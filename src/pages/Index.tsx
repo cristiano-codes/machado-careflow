@@ -1,47 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "./Dashboard";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock user for demonstration
-const mockUser = {
-  name: "Dr. João Silva",
-  email: "joao.silva@institutolauir.com.br",
-  role: "Coordenador Geral",
-  avatar: "/placeholder.svg"
-};
+import { apiService, User } from "@/services/api";
 
 const Index = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(mockUser);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  const handleLogin = async (credentials: { username: string; password: string }) => {
-    // Simulate API call to your backend
-    // Replace this with actual API call to your Node.js/Express backend
-    try {
-      console.log("Attempting login with:", credentials);
-      
-      // Simulate successful login for demo
-      if (credentials.username && credentials.password) {
+  // Verificar token ao carregar a página
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { valid, user: userData } = await apiService.verifyToken();
+      if (valid && userData) {
         setIsAuthenticated(true);
-        setUser(mockUser);
+        setUser(userData);
+      }
+      setIsLoading(false);
+    };
+
+    checkAuth();
+  }, []);
+
+  const handleLogin = async (credentials: { username: string; password: string }) => {
+    try {
+      const response = await apiService.login(credentials.username, credentials.password);
+      
+      if (response.success && response.user) {
+        setIsAuthenticated(true);
+        setUser(response.user);
         
         toast({
           title: "Login realizado com sucesso!",
-          description: `Bem-vindo, ${mockUser.name}`,
+          description: `Bem-vindo, ${response.user.name}`,
           variant: "default",
         });
+      } else {
+        throw new Error(response.message || "Falha na autenticação");
       }
     } catch (error) {
-      throw new Error("Falha na autenticação");
+      throw new Error(error instanceof Error ? error.message : "Falha na autenticação");
     }
   };
 
   const handleLogout = () => {
+    apiService.logout();
     setIsAuthenticated(false);
-    setUser(mockUser);
+    setUser(null);
     
     toast({
       title: "Logout realizado",
@@ -49,6 +57,14 @@ const Index = () => {
       variant: "default",
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginForm onLogin={handleLogin} />;
