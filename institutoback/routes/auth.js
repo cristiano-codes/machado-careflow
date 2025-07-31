@@ -10,9 +10,10 @@ const users = [
     id: 1,
     username: 'admin',
     email: 'joao.silva@institutolauir.com.br',
-    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password
+    password: null, // Senha será definida no primeiro acesso
     name: 'Dr. João Silva',
-    role: 'Coordenador Geral'
+    role: 'Coordenador Geral',
+    firstAccess: true
   }
 ];
 
@@ -37,6 +38,14 @@ router.post('/login', [
     const user = users.find(u => u.username === username || u.email === username);
     if (!user) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
+    }
+
+    // Verificar se é primeiro acesso
+    if (user.firstAccess) {
+      return res.status(403).json({ 
+        message: 'Primeiro acesso necessário. Defina sua senha primeiro.',
+        firstAccess: true
+      });
     }
 
     // Verificar senha
@@ -92,6 +101,64 @@ router.get('/verify', (req, res) => {
 
   } catch (error) {
     res.status(401).json({ message: 'Token inválido' });
+  }
+});
+
+// Rota para verificar se é primeiro acesso
+router.get('/first-access', (req, res) => {
+  const adminUser = users.find(u => u.username === 'admin');
+  res.json({ firstAccess: adminUser.firstAccess || false });
+});
+
+// Rota para definir senha no primeiro acesso
+router.post('/setup-password', [
+  body('username').notEmpty().withMessage('Username é obrigatório'),
+  body('password').isLength({ min: 6 }).withMessage('Senha deve ter pelo menos 6 caracteres'),
+  body('confirmPassword').custom((value, { req }) => {
+    if (value !== req.body.password) {
+      throw new Error('Confirmação de senha não confere');
+    }
+    return true;
+  })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: 'Dados inválidos', 
+        errors: errors.array() 
+      });
+    }
+
+    const { username, password } = req.body;
+    
+    const userIndex = users.findIndex(u => u.username === username);
+    if (userIndex === -1) {
+      return res.status(404).json({ message: 'Usuário não encontrado' });
+    }
+
+    const user = users[userIndex];
+    if (!user.firstAccess) {
+      return res.status(400).json({ message: 'Primeiro acesso já foi realizado' });
+    }
+
+    // Criptografar nova senha
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Atualizar usuário
+    users[userIndex] = {
+      ...user,
+      password: hashedPassword,
+      firstAccess: false
+    };
+
+    res.json({ 
+      message: 'Senha definida com sucesso! Agora você pode fazer login.' 
+    });
+
+  } catch (error) {
+    console.error('Erro no setup da senha:', error);
+    res.status(500).json({ message: 'Erro interno do servidor' });
   }
 });
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { FirstAccessForm } from "@/components/auth/FirstAccessForm";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "./Dashboard";
 import { useToast } from "@/hooks/use-toast";
@@ -9,15 +10,29 @@ const Index = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFirstAccess, setIsFirstAccess] = useState(false);
   const { toast } = useToast();
 
-  // Verificar token ao carregar a página
+  // Verificar token e primeiro acesso ao carregar a página
   useEffect(() => {
     const checkAuth = async () => {
-      const { valid, user: userData } = await apiService.verifyToken();
-      if (valid && userData) {
-        setIsAuthenticated(true);
-        setUser(userData);
+      try {
+        // Verificar se é primeiro acesso
+        const firstAccessCheck = await apiService.checkFirstAccess();
+        if (firstAccessCheck.firstAccess) {
+          setIsFirstAccess(true);
+          setIsLoading(false);
+          return;
+        }
+
+        // Verificar token se não for primeiro acesso
+        const { valid, user: userData } = await apiService.verifyToken();
+        if (valid && userData) {
+          setIsAuthenticated(true);
+          setUser(userData);
+        }
+      } catch (error) {
+        console.error('Erro na verificação:', error);
       }
       setIsLoading(false);
     };
@@ -58,12 +73,24 @@ const Index = () => {
     });
   };
 
+  const handleFirstAccessSuccess = () => {
+    setIsFirstAccess(false);
+    toast({
+      title: "Senha definida com sucesso!",
+      description: "Agora você pode fazer login",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
+  }
+
+  if (isFirstAccess) {
+    return <FirstAccessForm onSuccess={handleFirstAccessSuccess} />;
   }
 
   if (!isAuthenticated) {

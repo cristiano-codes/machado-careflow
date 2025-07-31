@@ -110,6 +110,16 @@ class ApiService {
       throw error;
     }
   }
+
+  async checkFirstAccess(): Promise<{ firstAccess: boolean }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/first-access`);
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao verificar primeiro acesso:', error);
+      return { firstAccess: false };
+    }
+  }
 }
 
 export const apiService = new ApiService();
