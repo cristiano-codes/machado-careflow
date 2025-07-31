@@ -52,7 +52,8 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-foreground">
-              Instituto Lauir Machado
+              Instituto {/* Aweto */}
+              {/* Instituto Lauir Machado */}
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
               Sistema de Gestão Institucional
