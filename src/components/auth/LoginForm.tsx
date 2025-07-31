@@ -7,10 +7,11 @@ import { Eye, EyeOff, Building, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface LoginFormProps {
-  onLogin: (credentials: { username: string; password: string }) => void;
+  onLogin: (credentials: { username: string; password: string }) => Promise<void>;
+  onRegister: () => void;
 }
 
-export function LoginForm({ onLogin }: LoginFormProps) {
+export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -112,6 +113,16 @@ export function LoginForm({ onLogin }: LoginFormProps) {
               {isLoading ? "Entrando..." : "Entrar"}
             </Button>
           </form>
+          
+          <div className="mt-6 text-center">
+            <Button 
+              variant="link" 
+              onClick={onRegister}
+              className="text-primary hover:text-primary-hover font-medium"
+            >
+              Primeiro Acesso? Crie sua conta
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

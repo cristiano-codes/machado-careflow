@@ -162,4 +162,64 @@ router.post('/setup-password', [
   }
 });
 
+// Rota para registro de novos usuários
+router.post('/register', [
+  body('username').notEmpty().withMessage('Username é obrigatório'),
+  body('email').isEmail().withMessage('Email deve ser válido'),
+  body('name').notEmpty().withMessage('Nome é obrigatório'),
+  body('phone').notEmpty().withMessage('Telefone é obrigatório'),
+  body('password').isLength({ min: 6 }).withMessage('Senha deve ter pelo menos 6 caracteres'),
+  body('confirmPassword').custom((value, { req }) => {
+    if (value !== req.body.password) {
+      throw new Error('Confirmação de senha não confere');
+    }
+    return true;
+  })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: 'Dados inválidos', 
+        errors: errors.array() 
+      });
+    }
+
+    const { username, email, name, phone, password } = req.body;
+    
+    // Verificar se usuário já existe
+    const existingUser = users.find(u => u.username === username || u.email === email);
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: 'Usuário ou email já existe' 
+      });
+    }
+
+    // Criptografar senha
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Criar novo usuário
+    const newUser = {
+      id: users.length + 1,
+      username,
+      email,
+      name,
+      phone,
+      password: hashedPassword,
+      role: 'Usuário',
+      firstAccess: false
+    };
+
+    users.push(newUser);
+
+    res.json({ 
+      message: 'Usuário criado com sucesso! Agora você pode fazer login.' 
+    });
+
+  } catch (error) {
+    console.error('Erro no registro:', error);
+    res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
 module.exports = router;

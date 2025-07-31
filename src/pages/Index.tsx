@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { FirstAccessForm } from "@/components/auth/FirstAccessForm";
+import { RegisterForm } from "@/components/auth/RegisterForm";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "./Dashboard";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +12,7 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFirstAccess, setIsFirstAccess] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
   const { toast } = useToast();
 
   // Verificar token e primeiro acesso ao carregar a página
@@ -81,6 +83,14 @@ const Index = () => {
     });
   };
 
+  const handleRegisterSuccess = () => {
+    setShowRegister(false);
+    toast({
+      title: "Conta criada com sucesso!",
+      description: "Agora você pode fazer login",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -93,8 +103,12 @@ const Index = () => {
     return <FirstAccessForm onSuccess={handleFirstAccessSuccess} />;
   }
 
+  if (showRegister) {
+    return <RegisterForm onSuccess={handleRegisterSuccess} onBackToLogin={() => setShowRegister(false)} />;
+  }
+
   if (!isAuthenticated) {
-    return <LoginForm onLogin={handleLogin} />;
+    return <LoginForm onLogin={handleLogin} onRegister={() => setShowRegister(true)} />;
   }
 
   return (
