@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, User, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useSettings } from "@/contexts/SettingsContext";
 
 interface HeaderProps {
   user?: {
@@ -24,6 +25,7 @@ interface HeaderProps {
 
 export function Header({ user, onLogout }: HeaderProps) {
   const navigate = useNavigate();
+  const { settings } = useSettings();
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -32,7 +34,7 @@ export function Header({ user, onLogout }: HeaderProps) {
           <SidebarTrigger className="h-8 w-8" />
           <div className="hidden md:block">
             <h1 className="text-lg font-semibold text-foreground">
-              Sistema de Gestão - Instituto Lauir Machado
+              Sistema de Gestão - {settings.instituicao_nome}
             </h1>
           </div>
         </div>

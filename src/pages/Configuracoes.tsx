@@ -8,37 +8,14 @@ import { Settings, Bell, Shield, Database, Mail } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/contexts/SettingsContext";
 
 export default function Configuracoes() {
-  const [settings, setSettings] = useState({
-    // Configurações Gerais
-    instituicao_nome: "Instituto Lauir Machado",
-    instituicao_email: "contato@institutolauir.com.br",
-    instituicao_telefone: "(11) 3456-7890",
-    instituicao_endereco: "Rua das Flores, 123 - São Paulo, SP",
-    
-    // Notificações
-    email_notifications: true,
-    sms_notifications: false,
-    push_notifications: true,
-    weekly_reports: true,
-    
-    // Segurança
-    two_factor_auth: false,
-    password_expiry_days: 90,
-    max_login_attempts: 3,
-    session_timeout: 60,
-    
-    // Sistema
-    backup_frequency: "daily",
-    data_retention_days: 365,
-    auto_updates: true,
-    debug_mode: false
-  });
-
+  const { settings, updateSettings, saveSettings } = useSettings();
   const { toast } = useToast();
 
   const handleSave = (section: string) => {
+    saveSettings();
     toast({
       title: "Configurações salvas!",
       description: `As configurações de ${section} foram atualizadas com sucesso.`,
@@ -46,10 +23,7 @@ export default function Configuracoes() {
   };
 
   const updateSetting = (key: string, value: any) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
+    updateSettings({ [key]: value });
   };
 
   const handleLogout = () => {
