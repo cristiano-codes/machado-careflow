@@ -4,9 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UserCheck, UserX, UserPlus, Shield, Clock, Settings } from 'lucide-react';
+import { UserCheck, UserX, UserPlus, Shield, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { apiService } from '@/services/api';
 
 interface User {
   id: number;
@@ -106,31 +105,6 @@ export function UserManagement() {
     }
   };
 
-  const handleCreateAdmin = async () => {
-    try {
-      const result = await apiService.createAdminUser();
-      if (result.success) {
-        toast({
-          title: "Sucesso!",
-          description: result.message
-        });
-        fetchUsers(); // Recarregar listas
-      } else {
-        toast({
-          title: "Erro",
-          description: result.message,
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Erro",
-        description: 'Erro ao criar usuário admin',
-        variant: "destructive"
-      });
-    }
-  };
-
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: any, text: string, icon: any }> = {
       'ativo': { variant: 'default', text: 'Ativo', icon: UserCheck },
@@ -176,13 +150,6 @@ export function UserManagement() {
           <p className="text-muted-foreground">Gerencie aprovações e status dos usuários</p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            onClick={handleCreateAdmin}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            <Settings className="w-4 h-4 mr-1" />
-            Criar Admin
-          </Button>
           <Badge variant="secondary" className="text-sm">
             <UserPlus className="w-4 h-4 mr-1" />
             {pendingUsers.length} pendentes
