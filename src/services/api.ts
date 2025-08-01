@@ -121,26 +121,19 @@ class ApiService {
     }
   }
 
-  async createAdminUser(): Promise<{ success: boolean; message: string }> {
+  async checkNeedsPasswordChange(): Promise<{ needsChange: boolean }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/create-admin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: 'admin',
-          password: 'admin',
-          name: 'Administrador',
-          email: 'admin@instituto.com',
-          phone: '(00) 00000-0000'
-        }),
-      });
+      const token = localStorage.getItem('token');
+      if (!token) return { needsChange: false };
 
+      const response = await fetch(`${API_BASE_URL}/auth/check-password-change`, {
+        headers: this.getAuthHeaders(),
+      });
+      
       return await response.json();
     } catch (error) {
-      console.error('Erro ao criar usuário admin:', error);
-      throw new Error('Erro de conexão com o servidor');
+      console.error('Erro ao verificar necessidade de troca de senha:', error);
+      return { needsChange: false };
     }
   }
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { FirstAccessForm } from "@/components/auth/FirstAccessForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
+import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "./Dashboard";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +14,7 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isFirstAccess, setIsFirstAccess] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [needsPasswordChange, setNeedsPasswordChange] = useState(false);
   const { toast } = useToast();
 
   // Verificar token e primeiro acesso ao carregar a página
@@ -47,6 +49,14 @@ const Index = () => {
       const response = await apiService.login(credentials.username, credentials.password);
       
       if (response.success && response.user) {
+        // Verificar se precisa alterar senha
+        const passwordCheck = await apiService.checkNeedsPasswordChange();
+        if (passwordCheck.needsChange) {
+          setNeedsPasswordChange(true);
+          setUser(response.user);
+          return;
+        }
+
         setIsAuthenticated(true);
         setUser(response.user);
         
@@ -91,6 +101,15 @@ const Index = () => {
     });
   };
 
+  const handlePasswordChangeSuccess = () => {
+    setNeedsPasswordChange(false);
+    setIsAuthenticated(true);
+    toast({
+      title: "Senha alterada com sucesso!",
+      description: "Agora você pode usar o sistema",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -105,6 +124,10 @@ const Index = () => {
 
   if (showRegister) {
     return <RegisterForm onSuccess={handleRegisterSuccess} onBackToLogin={() => setShowRegister(false)} />;
+  }
+
+  if (needsPasswordChange) {
+    return <ChangePasswordForm onSuccess={handlePasswordChangeSuccess} />;
   }
 
   if (!isAuthenticated) {
