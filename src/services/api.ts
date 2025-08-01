@@ -120,6 +120,29 @@ class ApiService {
       return { firstAccess: false };
     }
   }
+
+  async createAdminUser(): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/create-admin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: 'admin',
+          password: 'admin',
+          name: 'Administrador',
+          email: 'admin@instituto.com',
+          phone: '(00) 00000-0000'
+        }),
+      });
+
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao criar usuário admin:', error);
+      throw new Error('Erro de conexão com o servidor');
+    }
+  }
 }
 
 export const apiService = new ApiService();
