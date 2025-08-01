@@ -1,4 +1,5 @@
 const API_BASE_URL = 'http://localhost:3000/api';
+const DEMO_MODE = true; // Modo demonstração sem backend
 
 export interface LoginResponse {
   success: boolean;
@@ -31,6 +32,37 @@ class ApiService {
   }
 
   async login(username: string, password: string): Promise<LoginResponse> {
+    if (DEMO_MODE) {
+      // Simulação de login para demonstração
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simula delay de rede
+      
+      if (username === 'admin' && password === 'admin') {
+        const user = {
+          id: 1,
+          username: 'admin',
+          email: 'admin@institutolauir.com.br',
+          name: 'Administrador',
+          role: 'Coordenador Geral'
+        };
+        
+        const token = 'demo-token-123';
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        
+        return {
+          success: true,
+          message: 'Login realizado com sucesso',
+          token,
+          user
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Usuário ou senha incorretos'
+        };
+      }
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -55,6 +87,17 @@ class ApiService {
   }
 
   async verifyToken(): Promise<{ valid: boolean; user?: User }> {
+    if (DEMO_MODE) {
+      const token = localStorage.getItem('token');
+      const userStr = localStorage.getItem('user');
+      
+      if (token === 'demo-token-123' && userStr) {
+        const user = JSON.parse(userStr);
+        return { valid: true, user };
+      }
+      return { valid: false };
+    }
+
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -112,6 +155,10 @@ class ApiService {
   }
 
   async checkFirstAccess(): Promise<{ firstAccess: boolean }> {
+    if (DEMO_MODE) {
+      return { firstAccess: false }; // No modo demo, não há primeiro acesso
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}/auth/first-access`);
       return await response.json();
@@ -122,6 +169,10 @@ class ApiService {
   }
 
   async checkNeedsPasswordChange(): Promise<{ needsChange: boolean }> {
+    if (DEMO_MODE) {
+      return { needsChange: false }; // No modo demo, não precisa trocar senha
+    }
+
     try {
       const token = localStorage.getItem('token');
       if (!token) return { needsChange: false };
