@@ -13,53 +13,49 @@ const Index = () => {
 
   const handleLogin = async (credentials: { username: string; password: string }) => {
     try {
-      // Para compatibilidade, vamos tentar fazer login com email ou username
+      // Converter username para email se necessário
       let email = credentials.username;
-      
-      // Se não parece ser um email, vamos buscar o email pelo username no banco
       if (!email.includes('@')) {
-        // Para o admin, vamos usar o email padrão
+        // Se não é um email, assumir que é admin
         if (credentials.username === 'admin') {
           email = 'admin@instituto.com.br';
         } else {
-          throw new Error('Por favor, use seu email para fazer login');
+          throw new Error('Use email ou "admin" como usuário');
         }
       }
 
-      const result = await signIn(email, credentials.password);
+      const { error } = await signIn(email, credentials.password);
       
-      if (result.error) {
-        throw new Error(result.error);
+      if (error) {
+        // Se não conseguiu logar e é admin, mostrar mensagem especial
+        if (credentials.username === 'admin' && credentials.password === 'admin') {
+          toast({
+            title: "Primeiro acesso do administrador",
+            description: "Você precisa criar sua conta de administrador no Supabase. Clique em 'Registrar' e use o email 'admin@instituto.com.br'",
+            variant: "default",
+            duration: 8000
+          });
+        } else {
+          throw new Error(error);
+        }
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Falha na autenticação";
       toast({
         title: "Erro de autenticação",
-        description: errorMessage,
+        description: error instanceof Error ? error.message : "Usuário ou senha incorretos",
         variant: "destructive",
       });
       throw error;
     }
   };
 
-  const handleRegister = async (userData: any) => {
-    try {
-      const result = await signUp(userData.email, userData.password, userData);
-      
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      setShowRegister(false);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Erro no cadastro";
-      toast({
-        title: "Erro no cadastro",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      throw error;
-    }
+  const handleRegisterSuccess = () => {
+    setShowRegister(false);
+    toast({
+      title: "Cadastro realizado!",
+      description: "Verifique seu email para confirmar a conta, ou entre em contato com o administrador.",
+      duration: 5000
+    });
   };
 
   if (loading) {
@@ -71,19 +67,19 @@ const Index = () => {
   }
 
   if (showRegister) {
-    return <RegisterForm onSuccess={() => setShowRegister(false)} onBackToLogin={() => setShowRegister(false)} />;
+    return <RegisterForm onSuccess={handleRegisterSuccess} onBackToLogin={() => setShowRegister(false)} />;
   }
 
-  if (!user || !userProfile) {
+  if (!user) {
     return <LoginForm onLogin={handleLogin} onRegister={() => setShowRegister(true)} />;
   }
 
-  const layoutUser = {
+  const layoutUser = userProfile ? {
     name: userProfile.name || userProfile.username || userProfile.email,
     email: userProfile.email,
     role: userProfile.role,
     avatar: userProfile.avatar_url
-  };
+  } : undefined;
 
   return (
     <Layout user={layoutUser} onLogout={() => {}}>
