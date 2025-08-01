@@ -55,6 +55,12 @@ class ApiService {
           token,
           user
         };
+      } else if (username === 'user' && password === 'user') {
+        // Simular usuário pendente
+        return {
+          success: false,
+          message: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.'
+        };
       } else {
         return {
           success: false,
