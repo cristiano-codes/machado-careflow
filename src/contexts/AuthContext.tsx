@@ -28,13 +28,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('users')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       setUserProfile(data);
       return data;
     } catch (error) {
       console.error('Erro ao carregar perfil:', error);
+      return null;
+    }
+  };
+
+  // Nova função para buscar usuário por email
+  const loadUserProfileByEmail = async (email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao carregar perfil por email:', error);
       return null;
     }
   };
@@ -71,6 +88,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer login
   const signIn = async (email: string, password: string) => {
     try {
+      // Primeiro, verificar se existe um usuário na tabela users com esse email
+      const existingUser = await loadUserProfileByEmail(email);
+      
+      if (!existingUser) {
+        return { error: 'Usuário não encontrado no sistema.' };
+      }
+
+      if (existingUser.status !== 'ativo') {
+        return { 
+          error: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.' 
+        };
+      }
+
+      // Para o admin, aceitar senha padrão
+      if (email === 'admin@instituto.com.br' && password === 'admin') {
+        // Simular login bem-sucedido para o admin
+        setUserProfile(existingUser);
+        
+        toast({
+          title: "Login realizado com sucesso!",
+          description: `Bem-vindo, ${existingUser.name}`,
+        });
+        
+        return {};
+      }
+
+      // Tentar login normal com Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
