@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
+import { EditProfileForm } from "@/components/auth/EditProfileForm";
 import { apiService } from "@/services/api";
 import { User } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +37,10 @@ export default function Profile() {
 
   const handlePasswordChangeSuccess = () => {
     toast.success("Senha alterada com sucesso!");
+  };
+
+  const handleProfileUpdateSuccess = (updatedUser: any) => {
+    setUser({ ...user, ...updatedUser });
   };
 
   if (loading) {
@@ -93,32 +98,21 @@ export default function Profile() {
                   <Badge variant="secondary">{user?.role}</Badge>
                 </div>
               </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Nome de Usuário
-                  </label>
-                  <p className="mt-1 text-sm">{user?.username}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Email
-                  </label>
-                  <p className="mt-1 text-sm">{user?.email}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Perfil
-                  </label>
-                  <p className="mt-1 text-sm">{user?.role}</p>
-                </div>
-              </div>
             </CardContent>
           </Card>
 
           {/* Alterar Senha */}
           <ChangePasswordForm onSuccess={handlePasswordChangeSuccess} />
+        </div>
+
+        {/* Editar Perfil */}
+        <div className="grid gap-6">
+          {user && (
+            <EditProfileForm 
+              user={user} 
+              onSuccess={handleProfileUpdateSuccess}
+            />
+          )}
         </div>
       </div>
     </Layout>
