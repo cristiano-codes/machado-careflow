@@ -89,20 +89,20 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Shield className="w-5 h-5" />
+    <Card className="flex flex-col">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Shield className="w-4 h-4" />
           Alterar Senha
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-xs">
           Altere sua senha de acesso ao sistema
         </CardDescription>
       </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="currentPassword">Senha Atual</Label>
+        <CardContent className="flex-1">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="currentPassword" className="text-sm">Senha Atual</Label>
               <div className="relative">
                 <Input
                   id="currentPassword"
@@ -128,8 +128,8 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">Nova Senha</Label>
+          <div className="space-y-1">
+            <Label htmlFor="newPassword" className="text-sm">Nova Senha</Label>
               <div className="relative">
                 <Input
                   id="newPassword"
@@ -155,8 +155,8 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
+          <div className="space-y-1">
+            <Label htmlFor="confirmPassword" className="text-sm">Confirmar Nova Senha</Label>
               <div className="relative">
                 <Input
                   id="confirmPassword"
@@ -182,7 +182,7 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full text-sm mt-4" disabled={isLoading}>
               {isLoading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
