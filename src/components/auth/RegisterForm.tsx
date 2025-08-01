@@ -61,13 +61,14 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
 
       if (response.ok) {
         toast({
-          title: "Sucesso!",
-          description: data.message
+          title: "Cadastro realizado com sucesso!",
+          description: "Sua solicitação foi enviada para aprovação do administrador. Você receberá um email quando seu acesso for liberado.",
+          duration: 5000
         });
         onSuccess();
       } else {
         toast({
-          title: "Erro",
+          title: "Erro no cadastro",
           description: data.message || 'Erro ao criar usuário',
           variant: "destructive"
         });
@@ -90,11 +91,11 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
           <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
             <UserPlus className="w-6 h-6 text-blue-600" />
           </div>
-          <CardTitle className="text-2xl font-bold text-gray-900">
-            Primeiro Acesso
+          <CardTitle className="text-2xl font-bold text-foreground">
+            Cadastrar Nova Conta
           </CardTitle>
           <CardDescription>
-            Crie sua conta para acessar o sistema
+            Preencha os dados abaixo para solicitar acesso ao sistema
           </CardDescription>
         </CardHeader>
         <CardContent>

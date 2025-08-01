@@ -35,11 +35,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
     try {
       await onLogin({ username, password });
     } catch (error) {
-      toast({
-        title: "Erro de autenticação",
-        description: "Usuário ou senha incorretos.",
-        variant: "destructive",
-      });
+      // Erro já é tratado no Index.tsx, não precisa duplicar aqui
     } finally {
       setIsLoading(false);
     }

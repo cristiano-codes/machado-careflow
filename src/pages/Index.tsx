@@ -66,10 +66,34 @@ const Index = () => {
           variant: "default",
         });
       } else {
+        // Mensagens específicas baseadas no tipo de erro
+        if (response.message?.includes('aprovação') || response.message?.includes('liberado')) {
+          toast({
+            title: "Acesso Pendente",
+            description: response.message,
+            variant: "destructive",
+            duration: 5000
+          });
+        } else {
+          toast({
+            title: "Erro de autenticação",
+            description: response.message || "Usuário ou senha incorretos",
+            variant: "destructive",
+          });
+        }
         throw new Error(response.message || "Falha na autenticação");
       }
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : "Falha na autenticação");
+      // Se o erro não foi tratado acima, lança novamente
+      const errorMessage = error instanceof Error ? error.message : "Falha na autenticação";
+      if (!errorMessage.includes('aprovação') && !errorMessage.includes('liberado')) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Usuário ou senha incorretos",
+          variant: "destructive",
+        });
+      }
+      throw new Error(errorMessage);
     }
   };
 
@@ -96,8 +120,9 @@ const Index = () => {
   const handleRegisterSuccess = () => {
     setShowRegister(false);
     toast({
-      title: "Conta criada com sucesso!",
-      description: "Agora você pode fazer login",
+      title: "Solicitação enviada!",
+      description: "Aguarde a aprovação do administrador para acessar o sistema",
+      duration: 5000
     });
   };
 

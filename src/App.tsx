@@ -14,6 +14,7 @@ import Entrevistas from "./pages/Entrevistas";
 import Avaliacoes from "./pages/Avaliacoes";
 import AnaliseVagas from "./pages/AnaliseVagas";
 import Configuracoes from "./pages/Configuracoes";
+import GerenciarUsuarios from "./pages/GerenciarUsuarios";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/avaliacoes" element={<Avaliacoes />} />
             <Route path="/analise-vagas" element={<AnaliseVagas />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/gerenciar-usuarios" element={<GerenciarUsuarios />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
