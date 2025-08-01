@@ -15,6 +15,7 @@ import {
   UserCheck,
   BookOpen,
   User,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,6 +43,7 @@ const mainItems = [
 
 const managementItems = [
   { title: "Gerenciar Usuários", url: "/gerenciar-usuarios", icon: Users },
+  { title: "Gerenciar Permissões", url: "/gerenciar-permissoes", icon: Shield },
   { title: "Frequência", url: "/frequencia", icon: BookOpen },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Profissionais", url: "/profissionais", icon: Building },

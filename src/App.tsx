@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SettingsProvider } from "@/contexts/SettingsContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -15,15 +16,17 @@ import Avaliacoes from "./pages/Avaliacoes";
 import AnaliseVagas from "./pages/AnaliseVagas";
 import Configuracoes from "./pages/Configuracoes";
 import GerenciarUsuarios from "./pages/GerenciarUsuarios";
+import PermissionManager from "./pages/PermissionManager";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <SettingsProvider>
-        <Toaster />
-        <Sonner />
+      <AuthProvider>
+        <SettingsProvider>
+          <Toaster />
+          <Sonner />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -37,13 +40,15 @@ const App = () => (
             <Route path="/analise-vagas" element={<AnaliseVagas />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="/gerenciar-usuarios" element={<GerenciarUsuarios />} />
+            <Route path="/gerenciar-permissoes" element={<PermissionManager />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </SettingsProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+    </AuthProvider>
+  </TooltipProvider>
+</QueryClientProvider>
 );
 
 export default App;
