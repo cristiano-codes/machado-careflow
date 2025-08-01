@@ -187,6 +187,38 @@ class ApiService {
       return { needsChange: false };
     }
   }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    if (DEMO_MODE) {
+      // Simulação de troca de senha para demonstração
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simula delay de rede
+      
+      if (currentPassword === 'admin') {
+        return {
+          success: true,
+          message: 'Senha alterada com sucesso'
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Senha atual incorreta'
+        };
+      }
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao alterar senha:', error);
+      throw new Error('Erro de conexão com o servidor');
+    }
+  }
 }
 
 export const apiService = new ApiService();

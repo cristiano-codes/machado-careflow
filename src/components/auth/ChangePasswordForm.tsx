@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, EyeOff, Lock, Shield } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiService } from '@/services/api';
 
 interface ChangePasswordFormProps {
   onSuccess: () => void;
@@ -49,31 +50,23 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/auth/change-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          currentPassword: formData.currentPassword,
-          newPassword: formData.newPassword
-        })
-      });
+      const result = await apiService.changePassword(formData.currentPassword, formData.newPassword);
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (result.success) {
         toast({
           title: "Sucesso!",
-          description: "Senha alterada com sucesso"
+          description: result.message
+        });
+        setFormData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
         });
         onSuccess();
       } else {
         toast({
           title: "Erro",
-          description: data.message || 'Erro ao alterar senha',
+          description: result.message,
           variant: "destructive"
         });
       }
@@ -96,19 +89,16 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            <Shield className="w-6 h-6 text-primary" />
-          </div>
-          <CardTitle className="text-2xl font-bold">
-            Primeiro Acesso
-          </CardTitle>
-          <CardDescription>
-            Altere sua senha padrão para uma senha segura
-          </CardDescription>
-        </CardHeader>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="w-5 h-5" />
+          Alterar Senha
+        </CardTitle>
+        <CardDescription>
+          Altere sua senha de acesso ao sistema
+        </CardDescription>
+      </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -207,7 +197,6 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
             </Button>
           </form>
         </CardContent>
-      </Card>
-    </div>
+    </Card>
   );
 }
