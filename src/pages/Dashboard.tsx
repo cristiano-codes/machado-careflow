@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { useState } from "react";
+import { useSettings } from "@/contexts/SettingsContext";
 import { 
   Users, 
   Calendar, 
@@ -97,6 +98,7 @@ const getStatusColor = (status: string) => {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
+  const { settings } = useSettings();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -233,7 +235,7 @@ export default function Dashboard() {
             Painel Principal
           </h1>
           <p className="text-muted-foreground">
-            Visão geral das atividades do Instituto Lauir Machado
+            Visão geral das atividades do {settings.instituicao_nome}
           </p>
         </div>
         <div className="flex gap-2">
