@@ -1,18 +1,18 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UserCheck, UserX, UserPlus, Shield, Clock } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { CheckCircle, XCircle, Lock, Unlock } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
   name: string;
-  phone: string;
   role: string;
   status: string;
   created_at: string;
@@ -26,38 +26,29 @@ export function UserManagement() {
 
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
+      setIsLoading(true);
+      
       // Buscar todos os usuários
-      const allUsersResponse = await fetch('http://localhost:3000/api/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const { data: allUsersData, error: allUsersError } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      // Buscar usuários pendentes
-      const pendingResponse = await fetch('http://localhost:3000/api/users/pending', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (allUsersResponse.ok && pendingResponse.ok) {
-        const allUsersData = await allUsersResponse.json();
-        const pendingData = await pendingResponse.json();
-        
-        setAllUsers(allUsersData.users || []);
-        setPendingUsers(pendingData.users || []);
+      if (allUsersError) {
+        throw allUsersError;
       }
+
+      // Filtrar usuários pendentes
+      const pendingUsersData = allUsersData?.filter(user => user.status === 'pendente') || [];
+
+      setAllUsers(allUsersData || []);
+      setPendingUsers(pendingUsersData);
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
       toast({
         title: "Erro",
         description: "Erro ao carregar usuários",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -68,70 +59,72 @@ export function UserManagement() {
     fetchUsers();
   }, []);
 
-  const handleUserAction = async (userId: number, action: 'approve' | 'reject' | 'block') => {
+  const handleUserAction = async (userId: string, action: 'approve' | 'reject' | 'block') => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+      let newStatus: string;
+      let message: string;
 
-      const response = await fetch(`http://localhost:3000/api/users/${userId}/${action}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      switch (action) {
+        case 'approve':
+          newStatus = 'ativo';
+          message = 'Usuário aprovado com sucesso';
+          break;
+        case 'reject':
+          newStatus = 'rejeitado';
+          message = 'Usuário rejeitado';
+          break;
+        case 'block':
+          newStatus = 'bloqueado';
+          message = 'Usuário bloqueado';
+          break;
+        default:
+          return;
+      }
+
+      const { error } = await supabase
+        .from('users')
+        .update({ status: newStatus })
+        .eq('id', userId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Sucesso",
+        description: message,
+        variant: "default",
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        toast({
-          title: "Sucesso!",
-          description: data.message
-        });
-        fetchUsers(); // Recarregar listas
-      } else {
-        toast({
-          title: "Erro",
-          description: data.message || 'Erro na operação',
-          variant: "destructive"
-        });
-      }
+      // Recarregar dados
+      await fetchUsers();
     } catch (error) {
+      console.error('Erro na ação do usuário:', error);
       toast({
         title: "Erro",
-        description: 'Erro ao conectar com o servidor',
-        variant: "destructive"
+        description: "Erro ao processar ação",
+        variant: "destructive",
       });
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any, text: string, icon: any }> = {
-      'ativo': { variant: 'default', text: 'Ativo', icon: UserCheck },
-      'pendente': { variant: 'secondary', text: 'Pendente', icon: Clock },
-      'rejeitado': { variant: 'destructive', text: 'Rejeitado', icon: UserX },
-      'bloqueado': { variant: 'outline', text: 'Bloqueado', icon: Shield }
-    };
-
-    const config = variants[status] || variants['pendente'];
-    const Icon = config.icon;
-
-    return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
-        <Icon className="w-3 h-3" />
-        {config.text}
-      </Badge>
-    );
+    switch (status) {
+      case 'ativo':
+        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" /> Ativo</Badge>;
+      case 'pendente':
+        return <Badge variant="secondary"><XCircle className="w-3 h-3 mr-1" /> Pendente</Badge>;
+      case 'bloqueado':
+        return <Badge variant="destructive"><Lock className="w-3 h-3 mr-1" /> Bloqueado</Badge>;
+      case 'rejeitado':
+        return <Badge variant="outline"><XCircle className="w-3 h-3 mr-1" /> Rejeitado</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
   if (isLoading) {
@@ -144,56 +137,63 @@ export function UserManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
-          <p className="text-muted-foreground">Gerencie aprovações e status dos usuários</p>
-        </div>
-        <div className="flex gap-2">
-          <Badge variant="secondary" className="text-sm">
-            <UserPlus className="w-4 h-4 mr-1" />
-            {pendingUsers.length} pendentes
-          </Badge>
-          <Badge variant="outline" className="text-sm">
-            {allUsers.length} total
-          </Badge>
-        </div>
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Usuários Pendentes</CardTitle>
+            <Badge variant="secondary">{pendingUsers.length}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{pendingUsers.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Aguardando aprovação
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
+            <Badge variant="outline">{allUsers.length}</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{allUsers.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Todos os usuários no sistema
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
+      {/* Users Table */}
       <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="pending" className="flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            Aprovações Pendentes ({pendingUsers.length})
-          </TabsTrigger>
-          <TabsTrigger value="all" className="flex items-center gap-2">
-            <Shield className="w-4 h-4" />
-            Todos os Usuários ({allUsers.length})
-          </TabsTrigger>
+        <TabsList>
+          <TabsTrigger value="pending">Pendentes ({pendingUsers.length})</TabsTrigger>
+          <TabsTrigger value="all">Todos os Usuários ({allUsers.length})</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="pending" className="space-y-4">
+        
+        <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <CardTitle>Usuários Aguardando Aprovação</CardTitle>
+              <CardTitle>Usuários Pendentes</CardTitle>
               <CardDescription>
-                Usuários que se cadastraram e aguardam liberação de acesso
+                Usuários aguardando aprovação para acessar o sistema
               </CardDescription>
             </CardHeader>
             <CardContent>
               {pendingUsers.length === 0 ? (
-                <div className="text-center py-8">
-                  <UserCheck className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Nenhum usuário pendente de aprovação</p>
-                </div>
+                <p className="text-center text-muted-foreground py-4">
+                  Nenhum usuário pendente no momento
+                </p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nome</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Data Cadastro</TableHead>
+                      <TableHead>Usuário</TableHead>
+                      <TableHead>Data de Cadastro</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -202,24 +202,23 @@ export function UserManagement() {
                       <TableRow key={user.id}>
                         <TableCell className="font-medium">{user.name}</TableCell>
                         <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.phone}</TableCell>
+                        <TableCell>{user.username}</TableCell>
                         <TableCell>{formatDate(user.created_at)}</TableCell>
+                        <TableCell>{getStatusBadge(user.status)}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
+                            <Button
+                              variant="default"
+                              size="sm"
                               onClick={() => handleUserAction(user.id, 'approve')}
-                              className="bg-green-600 hover:bg-green-700"
                             >
-                              <UserCheck className="w-4 h-4 mr-1" />
                               Aprovar
                             </Button>
-                            <Button 
-                              size="sm" 
+                            <Button
                               variant="destructive"
+                              size="sm"
                               onClick={() => handleUserAction(user.id, 'reject')}
                             >
-                              <UserX className="w-4 h-4 mr-1" />
                               Rejeitar
                             </Button>
                           </div>
@@ -233,12 +232,12 @@ export function UserManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="all" className="space-y-4">
+        <TabsContent value="all">
           <Card>
             <CardHeader>
               <CardTitle>Todos os Usuários</CardTitle>
               <CardDescription>
-                Lista completa de usuários do sistema
+                Gerenciar todos os usuários do sistema
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -247,9 +246,10 @@ export function UserManagement() {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
+                    <TableHead>Usuário</TableHead>
+                    <TableHead>Função</TableHead>
+                    <TableHead>Data de Cadastro</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Data Cadastro</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -258,31 +258,31 @@ export function UserManagement() {
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">{user.name}</TableCell>
                       <TableCell>{user.email}</TableCell>
+                      <TableCell>{user.username}</TableCell>
                       <TableCell>{user.role}</TableCell>
-                      <TableCell>{getStatusBadge(user.status)}</TableCell>
                       <TableCell>{formatDate(user.created_at)}</TableCell>
+                      <TableCell>{getStatusBadge(user.status)}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          {user.status === 'ativo' && (
-                            <Button 
-                              size="sm" 
+                          {user.status === 'ativo' ? (
+                            <Button
                               variant="outline"
+                              size="sm"
                               onClick={() => handleUserAction(user.id, 'block')}
                             >
-                              <Shield className="w-4 h-4 mr-1" />
+                              <Lock className="w-3 h-3 mr-1" />
                               Bloquear
                             </Button>
-                          )}
-                          {user.status === 'bloqueado' && (
-                            <Button 
-                              size="sm" 
+                          ) : user.status === 'bloqueado' ? (
+                            <Button
+                              variant="default"
+                              size="sm"
                               onClick={() => handleUserAction(user.id, 'approve')}
-                              className="bg-green-600 hover:bg-green-700"
                             >
-                              <UserCheck className="w-4 h-4 mr-1" />
+                              <Unlock className="w-3 h-3 mr-1" />
                               Ativar
                             </Button>
-                          )}
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
