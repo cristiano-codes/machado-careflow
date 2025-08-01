@@ -54,31 +54,32 @@ export function EditProfileForm({ user, onSuccess }: EditProfileFormProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex flex-col">
+      <CardHeader className="pb-4">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Edit className="w-5 h-5" />
-            Editar Informações
+            <Edit className="w-4 h-4" />
+            <span className="text-lg">Editar Informações</span>
           </div>
           {!isEditing && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsEditing(true)}
+              className="text-xs"
             >
               Editar
             </Button>
           )}
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-xs">
           Atualize suas informações pessoais
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Nome Completo</Label>
+      <CardContent className="flex-1">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="name" className="text-sm">Nome Completo</Label>
             <Input
               id="name"
               type="text"
@@ -89,8 +90,8 @@ export function EditProfileForm({ user, onSuccess }: EditProfileFormProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="username">Nome de Usuário</Label>
+          <div className="space-y-1">
+            <Label htmlFor="username" className="text-sm">Nome de Usuário</Label>
             <Input
               id="username"
               type="text"
@@ -101,8 +102,8 @@ export function EditProfileForm({ user, onSuccess }: EditProfileFormProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+          <div className="space-y-1">
+            <Label htmlFor="email" className="text-sm">Email</Label>
             <Input
               id="email"
               type="email"
@@ -114,8 +115,8 @@ export function EditProfileForm({ user, onSuccess }: EditProfileFormProps) {
           </div>
 
           {isEditing && (
-            <div className="flex gap-2 pt-4">
-              <Button type="submit" disabled={loading}>
+            <div className="flex gap-2 pt-3">
+              <Button type="submit" disabled={loading} className="text-sm flex-1">
                 {loading ? "Salvando..." : "Salvar"}
               </Button>
               <Button 
@@ -123,6 +124,7 @@ export function EditProfileForm({ user, onSuccess }: EditProfileFormProps) {
                 variant="outline" 
                 onClick={handleCancel}
                 disabled={loading}
+                className="text-sm flex-1"
               >
                 Cancelar
               </Button>
