@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, Building, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/contexts/SettingsContext";
 
 interface LoginFormProps {
   onLogin: (credentials: { username: string; password: string }) => Promise<void>;
@@ -17,6 +18,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { settings } = useSettings();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,8 +54,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-foreground">
-              Instituto {/* Aweto */}
-              {/* Instituto Lauir Machado */}
+              {settings.instituicao_nome}
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
               Sistema de Gestão Institucional

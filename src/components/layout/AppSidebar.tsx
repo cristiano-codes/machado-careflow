@@ -28,6 +28,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useSettings } from "@/contexts/SettingsContext";
 
 const mainItems = [
   { title: "Início", url: "/dashboard", icon: Home },
@@ -51,6 +52,7 @@ export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
   const isCollapsed = state === "collapsed";
+  const { settings } = useSettings();
 
   const isActive = (path: string) => currentPath === path;
   const isMainExpanded = mainItems.some((item) => isActive(item.url));
@@ -75,8 +77,8 @@ export function AppSidebar() {
             </div>
             {!isCollapsed && (
               <div>
-                <h2 className="font-semibold text-sm text-foreground">Instituto</h2>
-                <p className="text-xs text-muted-foreground">Lauir Machado</p>
+                <h2 className="font-semibold text-sm text-foreground">{settings.instituicao_nome}</h2>
+                <p className="text-xs text-muted-foreground">Sistema de Gestão</p>
               </div>
             )}
           </div>
