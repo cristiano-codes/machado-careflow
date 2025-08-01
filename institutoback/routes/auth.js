@@ -35,10 +35,11 @@ async function initDatabase() {
     // Verificar se existe admin
     const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
     if (adminCheck.rows.length === 0) {
+      const hashedPassword = await bcrypt.hash('admin', 10);
       await pool.query(`
         INSERT INTO users (username, email, name, role, status, first_access, password)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, ['admin', 'admin@institutolauir.com.br', 'Administrador', 'Coordenador Geral', 'ativo', true, null]);
+      `, ['admin', 'admin@institutolauir.com.br', 'Administrador', 'Coordenador Geral', 'ativo', false, hashedPassword]);
     }
 
     console.log('Banco de dados inicializado com sucesso');
