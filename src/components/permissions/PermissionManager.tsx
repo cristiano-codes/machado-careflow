@@ -93,24 +93,51 @@ export function PermissionManager() {
     }
   };
 
-  // Conceder todas as permissões de um módulo
-  const grantAllModulePermissions = async (moduleId: string) => {
-    if (!selectedUser) return;
+  // Conceder permissões básicas para um usuário
+  const grantBasicPermissions = async (userId: string) => {
+    if (!userId) return;
 
     setLoading(true);
     try {
-      for (const permission of allPermissions) {
-        if (!userHasPermission(moduleId, permission.id)) {
-          await grantPermission(selectedUser, moduleId, permission.id);
+      // Dar permissão de visualização para todos os módulos
+      const viewPermission = allPermissions.find(p => p.name === 'view');
+      if (viewPermission) {
+        for (const module of allModules) {
+          await grantPermission(userId, module.id, viewPermission.id);
         }
       }
-      await loadSelectedUserPermissions(selectedUser);
+      
+      await loadSelectedUserPermissions(userId);
       toast({
-        title: "Sucesso",
-        description: "Todas as permissões do módulo foram concedidas",
+        title: "Permissões básicas concedidas",
+        description: "Usuário agora pode visualizar todos os módulos",
       });
     } catch (error) {
-      console.error('Erro ao conceder permissões:', error);
+      console.error('Erro ao conceder permissões básicas:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Conceder todas as permissões para um usuário
+  const grantAllPermissions = async (userId: string) => {
+    if (!userId) return;
+
+    setLoading(true);
+    try {
+      for (const module of allModules) {
+        for (const permission of allPermissions) {
+          await grantPermission(userId, module.id, permission.id);
+        }
+      }
+      
+      await loadSelectedUserPermissions(userId);
+      toast({
+        title: "Acesso total concedido",
+        description: "Usuário agora tem todas as permissões",
+      });
+    } catch (error) {
+      console.error('Erro ao conceder todas as permissões:', error);
     } finally {
       setLoading(false);
     }
@@ -237,6 +264,25 @@ export function PermissionManager() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {selectedUser && (
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    onClick={() => grantBasicPermissions(selectedUser)}
+                    disabled={loading}
+                    variant="outline"
+                  >
+                    Liberar Acesso Básico
+                  </Button>
+                  <Button
+                    onClick={() => grantAllPermissions(selectedUser)}
+                    disabled={loading}
+                    variant="default"
+                  >
+                    Liberar Acesso Total
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -294,7 +340,7 @@ export function PermissionManager() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => grantAllModulePermissions(module.id)}
+                              onClick={() => grantAllPermissions(selectedUser)}
                               disabled={loading}
                             >
                               <Plus className="w-3 h-3" />
