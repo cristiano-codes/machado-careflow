@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: adminUser, error } = await supabase
           .from('users')
           .select('*')
-          .eq('email', 'admin@lovable.ia')
+          .eq('username', 'admin')
           .maybeSingle();
         
         console.log('📊 Resultado busca admin:', { adminUser, error });
