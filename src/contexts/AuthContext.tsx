@@ -88,10 +88,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer login
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('Tentando login com:', email, password);
+      
       // Primeiro, verificar se existe um usuário na tabela users com esse email
       const existingUser = await loadUserProfileByEmail(email);
+      console.log('Usuário encontrado:', existingUser);
       
       if (!existingUser) {
+        console.log('Usuário não encontrado');
         return { error: 'Usuário não encontrado no sistema.' };
       }
 
