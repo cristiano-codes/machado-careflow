@@ -112,16 +112,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer login
   const signIn = async (email: string, password: string) => {
     try {
-      // Para o admin nativo, aceitar login direto sem validação de banco
+      console.log('🔍 Tentando login com:', email, password);
+      
+      // PRIMEIRO: Verificar se é o admin nativo
       if (email === 'admin@lovable.ia' && password === 'admin') {
-        // Buscar o usuário admin na base
+        console.log('✅ Detectado login de admin nativo');
+        
         const { data: adminUser, error } = await supabase
           .from('users')
           .select('*')
           .eq('email', 'admin@lovable.ia')
           .maybeSingle();
         
+        console.log('📊 Resultado busca admin:', { adminUser, error });
+        
         if (adminUser) {
+          console.log('✅ Admin encontrado, fazendo login');
+          
           // Simular login bem-sucedido para o admin nativo
           const fakeUser = {
             id: adminUser.id,
@@ -144,8 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           
           return {};
+        } else {
+          console.log('❌ Admin não encontrado no banco');
         }
       }
+
+      console.log('🔄 Verificando usuário normal...');
 
       // Para outros usuários, verificar se existe na tabela users
       const existingUser = await loadUserProfileByEmail(email);
