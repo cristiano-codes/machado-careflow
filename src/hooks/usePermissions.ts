@@ -39,7 +39,7 @@ export function usePermissions() {
       const adminProfile = localStorage.getItem('admin_profile');
       if (adminProfile) {
         const admin = JSON.parse(adminProfile);
-        if (admin.email === 'admin@lovable.ia') {
+        if (admin.email === 'admin@admin.com') {
           // Admin nativo tem todas as permissões
           const { data: modules } = await supabase.from('modules').select('*');
           const { data: permissions } = await supabase.from('permissions').select('*');
