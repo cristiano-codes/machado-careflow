@@ -94,14 +94,11 @@ export default function Agenda() {
 
   return (
     <Layout onLogout={handleLogout}>
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Calendar className="w-8 h-8 text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold">Agenda</h1>
-              <p className="text-muted-foreground">Visualize e gerencie os agendamentos</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
+            <p className="text-muted-foreground text-sm">Visualize e gerencie os agendamentos</p>
           </div>
           <Button>
             <Plus className="w-4 h-4 mr-2" />

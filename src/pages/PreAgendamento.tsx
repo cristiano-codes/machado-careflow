@@ -36,13 +36,10 @@ export default function PreAgendamento() {
 
   return (
     <Layout onLogout={handleLogout}>
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <MessageSquare className="w-8 h-8 text-primary" />
-          <div>
-            <h1 className="text-3xl font-bold">Pré-Agendamento</h1>
-            <p className="text-muted-foreground">Solicite um agendamento e entraremos em contato</p>
-          </div>
+      <div className="max-w-7xl mx-auto space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Pré-Agendamento</h1>
+          <p className="text-muted-foreground text-sm">Solicite um agendamento e entraremos em contato</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

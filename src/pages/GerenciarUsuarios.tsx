@@ -4,12 +4,10 @@ import { ProtectedRoute } from "@/components/common/ProtectedRoute";
 export default function GerenciarUsuarios() {
   return (
     <ProtectedRoute module="usuarios" permission="view">
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto space-y-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Gerenciar Usuários
-          </h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Gerenciar Usuários</h1>
+          <p className="text-muted-foreground text-sm">
             Gerencie usuários, aprovações e permissões do sistema
           </p>
         </div>

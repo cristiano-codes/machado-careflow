@@ -230,37 +230,32 @@ export default function Dashboard() {
   };
   return (
     <ProtectedRoute module="dashboard" permission="view">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Painel Principal
-            </h1>
-            <p className="text-muted-foreground">
-              Visão geral das atividades do {settings.instituicao_nome}
-            </p>
-          </div>
-          <div className="flex gap-2">
+      <div className="max-w-7xl mx-auto space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Painel Principal</h1>
+          <p className="text-muted-foreground text-sm">
+            Visão geral das atividades do {settings.instituicao_nome}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant={activeTab === 'overview' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('overview')}
+            className="flex items-center gap-2"
+          >
+            <BarChart3 className="w-4 h-4" />
+            Visão Geral
+          </Button>
+          {canViewUsers && (
             <Button 
-              variant={activeTab === 'overview' ? 'default' : 'outline'}
-              onClick={() => setActiveTab('overview')}
+              variant={activeTab === 'users' ? 'default' : 'outline'}
+              onClick={() => setActiveTab('users')}
               className="flex items-center gap-2"
             >
-              <BarChart3 className="w-4 h-4" />
-              Visão Geral
+              <Users className="w-4 h-4" />
+              Usuários
             </Button>
-            {canViewUsers && (
-              <Button 
-                variant={activeTab === 'users' ? 'default' : 'outline'}
-                onClick={() => setActiveTab('users')}
-                className="flex items-center gap-2"
-              >
-                <Users className="w-4 h-4" />
-                Usuários
-              </Button>
-            )}
-          </div>
+          )}
         </div>
 
         {renderContent()}

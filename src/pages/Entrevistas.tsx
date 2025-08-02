@@ -87,14 +87,11 @@ export default function Entrevistas() {
 
   return (
     <Layout onLogout={handleLogout}>
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Users className="w-8 h-8 text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold">Entrevistas</h1>
-              <p className="text-muted-foreground">Gerencie as entrevistas e consultas</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Entrevistas</h1>
+            <p className="text-muted-foreground text-sm">Gerencie as entrevistas e consultas</p>
           </div>
           <Button>
             <Plus className="w-4 h-4 mr-2" />

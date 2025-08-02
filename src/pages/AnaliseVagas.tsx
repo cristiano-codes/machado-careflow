@@ -165,14 +165,11 @@ export default function AnaliseVagas() {
 
   return (
     <Layout onLogout={handleLogout}>
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <UserCheck className="w-8 h-8 text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold">Análise de Vagas</h1>
-              <p className="text-muted-foreground">Gerencie vagas e análise de candidatos</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Análise de Vagas</h1>
+            <p className="text-muted-foreground text-sm">Gerencie vagas e análise de candidatos</p>
           </div>
           <Button>
             <Plus className="w-4 h-4 mr-2" />
