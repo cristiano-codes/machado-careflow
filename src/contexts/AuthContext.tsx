@@ -104,6 +104,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Para o admin, aceitar senha padrão
       if (email === 'admin@instituto.com.br' && password === 'admin') {
         // Simular login bem-sucedido para o admin
+        const fakeUser = {
+          id: existingUser.id,
+          email: existingUser.email,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          aud: 'authenticated',
+          role: 'authenticated'
+        };
+        
+        setUser(fakeUser as any);
         setUserProfile(existingUser);
         
         toast({
@@ -186,8 +196,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer logout
   const signOut = async () => {
     try {
-      await supabase.auth.signOut();
-      setUserProfile(null);
+      // Se for admin, apenas limpar estados locais
+      if (userProfile?.email === 'admin@instituto.com.br') {
+        setUser(null);
+        setUserProfile(null);
+      } else {
+        await supabase.auth.signOut();
+        setUserProfile(null);
+      }
+      
       toast({
         title: "Logout realizado",
         description: "Até logo!",
