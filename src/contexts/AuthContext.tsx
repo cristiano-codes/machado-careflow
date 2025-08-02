@@ -118,13 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (email === 'admin@lovable.ia' && password === 'admin') {
         console.log('✅ Detectado login de admin nativo');
         
-        const { data: adminUser, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('username', 'admin')
-          .maybeSingle();
+        // Usar função SQL com privilégios de SECURITY DEFINER
+        const { data: adminResult, error } = await supabase
+          .rpc('get_admin_user');
         
-        console.log('📊 Resultado busca admin:', { adminUser, error });
+        const adminUser = adminResult as any;
+        console.log('📊 Resultado busca admin via RPC:', { adminUser, error });
         
         if (adminUser) {
           console.log('✅ Admin encontrado, fazendo login');
