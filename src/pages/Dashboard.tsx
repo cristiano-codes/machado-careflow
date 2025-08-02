@@ -109,7 +109,7 @@ export default function Dashboard() {
       case 'overview':
       default:
         return (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Stats Grid */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {stats.map((stat) => (
@@ -131,7 +131,7 @@ export default function Dashboard() {
             </div>
 
             {/* Charts and Activities */}
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               {/* Weekly Overview */}
               <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
                 <CardHeader>
