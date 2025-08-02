@@ -88,27 +88,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer login
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('Tentando login com:', email, password);
-      
-      // Primeiro, verificar se existe um usuário na tabela users com esse email
-      const existingUser = await loadUserProfileByEmail(email);
-      console.log('Usuário encontrado:', existingUser);
-      
-      if (!existingUser) {
-        console.log('Usuário não encontrado');
-        return { error: 'Usuário não encontrado no sistema.' };
-      }
-
-      if (existingUser.status !== 'ativo') {
-        return { 
-          error: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.' 
-        };
-      }
-
-      // Para o admin nativo, aceitar login direto
+      // Para o admin nativo, aceitar login direto sem validação de banco
       if (email === 'admin@lovable.ia' && password === 'admin') {
         // Buscar o usuário admin na base
-        const adminUser = await loadUserProfileByEmail('admin@lovable.ia');
+        const { data: adminUser, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', 'admin')
+          .maybeSingle();
         
         if (adminUser) {
           // Simular login bem-sucedido para o admin nativo
@@ -131,6 +118,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           return {};
         }
+      }
+
+      // Para outros usuários, verificar se existe na tabela users
+      const existingUser = await loadUserProfileByEmail(email);
+      
+      if (!existingUser) {
+        return { error: 'Usuário não encontrado no sistema.' };
+      }
+
+      if (existingUser.status !== 'ativo') {
+        return { 
+          error: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.' 
+        };
       }
 
       // Tentar login normal com Supabase Auth
