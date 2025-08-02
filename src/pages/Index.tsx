@@ -27,17 +27,7 @@ const Index = () => {
       const { error } = await signIn(email, credentials.password);
       
       if (error) {
-        // Se não conseguiu logar e é admin, mostrar mensagem especial
-        if (credentials.username === 'admin' && credentials.password === 'admin') {
-          toast({
-            title: "Primeiro acesso do administrador",
-            description: "Você precisa criar sua conta de administrador no Supabase. Clique em 'Registrar' e use o email 'admin@instituto.com.br'",
-            variant: "default",
-            duration: 8000
-          });
-        } else {
-          throw new Error(error);
-        }
+        throw new Error(error);
       }
     } catch (error) {
       toast({
