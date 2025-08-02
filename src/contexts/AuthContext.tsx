@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (adminProfile) {
       try {
         const admin = JSON.parse(adminProfile);
-        if (admin.email === 'admin@lovable.ia') {
+        if (admin.email === 'admin@admin.com') {
           const fakeUser = {
             id: admin.id,
             email: admin.email,
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       // PRIMEIRO: Verificar se é o admin nativo
-      if (email === 'admin@lovable.ia' && password === 'admin') {
+      if (email === 'admin@admin.com' && password === 'admin') {
         // Usar função SQL com privilégios de SECURITY DEFINER
         const { data: adminResult, error } = await supabase
           .rpc('get_admin_user');
@@ -232,7 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       // Se for admin nativo, apenas limpar estados locais
-      if (userProfile?.email === 'admin@lovable.ia') {
+      if (userProfile?.email === 'admin@admin.com') {
         setUser(null);
         setUserProfile(null);
         localStorage.removeItem('admin_profile');
