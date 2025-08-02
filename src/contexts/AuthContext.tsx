@@ -105,27 +105,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      // Para o admin, aceitar senha padrão
-      if (email === 'admin@instituto.com.br' && password === 'admin') {
-        // Simular login bem-sucedido para o admin
-        const fakeUser = {
-          id: existingUser.id,
-          email: existingUser.email,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          aud: 'authenticated',
-          role: 'authenticated'
-        };
+      // Para o admin nativo, aceitar login direto
+      if (email === 'admin@lovable.ia' && password === 'admin') {
+        // Buscar o usuário admin na base
+        const adminUser = await loadUserProfileByEmail('admin@lovable.ia');
         
-        setUser(fakeUser as any);
-        setUserProfile(existingUser);
-        
-        toast({
-          title: "Login realizado com sucesso!",
-          description: `Bem-vindo, ${existingUser.name}`,
-        });
-        
-        return {};
+        if (adminUser) {
+          // Simular login bem-sucedido para o admin nativo
+          const fakeUser = {
+            id: adminUser.id,
+            email: adminUser.email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            aud: 'authenticated',
+            role: 'authenticated'
+          };
+          
+          setUser(fakeUser as any);
+          setUserProfile(adminUser);
+          
+          toast({
+            title: "Login realizado com sucesso!",
+            description: `Bem-vindo, ${adminUser.name}`,
+          });
+          
+          return {};
+        }
       }
 
       // Tentar login normal com Supabase Auth
@@ -200,8 +205,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer logout
   const signOut = async () => {
     try {
-      // Se for admin, apenas limpar estados locais
-      if (userProfile?.email === 'admin@instituto.com.br') {
+      // Se for admin nativo, apenas limpar estados locais
+      if (userProfile?.email === 'admin@lovable.ia') {
         setUser(null);
         setUserProfile(null);
       } else {
