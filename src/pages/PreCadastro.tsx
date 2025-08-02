@@ -55,7 +55,7 @@ export default function PreCadastro() {
           <p className="text-muted-foreground text-sm">Cadastre informações básicas do paciente</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Dados Pessoais */}
           <Card>
             <CardHeader>
