@@ -8,12 +8,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/contexts/SettingsContext";
 
 interface LoginFormProps {
-  onLogin: (credentials: { username: string; password: string }) => Promise<void>;
+  onLogin: (credentials: { email: string; password: string }) => Promise<void>;
   onRegister: () => void;
 }
 
 export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,7 +22,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) {
+    if (!email || !password) {
       toast({
         title: "Campos obrigatórios",
         description: "Por favor, preencha todos os campos.",
@@ -33,7 +33,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
 
     setIsLoading(true);
     try {
-      await onLogin({ username, password });
+      await onLogin({ email, password });
     } catch (error) {
       // Erro já é tratado no Index.tsx, não precisa duplicar aqui
     } finally {
@@ -61,17 +61,17 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-sm font-medium">
-                Usuário
+              <Label htmlFor="email" className="text-sm font-medium">
+                E-mail
               </Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  id="username"
-                  type="text"
-                  placeholder="Digite seu usuário"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder="Digite seu e-mail"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
                   required
                 />

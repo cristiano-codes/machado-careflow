@@ -11,20 +11,9 @@ const Index = () => {
   const { user, userProfile, loading, signIn, signUp } = useAuth();
   const { toast } = useToast();
 
-  const handleLogin = async (credentials: { username: string; password: string }) => {
+  const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
-      // Converter username para email se necessário
-      let email = credentials.username;
-      if (!email.includes('@')) {
-        // Se não é um email, assumir que é admin
-        if (credentials.username === 'admin') {
-          email = 'admin@lovable.ia';
-        } else {
-          throw new Error('Use email ou "admin" como usuário');
-        }
-      }
-
-      const { error } = await signIn(email, credentials.password);
+      const { error } = await signIn(credentials.email, credentials.password);
       
       if (error) {
         throw new Error(error);
@@ -32,7 +21,7 @@ const Index = () => {
     } catch (error) {
       toast({
         title: "Erro de autenticação",
-        description: error instanceof Error ? error.message : "Usuário ou senha incorretos",
+        description: error instanceof Error ? error.message : "E-mail ou senha incorretos",
         variant: "destructive",
       });
       throw error;

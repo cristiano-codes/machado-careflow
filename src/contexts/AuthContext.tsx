@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: adminUser, error } = await supabase
           .from('users')
           .select('*')
-          .eq('username', 'admin')
+          .eq('email', 'admin@lovable.ia')
           .maybeSingle();
         
         if (adminUser) {
@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const existingUser = await loadUserProfileByEmail(email);
       
       if (!existingUser) {
-        return { error: 'Usuário não encontrado no sistema.' };
+        return { error: 'E-mail não encontrado no sistema.' };
       }
 
       if (existingUser.status !== 'ativo') {
