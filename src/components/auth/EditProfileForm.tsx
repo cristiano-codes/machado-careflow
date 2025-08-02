@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Edit } from "lucide-react";
 import { toast } from "sonner";
-import { apiService } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface EditProfileFormProps {
   user: {
@@ -19,6 +20,7 @@ interface EditProfileFormProps {
 export function EditProfileForm({ user, onSuccess }: EditProfileFormProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { updateProfile } = useAuth();
   const [formData, setFormData] = useState({
     name: user.name || "",
     email: user.email || "",
@@ -30,17 +32,57 @@ export function EditProfileForm({ user, onSuccess }: EditProfileFormProps) {
     setLoading(true);
 
     try {
-      // Aqui você pode adicionar a chamada para a API para atualizar o perfil
-      // Por enquanto, vamos simular a atualização
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Se o email mudou, atualizar no Supabase Auth também
+      if (formData.email !== user.email) {
+        const { error: authError } = await supabase.auth.updateUser({
+          email: formData.email
+        });
+        
+        if (authError) {
+          throw new Error("Erro ao atualizar email: " + authError.message);
+        }
+        
+        // Enviar email de confirmação
+        await sendEmailConfirmation(formData.email, user.name);
+      }
+      
+      // Atualizar perfil na tabela users
+      const result = await updateProfile(formData);
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
       
       toast.success("Perfil atualizado com sucesso!");
+      if (formData.email !== user.email) {
+        toast.info("Confirme o novo email para ativá-lo");
+      }
       onSuccess(formData);
       setIsEditing(false);
-    } catch (error) {
-      toast.error("Erro ao atualizar perfil");
+    } catch (error: any) {
+      console.error("Erro:", error);
+      toast.error(error.message || "Erro ao atualizar perfil");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendEmailConfirmation = async (email: string, name: string) => {
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: "Confirmação de Alteração de Email - Instituto Lauir",
+          html: `
+            <h2>Olá, ${name}!</h2>
+            <p>Seu email foi alterado para: <strong>${email}</strong></p>
+            <p>Se você não fez esta alteração, entre em contato conosco imediatamente.</p>
+            <p>Atenciosamente,<br>Instituto Lauir</p>
+          `
+        }
+      });
+    } catch (error) {
+      console.error("Erro ao enviar email:", error);
     }
   };
 
