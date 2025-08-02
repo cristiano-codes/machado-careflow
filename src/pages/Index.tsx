@@ -18,7 +18,7 @@ const Index = () => {
       if (!email.includes('@')) {
         // Se não é um email, assumir que é admin
         if (credentials.username === 'admin') {
-          email = 'admin@instituto.com.br';
+          email = 'admin@lovable.ia';
         } else {
           throw new Error('Use email ou "admin" como usuário');
         }
