@@ -58,7 +58,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Configurar listener de autenticação
   useEffect(() => {
-    // Verificar sessão atual
+    // Verificar se há admin no localStorage primeiro
+    const adminProfile = localStorage.getItem('admin_profile');
+    if (adminProfile) {
+      try {
+        const admin = JSON.parse(adminProfile);
+        if (admin.email === 'admin@lovable.ia') {
+          const fakeUser = {
+            id: admin.id,
+            email: admin.email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            aud: 'authenticated',
+            role: 'authenticated'
+          };
+          setUser(fakeUser as any);
+          setUserProfile(admin);
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        localStorage.removeItem('admin_profile');
+      }
+    }
+
+    // Verificar sessão atual do Supabase
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -110,6 +134,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           setUser(fakeUser as any);
           setUserProfile(adminUser);
+          
+          // Salvar perfil do admin no localStorage para o hook de permissões
+          localStorage.setItem('admin_profile', JSON.stringify(adminUser));
           
           toast({
             title: "Login realizado com sucesso!",
@@ -209,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userProfile?.email === 'admin@lovable.ia') {
         setUser(null);
         setUserProfile(null);
+        localStorage.removeItem('admin_profile');
       } else {
         await supabase.auth.signOut();
         setUserProfile(null);
