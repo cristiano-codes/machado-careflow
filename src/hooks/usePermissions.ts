@@ -35,6 +35,36 @@ export function usePermissions() {
   // Carregar permissões do usuário atual
   const loadUserPermissions = async () => {
     try {
+      // Primeiro verificar se é o admin nativo (localStorage ou contexto)
+      const adminProfile = localStorage.getItem('admin_profile');
+      if (adminProfile) {
+        const admin = JSON.parse(adminProfile);
+        if (admin.email === 'admin@lovable.ia') {
+          // Admin nativo tem todas as permissões
+          const { data: modules } = await supabase.from('modules').select('*');
+          const { data: permissions } = await supabase.from('permissions').select('*');
+          
+          if (modules && permissions) {
+            const adminPermissions: UserPermission[] = [];
+            modules.forEach(module => {
+              permissions.forEach(permission => {
+                adminPermissions.push({
+                  id: `${module.id}-${permission.id}`,
+                  user_id: admin.id,
+                  module_id: module.id,
+                  permission_id: permission.id,
+                  module,
+                  permission
+                });
+              });
+            });
+            setUserPermissions(adminPermissions);
+          }
+          return;
+        }
+      }
+
+      // Para usuários normais, usar Supabase Auth
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
