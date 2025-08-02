@@ -112,22 +112,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer login
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('🔍 Tentando login com:', email, password);
-      
       // PRIMEIRO: Verificar se é o admin nativo
       if (email === 'admin@lovable.ia' && password === 'admin') {
-        console.log('✅ Detectado login de admin nativo');
-        
         // Usar função SQL com privilégios de SECURITY DEFINER
         const { data: adminResult, error } = await supabase
           .rpc('get_admin_user');
         
         const adminUser = adminResult as any;
-        console.log('📊 Resultado busca admin via RPC:', { adminUser, error });
         
         if (adminUser) {
-          console.log('✅ Admin encontrado, fazendo login');
-          
           // Simular login bem-sucedido para o admin nativo
           const fakeUser = {
             id: adminUser.id,
@@ -150,14 +143,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           
           return {};
-        } else {
-          console.log('❌ Admin não encontrado no banco');
         }
       }
 
-      console.log('🔄 Verificando usuário normal...');
-
-      // Para outros usuários, verificar se existe na tabela users
+      // SEGUNDO: Para outros usuários, verificar se existe na tabela users
       const existingUser = await loadUserProfileByEmail(email);
       
       if (!existingUser) {
