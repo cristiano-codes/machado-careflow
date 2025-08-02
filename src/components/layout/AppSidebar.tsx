@@ -32,7 +32,7 @@ import {
 import { useSettings } from "@/contexts/SettingsContext";
 
 const mainItems = [
-  { title: "Início", url: "/dashboard", icon: Home },
+  { title: "Dashboard", url: "/dashboard", icon: BarChart3 },
   { title: "Pré-Agendamento", url: "/pre-agendamento", icon: MessageSquare },
   { title: "Agenda", url: "/agenda", icon: Calendar },
   { title: "Pré-Cadastro", url: "/pre-cadastro", icon: UserPlus },
