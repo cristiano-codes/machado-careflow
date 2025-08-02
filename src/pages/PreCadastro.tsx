@@ -49,13 +49,10 @@ export default function PreCadastro() {
 
   return (
     <Layout onLogout={handleLogout}>
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <UserPlus className="w-8 h-8 text-primary" />
-          <div>
-            <h1 className="text-3xl font-bold">Pré-Cadastro</h1>
-            <p className="text-muted-foreground">Cadastre informações básicas do paciente</p>
-          </div>
+      <div className="max-w-7xl mx-auto space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Pré-Cadastro</h1>
+          <p className="text-muted-foreground text-sm">Cadastre informações básicas do paciente</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
