@@ -231,13 +231,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer logout
   const signOut = async () => {
     try {
+      console.log('Iniciando logout...');
+      
       // Se for admin nativo, apenas limpar estados locais
       if (userProfile?.email === 'admin@admin.com') {
+        console.log('Logout admin nativo');
         setUser(null);
         setUserProfile(null);
         localStorage.removeItem('admin_profile');
       } else {
+        console.log('Logout usuário normal');
         await supabase.auth.signOut();
+        setUser(null);
         setUserProfile(null);
       }
       
@@ -245,8 +250,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Logout realizado",
         description: "Até logo!",
       });
+      
+      console.log('Logout concluído');
     } catch (error) {
       console.error('Erro no logout:', error);
+      toast({
+        title: "Erro no logout",
+        description: "Ocorreu um erro ao fazer logout",
+        variant: "destructive"
+      });
     }
   };
 
