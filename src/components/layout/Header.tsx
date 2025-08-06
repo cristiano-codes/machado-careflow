@@ -79,7 +79,10 @@ export function Header({ user, onLogout }: HeaderProps) {
                   <span>Configurações</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout} className="text-destructive">
+                <DropdownMenuItem onClick={() => {
+                  console.log('Clicou em Sair - Header');
+                  onLogout();
+                }} className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sair</span>
                 </DropdownMenuItem>

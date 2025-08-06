@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
   const [showRegister, setShowRegister] = useState(false);
-  const { user, userProfile, loading, signIn, signUp } = useAuth();
+  const { user, userProfile, loading, signIn, signUp, signOut } = useAuth();
   const { toast } = useToast();
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
@@ -61,7 +61,7 @@ const Index = () => {
   } : undefined;
 
   return (
-    <Layout user={layoutUser} onLogout={() => {}}>
+    <Layout user={layoutUser} onLogout={signOut}>
       <Dashboard />
     </Layout>
   );
