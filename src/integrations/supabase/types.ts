@@ -457,6 +457,33 @@ export type Database = {
           },
         ]
       }
+      login_attempts: {
+        Row: {
+          attempt_time: string
+          email: string
+          id: string
+          ip_address: unknown | null
+          success: boolean
+          user_agent: string | null
+        }
+        Insert: {
+          attempt_time?: string
+          email: string
+          id?: string
+          ip_address?: unknown | null
+          success?: boolean
+          user_agent?: string | null
+        }
+        Update: {
+          attempt_time?: string
+          email?: string
+          id?: string
+          ip_address?: unknown | null
+          success?: boolean
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       modules: {
         Row: {
           created_at: string
@@ -976,12 +1003,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_login_rate_limit: {
+        Args: { user_email: string; client_ip?: string }
+        Returns: boolean
+      }
       get_admin_user: {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
       is_authenticated: {
         Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      log_login_attempt: {
+        Args: {
+          user_email: string
+          is_success: boolean
+          client_ip?: string
+          client_user_agent?: string
+        }
+        Returns: undefined
+      }
+      validate_password_strength: {
+        Args: { password: string }
         Returns: boolean
       }
     }
