@@ -62,6 +62,83 @@ export type Database = {
         }
         Relationships: []
       }
+      system_settings: {
+        Row: {
+          auto_updates: boolean
+          backup_frequency: string
+          created_at: string
+          data_retention_days: number
+          debug_mode: boolean
+          email_notifications: boolean
+          id: string
+          instituicao_email: string
+          instituicao_endereco: string | null
+          instituicao_nome: string
+          instituicao_telefone: string | null
+          max_login_attempts: number
+          password_expiry_days: number
+          push_notifications: boolean
+          session_timeout: number
+          sms_notifications: boolean
+          two_factor_auth: boolean
+          updated_at: string
+          updated_by: string | null
+          weekly_reports: boolean
+        }
+        Insert: {
+          auto_updates?: boolean
+          backup_frequency?: string
+          created_at?: string
+          data_retention_days?: number
+          debug_mode?: boolean
+          email_notifications?: boolean
+          id?: string
+          instituicao_email?: string
+          instituicao_endereco?: string | null
+          instituicao_nome?: string
+          instituicao_telefone?: string | null
+          max_login_attempts?: number
+          password_expiry_days?: number
+          push_notifications?: boolean
+          session_timeout?: number
+          sms_notifications?: boolean
+          two_factor_auth?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          weekly_reports?: boolean
+        }
+        Update: {
+          auto_updates?: boolean
+          backup_frequency?: string
+          created_at?: string
+          data_retention_days?: number
+          debug_mode?: boolean
+          email_notifications?: boolean
+          id?: string
+          instituicao_email?: string
+          instituicao_endereco?: string | null
+          instituicao_nome?: string
+          instituicao_telefone?: string | null
+          max_login_attempts?: number
+          password_expiry_days?: number
+          push_notifications?: boolean
+          session_timeout?: number
+          sms_notifications?: boolean
+          two_factor_auth?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          weekly_reports?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_permissions: {
         Row: {
           created_at: string
