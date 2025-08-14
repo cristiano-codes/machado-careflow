@@ -9,7 +9,7 @@ import { useState } from "react";
 
 interface Avaliacao {
   id: number;
-  paciente: string;
+  aluno: string;
   tipo: string;
   data_inicio: string;
   data_conclusao?: string;
@@ -23,7 +23,7 @@ export default function Avaliacoes() {
   const [avaliacoes] = useState<Avaliacao[]>([
     {
       id: 1,
-      paciente: "Maria Silva",
+      aluno: "Maria Silva",
       tipo: "Avaliação Psicológica Completa",
       data_inicio: "2024-02-10",
       data_conclusao: "2024-02-15",
@@ -34,7 +34,7 @@ export default function Avaliacoes() {
     },
     {
       id: 2,
-      paciente: "Carlos Oliveira",
+      aluno: "Carlos Oliveira",
       tipo: "Avaliação Neuropsicológica",
       data_inicio: "2024-02-12",
       profissional: "Dra. Ana Costa",
@@ -43,7 +43,7 @@ export default function Avaliacoes() {
     },
     {
       id: 3,
-      paciente: "Lucia Ferreira",
+      aluno: "Lucia Ferreira",
       tipo: "Avaliação Vocacional",
       data_inicio: "2024-02-20",
       profissional: "Dr. Pedro Lima",
@@ -52,16 +52,16 @@ export default function Avaliacoes() {
     },
     {
       id: 4,
-      paciente: "Roberto Santos",
+      aluno: "Roberto Santos",
       tipo: "Avaliação de Personalidade",
       data_inicio: "2024-02-08",
       profissional: "Dra. Carmen Rosa",
       status: "cancelada",
-      observacoes: "Cancelada a pedido do paciente"
+      observacoes: "Cancelada a pedido do aluno"
     },
     {
       id: 5,
-      paciente: "Amanda Costa",
+      aluno: "Amanda Costa",
       tipo: "Avaliação Cognitiva",
       data_inicio: "2024-02-14",
       data_conclusao: "2024-02-18",
@@ -175,7 +175,7 @@ export default function Avaliacoes() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Paciente</TableHead>
+                      <TableHead>Aluno</TableHead>
                       <TableHead>Tipo de Avaliação</TableHead>
                       <TableHead>Início</TableHead>
                       <TableHead>Conclusão</TableHead>
@@ -190,7 +190,7 @@ export default function Avaliacoes() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-muted-foreground" />
-                            {avaliacao.paciente}
+                            {avaliacao.aluno}
                           </div>
                         </TableCell>
                         <TableCell className="max-w-xs">
@@ -246,7 +246,7 @@ export default function Avaliacoes() {
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <User className="w-4 h-4 text-muted-foreground" />
-                              <span className="font-medium">{avaliacao.paciente}</span>
+                              <span className="font-medium">{avaliacao.aluno}</span>
                             </div>
                             <p className="text-sm text-muted-foreground">{avaliacao.tipo}</p>
                             <p className="text-xs text-muted-foreground">
@@ -288,7 +288,7 @@ export default function Avaliacoes() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Paciente</TableHead>
+                      <TableHead>Aluno</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Período</TableHead>
                       <TableHead>Profissional</TableHead>
@@ -299,7 +299,7 @@ export default function Avaliacoes() {
                   <TableBody>
                     {avaliacoesConcluidas.map((avaliacao) => (
                       <TableRow key={avaliacao.id}>
-                        <TableCell className="font-medium">{avaliacao.paciente}</TableCell>
+                        <TableCell className="font-medium">{avaliacao.aluno}</TableCell>
                         <TableCell className="max-w-xs truncate">{avaliacao.tipo}</TableCell>
                         <TableCell>
                           {formatDate(avaliacao.data_inicio)} a {avaliacao.data_conclusao ? formatDate(avaliacao.data_conclusao) : '-'}
@@ -346,7 +346,7 @@ export default function Avaliacoes() {
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <User className="w-4 h-4 text-muted-foreground" />
-                              <span className="font-medium">{avaliacao.paciente}</span>
+                              <span className="font-medium">{avaliacao.aluno}</span>
                             </div>
                             <p className="text-sm text-muted-foreground">{avaliacao.tipo}</p>
                             <p className="text-xs text-muted-foreground">
