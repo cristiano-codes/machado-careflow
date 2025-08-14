@@ -8,7 +8,6 @@ import { UserPlus, User, MapPin, Phone, Mail } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-
 export default function PreCadastro() {
   const [formData, setFormData] = useState({
     nome: '',
@@ -32,27 +31,25 @@ export default function PreCadastro() {
     numero_convenio: '',
     observacoes: ''
   });
-  const { toast } = useToast();
-
+  const {
+    toast
+  } = useToast();
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     toast({
       title: "Pré-cadastro realizado!",
-      description: "Seus dados foram salvos com sucesso.",
+      description: "Seus dados foram salvos com sucesso."
     });
   };
-
   const handleLogout = () => {
     localStorage.removeItem('token');
     window.location.href = '/';
   };
-
-  return (
-    <Layout onLogout={handleLogout}>
+  return <Layout onLogout={handleLogout}>
       <div className="max-w-7xl mx-auto space-y-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Pré-Cadastro</h1>
-          <p className="text-muted-foreground text-sm">Cadastre informações básicas do paciente</p>
+          <p className="text-muted-foreground text-sm">Cadastre informações básicas do aluno</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,58 +60,50 @@ export default function PreCadastro() {
                 <User className="w-5 h-5" />
                 Dados Pessoais
               </CardTitle>
-              <CardDescription>
-                Informações básicas do paciente
-              </CardDescription>
+              <CardDescription>Informações básicas do aluno</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="nome">Nome Completo*</Label>
-                  <Input
-                    id="nome"
-                    value={formData.nome}
-                    onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
-                    required
-                  />
+                  <Input id="nome" value={formData.nome} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  nome: e.target.value
+                }))} required />
                 </div>
                 <div>
                   <Label htmlFor="data_nascimento">Data de Nascimento*</Label>
-                  <Input
-                    id="data_nascimento"
-                    type="date"
-                    value={formData.data_nascimento}
-                    onChange={(e) => setFormData(prev => ({ ...prev, data_nascimento: e.target.value }))}
-                    required
-                  />
+                  <Input id="data_nascimento" type="date" value={formData.data_nascimento} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  data_nascimento: e.target.value
+                }))} required />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="cpf">CPF*</Label>
-                  <Input
-                    id="cpf"
-                    placeholder="000.000.000-00"
-                    value={formData.cpf}
-                    onChange={(e) => setFormData(prev => ({ ...prev, cpf: e.target.value }))}
-                    required
-                  />
+                  <Input id="cpf" placeholder="000.000.000-00" value={formData.cpf} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  cpf: e.target.value
+                }))} required />
                 </div>
                 <div>
                   <Label htmlFor="rg">RG</Label>
-                  <Input
-                    id="rg"
-                    value={formData.rg}
-                    onChange={(e) => setFormData(prev => ({ ...prev, rg: e.target.value }))}
-                  />
+                  <Input id="rg" value={formData.rg} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  rg: e.target.value
+                }))} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="estado_civil">Estado Civil</Label>
-                  <Select value={formData.estado_civil} onValueChange={(value) => setFormData(prev => ({ ...prev, estado_civil: value }))}>
+                  <Select value={formData.estado_civil} onValueChange={value => setFormData(prev => ({
+                  ...prev,
+                  estado_civil: value
+                }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
@@ -129,7 +118,10 @@ export default function PreCadastro() {
                 </div>
                 <div>
                   <Label htmlFor="escolaridade">Escolaridade</Label>
-                  <Select value={formData.escolaridade} onValueChange={(value) => setFormData(prev => ({ ...prev, escolaridade: value }))}>
+                  <Select value={formData.escolaridade} onValueChange={value => setFormData(prev => ({
+                  ...prev,
+                  escolaridade: value
+                }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
@@ -145,11 +137,10 @@ export default function PreCadastro() {
 
               <div>
                 <Label htmlFor="profissao">Profissão</Label>
-                <Input
-                  id="profissao"
-                  value={formData.profissao}
-                  onChange={(e) => setFormData(prev => ({ ...prev, profissao: e.target.value }))}
-                />
+                <Input id="profissao" value={formData.profissao} onChange={e => setFormData(prev => ({
+                ...prev,
+                profissao: e.target.value
+              }))} />
               </div>
             </CardContent>
           </Card>
@@ -166,34 +157,26 @@ export default function PreCadastro() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="email">E-mail*</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                    required
-                  />
+                  <Input id="email" type="email" value={formData.email} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  email: e.target.value
+                }))} required />
                 </div>
                 <div>
                   <Label htmlFor="telefone">Telefone</Label>
-                  <Input
-                    id="telefone"
-                    placeholder="(11) 1234-5678"
-                    value={formData.telefone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, telefone: e.target.value }))}
-                  />
+                  <Input id="telefone" placeholder="(11) 1234-5678" value={formData.telefone} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  telefone: e.target.value
+                }))} />
                 </div>
               </div>
 
               <div>
                 <Label htmlFor="celular">Celular*</Label>
-                <Input
-                  id="celular"
-                  placeholder="(11) 99999-9999"
-                  value={formData.celular}
-                  onChange={(e) => setFormData(prev => ({ ...prev, celular: e.target.value }))}
-                  required
-                />
+                <Input id="celular" placeholder="(11) 99999-9999" value={formData.celular} onChange={e => setFormData(prev => ({
+                ...prev,
+                celular: e.target.value
+              }))} required />
               </div>
             </CardContent>
           </Card>
@@ -210,62 +193,58 @@ export default function PreCadastro() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="cep">CEP</Label>
-                  <Input
-                    id="cep"
-                    placeholder="00000-000"
-                    value={formData.cep}
-                    onChange={(e) => setFormData(prev => ({ ...prev, cep: e.target.value }))}
-                  />
+                  <Input id="cep" placeholder="00000-000" value={formData.cep} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  cep: e.target.value
+                }))} />
                 </div>
                 <div className="md:col-span-2">
                   <Label htmlFor="endereco">Endereço</Label>
-                  <Input
-                    id="endereco"
-                    value={formData.endereco}
-                    onChange={(e) => setFormData(prev => ({ ...prev, endereco: e.target.value }))}
-                  />
+                  <Input id="endereco" value={formData.endereco} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  endereco: e.target.value
+                }))} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="numero">Número</Label>
-                  <Input
-                    id="numero"
-                    value={formData.numero}
-                    onChange={(e) => setFormData(prev => ({ ...prev, numero: e.target.value }))}
-                  />
+                  <Input id="numero" value={formData.numero} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  numero: e.target.value
+                }))} />
                 </div>
                 <div className="md:col-span-2">
                   <Label htmlFor="complemento">Complemento</Label>
-                  <Input
-                    id="complemento"
-                    value={formData.complemento}
-                    onChange={(e) => setFormData(prev => ({ ...prev, complemento: e.target.value }))}
-                  />
+                  <Input id="complemento" value={formData.complemento} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  complemento: e.target.value
+                }))} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="bairro">Bairro</Label>
-                  <Input
-                    id="bairro"
-                    value={formData.bairro}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bairro: e.target.value }))}
-                  />
+                  <Input id="bairro" value={formData.bairro} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  bairro: e.target.value
+                }))} />
                 </div>
                 <div>
                   <Label htmlFor="cidade">Cidade</Label>
-                  <Input
-                    id="cidade"
-                    value={formData.cidade}
-                    onChange={(e) => setFormData(prev => ({ ...prev, cidade: e.target.value }))}
-                  />
+                  <Input id="cidade" value={formData.cidade} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  cidade: e.target.value
+                }))} />
                 </div>
                 <div>
                   <Label htmlFor="estado">Estado</Label>
-                  <Select value={formData.estado} onValueChange={(value) => setFormData(prev => ({ ...prev, estado: value }))}>
+                  <Select value={formData.estado} onValueChange={value => setFormData(prev => ({
+                  ...prev,
+                  estado: value
+                }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="UF" />
                     </SelectTrigger>
@@ -293,7 +272,10 @@ export default function PreCadastro() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="convenio">Convênio</Label>
-                  <Select value={formData.convenio} onValueChange={(value) => setFormData(prev => ({ ...prev, convenio: value }))}>
+                  <Select value={formData.convenio} onValueChange={value => setFormData(prev => ({
+                  ...prev,
+                  convenio: value
+                }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o convênio" />
                     </SelectTrigger>
@@ -308,22 +290,19 @@ export default function PreCadastro() {
                 </div>
                 <div>
                   <Label htmlFor="numero_convenio">Número do Convênio</Label>
-                  <Input
-                    id="numero_convenio"
-                    value={formData.numero_convenio}
-                    onChange={(e) => setFormData(prev => ({ ...prev, numero_convenio: e.target.value }))}
-                  />
+                  <Input id="numero_convenio" value={formData.numero_convenio} onChange={e => setFormData(prev => ({
+                  ...prev,
+                  numero_convenio: e.target.value
+                }))} />
                 </div>
               </div>
 
               <div>
                 <Label htmlFor="observacoes">Observações</Label>
-                <Textarea
-                  id="observacoes"
-                  placeholder="Informações adicionais..."
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, observacoes: e.target.value }))}
-                />
+                <Textarea id="observacoes" placeholder="Informações adicionais..." value={formData.observacoes} onChange={e => setFormData(prev => ({
+                ...prev,
+                observacoes: e.target.value
+              }))} />
               </div>
             </CardContent>
           </Card>
@@ -338,6 +317,5 @@ export default function PreCadastro() {
           </div>
         </form>
       </div>
-    </Layout>
-  );
+    </Layout>;
 }
