@@ -9,7 +9,7 @@ import { useState } from "react";
 
 interface Entrevista {
   id: number;
-  paciente: string;
+  aluno: string;
   data: string;
   hora: string;
   tipo: string;
@@ -22,7 +22,7 @@ export default function Entrevistas() {
   const [entrevistas] = useState<Entrevista[]>([
     {
       id: 1,
-      paciente: "Maria Silva",
+      aluno: "Maria Silva",
       data: "2024-02-15",
       hora: "09:00",
       tipo: "Inicial",
@@ -32,7 +32,7 @@ export default function Entrevistas() {
     },
     {
       id: 2,
-      paciente: "Carlos Oliveira",
+      aluno: "Carlos Oliveira",
       data: "2024-02-16",
       hora: "10:30",
       tipo: "Retorno",
@@ -41,7 +41,7 @@ export default function Entrevistas() {
     },
     {
       id: 3,
-      paciente: "Lucia Ferreira",
+      aluno: "Lucia Ferreira",
       data: "2024-02-17",
       hora: "14:00",
       tipo: "Avaliação",
@@ -50,13 +50,13 @@ export default function Entrevistas() {
     },
     {
       id: 4,
-      paciente: "Roberto Santos",
+      aluno: "Roberto Santos",
       data: "2024-02-18",
       hora: "15:30",
       tipo: "Seguimento",
       profissional: "Dra. Carmen Rosa",
       status: "cancelada",
-      observacoes: "Cancelada pelo paciente"
+      observacoes: "Cancelada pelo aluno"
     }
   ]);
 
@@ -164,7 +164,7 @@ export default function Entrevistas() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Paciente</TableHead>
+                      <TableHead>Aluno</TableHead>
                       <TableHead>Data/Hora</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Profissional</TableHead>
@@ -178,7 +178,7 @@ export default function Entrevistas() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-muted-foreground" />
-                            {entrevista.paciente}
+                            {entrevista.aluno}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -226,7 +226,7 @@ export default function Entrevistas() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Paciente</TableHead>
+                      <TableHead>Aluno</TableHead>
                       <TableHead>Data/Hora</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Profissional</TableHead>
@@ -236,7 +236,7 @@ export default function Entrevistas() {
                   <TableBody>
                     {entrevistasAgendadas.map((entrevista) => (
                       <TableRow key={entrevista.id}>
-                        <TableCell className="font-medium">{entrevista.paciente}</TableCell>
+                        <TableCell className="font-medium">{entrevista.aluno}</TableCell>
                         <TableCell>
                           {formatDate(entrevista.data)} às {entrevista.hora}
                         </TableCell>
@@ -275,7 +275,7 @@ export default function Entrevistas() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Paciente</TableHead>
+                      <TableHead>Aluno</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Profissional</TableHead>
@@ -286,7 +286,7 @@ export default function Entrevistas() {
                   <TableBody>
                     {entrevistasRealizadas.map((entrevista) => (
                       <TableRow key={entrevista.id}>
-                        <TableCell className="font-medium">{entrevista.paciente}</TableCell>
+                        <TableCell className="font-medium">{entrevista.aluno}</TableCell>
                         <TableCell>{formatDate(entrevista.data)}</TableCell>
                         <TableCell>{entrevista.tipo}</TableCell>
                         <TableCell>{entrevista.profissional}</TableCell>
@@ -321,7 +321,7 @@ export default function Entrevistas() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Paciente</TableHead>
+                      <TableHead>Aluno</TableHead>
                       <TableHead>Data/Hora</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Profissional</TableHead>
@@ -331,7 +331,7 @@ export default function Entrevistas() {
                   <TableBody>
                     {entrevistasPendentes.map((entrevista) => (
                       <TableRow key={entrevista.id}>
-                        <TableCell className="font-medium">{entrevista.paciente}</TableCell>
+                        <TableCell className="font-medium">{entrevista.aluno}</TableCell>
                         <TableCell>
                           {formatDate(entrevista.data)} às {entrevista.hora}
                         </TableCell>
