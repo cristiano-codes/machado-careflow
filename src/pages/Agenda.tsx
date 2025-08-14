@@ -8,7 +8,7 @@ import { useState } from "react";
 interface AgendaItem {
   id: number;
   hora: string;
-  paciente: string;
+  aluno: string;
   servico: string;
   status: 'agendado' | 'confirmado' | 'concluido' | 'cancelado';
   profissional: string;
@@ -21,7 +21,7 @@ export default function Agenda() {
     {
       id: 1,
       hora: "08:00",
-      paciente: "Maria Silva",
+      aluno: "Maria Silva",
       servico: "Avaliação Psicológica",
       status: "confirmado",
       profissional: "Dr. João Santos"
@@ -29,7 +29,7 @@ export default function Agenda() {
     {
       id: 2,
       hora: "09:30",
-      paciente: "Carlos Oliveira",
+      aluno: "Carlos Oliveira",
       servico: "Terapia Individual",
       status: "agendado",
       profissional: "Dra. Ana Costa"
@@ -37,7 +37,7 @@ export default function Agenda() {
     {
       id: 3,
       hora: "11:00",
-      paciente: "Lucia Ferreira",
+      aluno: "Lucia Ferreira",
       servico: "Orientação Profissional",
       status: "concluido",
       profissional: "Dr. Pedro Lima"
@@ -45,7 +45,7 @@ export default function Agenda() {
     {
       id: 4,
       hora: "14:00",
-      paciente: "Roberto Santos",
+      aluno: "Roberto Santos",
       servico: "Terapia em Grupo",
       status: "agendado",
       profissional: "Dra. Carmen Rosa"
@@ -53,7 +53,7 @@ export default function Agenda() {
     {
       id: 5,
       hora: "15:30",
-      paciente: "Amanda Costa",
+      aluno: "Amanda Costa",
       servico: "Avaliação Psicológica",
       status: "cancelado",
       profissional: "Dr. João Santos"
@@ -144,7 +144,7 @@ export default function Agenda() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-medium">{item.paciente}</span>
+                        <span className="font-medium">{item.aluno}</span>
                       </div>
                       <div className="text-sm text-muted-foreground">{item.servico}</div>
                       <div className="text-xs text-muted-foreground">
@@ -190,7 +190,7 @@ export default function Agenda() {
               <div className="text-3xl font-bold text-green-600">
                 {agendamentos.filter(a => a.status === 'confirmado').length}
               </div>
-              <p className="text-sm text-muted-foreground">Pacientes confirmados</p>
+              <p className="text-sm text-muted-foreground">Alunos confirmados</p>
             </CardContent>
           </Card>
 

@@ -148,14 +148,14 @@ class ApiService {
     }
   }
 
-  async getPacientes() {
+  async getAlunos() {
     try {
-      const response = await fetch(`${API_BASE_URL}/pacientes`, {
+      const response = await fetch(`${API_BASE_URL}/alunos`, {
         headers: this.getAuthHeaders(),
       });
       return await response.json();
     } catch (error) {
-      console.error('Erro ao buscar pacientes:', error);
+      console.error('Erro ao buscar alunos:', error);
       throw error;
     }
   }
