@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { apiService } from '@/services/api';
 
 interface Settings {
   instituicao_nome: string;
@@ -57,35 +57,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const loadSettings = async () => {
     try {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('*')
-        .single();
+      const response = await fetch('http://localhost:3000/api/settings');
+      const data = await response.json();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Erro ao carregar configurações:', error);
-        return;
-      }
-
-      if (data) {
+      if (data && data.success) {
         setSettings(prevSettings => ({
           ...prevSettings,
-          instituicao_nome: data.instituicao_nome,
-          instituicao_email: data.instituicao_email,
-          instituicao_telefone: data.instituicao_telefone,
-          instituicao_endereco: data.instituicao_endereco,
-          email_notifications: data.email_notifications,
-          sms_notifications: data.sms_notifications,
-          push_notifications: data.push_notifications,
-          weekly_reports: data.weekly_reports,
-          two_factor_auth: data.two_factor_auth,
-          password_expiry_days: data.password_expiry_days,
-          max_login_attempts: data.max_login_attempts,
-          session_timeout: data.session_timeout,
-          backup_frequency: data.backup_frequency,
-          data_retention_days: data.data_retention_days,
-          auto_updates: data.auto_updates,
-          debug_mode: data.debug_mode
+          ...data.settings
         }));
       }
     } catch (error) {
@@ -99,30 +77,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const saveSettings = async () => {
     try {
-      const { error } = await supabase
-        .from('system_settings')
-        .upsert({
-          instituicao_nome: settings.instituicao_nome,
-          instituicao_email: settings.instituicao_email,
-          instituicao_telefone: settings.instituicao_telefone,
-          instituicao_endereco: settings.instituicao_endereco,
-          email_notifications: settings.email_notifications,
-          sms_notifications: settings.sms_notifications,
-          push_notifications: settings.push_notifications,
-          weekly_reports: settings.weekly_reports,
-          two_factor_auth: settings.two_factor_auth,
-          password_expiry_days: settings.password_expiry_days,
-          max_login_attempts: settings.max_login_attempts,
-          session_timeout: settings.session_timeout,
-          backup_frequency: settings.backup_frequency,
-          data_retention_days: settings.data_retention_days,
-          auto_updates: settings.auto_updates,
-          debug_mode: settings.debug_mode
-        });
+      const response = await fetch('http://localhost:3000/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+      });
 
-      if (error) {
-        console.error('Erro ao salvar configurações:', error);
-        throw error;
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Erro ao salvar configurações');
       }
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);

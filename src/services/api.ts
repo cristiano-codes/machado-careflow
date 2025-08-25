@@ -1,5 +1,5 @@
 const API_BASE_URL = 'http://localhost:3000/api';
-const DEMO_MODE = true; // Modo demonstração sem backend
+const DEMO_MODE = false; // Usando backend PostgreSQL local
 
 export interface LoginResponse {
   success: boolean;

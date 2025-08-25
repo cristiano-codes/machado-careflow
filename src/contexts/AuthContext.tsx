@@ -1,10 +1,9 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { apiService } from '@/services/api';
 
 interface AuthContextType {
-  user: User | null;
+  user: any | null;
   userProfile: any | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
@@ -16,177 +15,47 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Carregar perfil do usuário
-  const loadUserProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) throw error;
-      setUserProfile(data);
-      return data;
-    } catch (error) {
-      console.error('Erro ao carregar perfil:', error);
-      return null;
-    }
-  };
-
-  // Nova função para buscar usuário por email
-  const loadUserProfileByEmail = async (email: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Erro ao carregar perfil por email:', error);
-      return null;
-    }
-  };
-
-  // Configurar listener de autenticação
+  // Verificar autenticação no localStorage
   useEffect(() => {
-    // Verificar se há admin no localStorage primeiro
-    const adminProfile = localStorage.getItem('admin_profile');
-    if (adminProfile) {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    
+    if (token && userStr) {
       try {
-        const admin = JSON.parse(adminProfile);
-        if (admin.email === 'admin@admin.com') {
-          const fakeUser = {
-            id: admin.id,
-            email: admin.email,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            aud: 'authenticated',
-            role: 'authenticated'
-          };
-          setUser(fakeUser as any);
-          setUserProfile(admin);
-          setLoading(false);
-          return;
-        }
+        const userData = JSON.parse(userStr);
+        setUser(userData);
+        setUserProfile(userData);
       } catch (error) {
-        localStorage.removeItem('admin_profile');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
       }
     }
-
-    // Verificar sessão atual do Supabase
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadUserProfile(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    // Escutar mudanças de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          await loadUserProfile(session.user.id);
-        } else {
-          setUserProfile(null);
-        }
-        
-        setLoading(false);
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    setLoading(false);
   }, []);
 
   // Fazer login
   const signIn = async (email: string, password: string) => {
     try {
-      // PRIMEIRO: Verificar se é o admin nativo
-      if (email === 'admin@admin.com' && password === 'admin') {
-        // Usar função SQL com privilégios de SECURITY DEFINER
-        const { data: adminResult, error } = await supabase
-          .rpc('get_admin_user');
-        
-        const adminUser = adminResult as any;
-        
-        if (adminUser) {
-          // Simular login bem-sucedido para o admin nativo
-          const fakeUser = {
-            id: adminUser.id,
-            email: adminUser.email,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            aud: 'authenticated',
-            role: 'authenticated'
-          };
-          
-          setUser(fakeUser as any);
-          setUserProfile(adminUser);
-          
-          // Salvar perfil do admin no localStorage para o hook de permissões
-          localStorage.setItem('admin_profile', JSON.stringify(adminUser));
-          
-          toast({
-            title: "Login realizado com sucesso!",
-            description: `Bem-vindo, ${adminUser.name}`,
-          });
-          
-          return {};
-        }
-      }
-
-      // SEGUNDO: Para outros usuários, verificar se existe na tabela users
-      const existingUser = await loadUserProfileByEmail(email);
+      const result = await apiService.login(email, password);
       
-      if (!existingUser) {
-        return { error: 'E-mail não encontrado no sistema.' };
-      }
-
-      if (existingUser.status !== 'ativo') {
-        return { 
-          error: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.' 
-        };
-      }
-
-      // Tentar login normal com Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        return { error: error.message };
-      }
-
-      if (data.user) {
-        const profile = await loadUserProfile(data.user.id);
+      if (result.success && result.user) {
+        setUser(result.user);
+        setUserProfile(result.user);
         
-        // Verificar status do usuário
-        if (profile && profile.status !== 'ativo') {
-          await supabase.auth.signOut();
-          return { 
-            error: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.' 
-          };
-        }
-
         toast({
           title: "Login realizado com sucesso!",
-          description: `Bem-vindo, ${profile?.name || data.user.email}`,
+          description: `Bem-vindo, ${result.user.name}`,
         });
+        
+        return {};
+      } else {
+        return { error: result.message };
       }
-
-      return {};
     } catch (error) {
       console.error('Erro no login:', error);
       return { error: 'Erro interno. Tente novamente.' };
@@ -196,32 +65,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer cadastro
   const signUp = async (email: string, password: string, userData: any) => {
     try {
-      // Primeiro, criar usuário na tabela users
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
+      const response = await fetch('http://localhost:3000/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email,
+          password,
           username: userData.username,
           name: userData.name,
-          phone: userData.phone,
-          role: 'Usuário',
-          status: 'pendente'
-        });
-
-      if (insertError) {
-        if (insertError.code === '23505') {
-          return { error: 'Usuário ou email já existe' };
-        }
-        throw insertError;
-      }
-
-      toast({
-        title: "Cadastro realizado com sucesso!",
-        description: "Sua solicitação foi enviada para aprovação do administrador.",
-        duration: 5000
+          phone: userData.phone
+        })
       });
 
-      return {};
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: "Cadastro realizado com sucesso!",
+          description: "Sua solicitação foi enviada para aprovação do administrador.",
+          duration: 5000
+        });
+        return {};
+      } else {
+        return { error: result.message };
+      }
     } catch (error) {
       console.error('Erro no cadastro:', error);
       return { error: 'Erro interno. Tente novamente.' };
@@ -231,27 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer logout
   const signOut = async () => {
     try {
-      console.log('Iniciando logout...');
-      
-      // Se for admin nativo, apenas limpar estados locais
-      if (userProfile?.email === 'admin@admin.com') {
-        console.log('Logout admin nativo');
-        setUser(null);
-        setUserProfile(null);
-        localStorage.removeItem('admin_profile');
-      } else {
-        console.log('Logout usuário normal');
-        await supabase.auth.signOut();
-        setUser(null);
-        setUserProfile(null);
-      }
+      apiService.logout();
+      setUser(null);
+      setUserProfile(null);
       
       toast({
         title: "Logout realizado",
         description: "Até logo!",
       });
-      
-      console.log('Logout concluído');
     } catch (error) {
       console.error('Erro no logout:', error);
       toast({
@@ -267,21 +121,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (!user) return { error: 'Usuário não autenticado' };
 
-      const { error } = await supabase
-        .from('users')
-        .update(data)
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      await loadUserProfile(user.id);
-      
-      toast({
-        title: "Perfil atualizado",
-        description: "Suas informações foram atualizadas com sucesso",
+      const response = await fetch(`http://localhost:3000/api/users/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(data)
       });
 
-      return {};
+      const result = await response.json();
+
+      if (result.success) {
+        setUserProfile({ ...userProfile, ...data });
+        
+        toast({
+          title: "Perfil atualizado",
+          description: "Suas informações foram atualizadas com sucesso",
+        });
+
+        return {};
+      } else {
+        return { error: result.message };
+      }
     } catch (error) {
       console.error('Erro ao atualizar perfil:', error);
       return { error: 'Erro ao atualizar perfil' };
