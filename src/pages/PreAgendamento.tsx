@@ -6,8 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, MessageSquare, Clock, User } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function PreAgendamento() {
   const [formData, setFormData] = useState({
@@ -19,14 +20,74 @@ export default function PreAgendamento() {
     horario_preferencia: '',
     observacoes: ''
   });
+  const [services, setServices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    loadServices();
+  }, []);
+
+  const loadServices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('active', true)
+        .order('name');
+
+      if (error) throw error;
+      setServices(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar serviços:', error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Pré-agendamento realizado!",
-      description: "Entraremos em contato para confirmar o horário.",
-    });
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('pre_appointments')
+        .insert({
+          name: formData.nome,
+          phone: formData.telefone,
+          email: formData.email,
+          service_type: formData.servico,
+          preferred_date: formData.data_preferencia || null,
+          preferred_time: formData.horario_preferencia || null,
+          notes: formData.observacoes || null,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Pré-agendamento realizado!",
+        description: "Entraremos em contato para confirmar o horário.",
+      });
+
+      // Limpar formulário
+      setFormData({
+        nome: '',
+        telefone: '',
+        email: '',
+        servico: '',
+        data_preferencia: '',
+        horario_preferencia: '',
+        observacoes: ''
+      });
+    } catch (error) {
+      console.error('Erro ao salvar pré-agendamento:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar pré-agendamento. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -93,10 +154,11 @@ export default function PreAgendamento() {
                       <SelectValue placeholder="Selecione o serviço" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="avaliacao">Avaliação Psicológica</SelectItem>
-                      <SelectItem value="terapia">Terapia Individual</SelectItem>
-                      <SelectItem value="grupo">Terapia em Grupo</SelectItem>
-                      <SelectItem value="orientacao">Orientação Profissional</SelectItem>
+                      {services.map((service) => (
+                        <SelectItem key={service.id} value={service.name}>
+                          {service.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -142,8 +204,8 @@ export default function PreAgendamento() {
                   <p><strong>Horários:</strong> Seg-Sex: 8h-18h | Sáb: 8h-12h</p>
                   <p><strong>Dica:</strong> Chegue 15min antes • Traga documento com foto</p>
                 </div>
-                <Button type="submit">
-                  Solicitar Pré-Agendamento
+                <Button type="submit" disabled={loading}>
+                  {loading ? 'Salvando...' : 'Solicitar Pré-Agendamento'}
                 </Button>
               </div>
             </form>
