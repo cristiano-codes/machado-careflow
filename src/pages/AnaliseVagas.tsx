@@ -5,10 +5,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserCheck, Briefcase, Users, TrendingUp, Plus, Eye } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Vaga {
-  id: number;
+  id: string;
   titulo: string;
   empresa: string;
   descricao: string;
@@ -22,90 +23,98 @@ interface Vaga {
 }
 
 interface Candidato {
-  id: number;
+  id: string;
   nome: string;
   email: string;
   telefone: string;
-  vaga_id: number;
+  vaga_id: string;
   status: 'novo' | 'em_analise' | 'aprovado' | 'rejeitado';
   pontuacao?: number;
   observacoes?: string;
 }
 
 export default function AnaliseVagas() {
-  const [vagas] = useState<Vaga[]>([
-    {
-      id: 1,
-      titulo: "Desenvolvedor Frontend",
-      empresa: "TechCorp",
-      descricao: "Desenvolvimento de interfaces web modernas",
-      requisitos: ["React", "TypeScript", "CSS"],
-      salario: "R$ 5.000 - R$ 8.000",
-      tipo: "clt",
-      nivel: "pleno",
-      status: "ativa",
-      candidatos: 15,
-      data_criacao: "2024-02-10"
-    },
-    {
-      id: 2,
-      titulo: "Analista de Dados",
-      empresa: "DataSoft",
-      descricao: "Análise e interpretação de dados empresariais",
-      requisitos: ["Python", "SQL", "Power BI"],
-      salario: "R$ 4.500 - R$ 7.000",
-      tipo: "clt",
-      nivel: "junior",
-      status: "ativa",
-      candidatos: 23,
-      data_criacao: "2024-02-08"
-    },
-    {
-      id: 3,
-      titulo: "Gerente de Projetos",
-      empresa: "InnovaCorp",
-      descricao: "Gestão de projetos de tecnologia",
-      requisitos: ["PMP", "Scrum", "Liderança"],
-      salario: "R$ 8.000 - R$ 12.000",
-      tipo: "clt",
-      nivel: "senior",
-      status: "preenchida",
-      candidatos: 8,
-      data_criacao: "2024-01-25"
-    }
-  ]);
+  const [vagas, setVagas] = useState<Vaga[]>([]);
+  const [candidatos, setCandidatos] = useState<Candidato[]>([]);
 
-  const [candidatos] = useState<Candidato[]>([
-    {
-      id: 1,
-      nome: "João Silva",
-      email: "joao@email.com",
-      telefone: "(11) 99999-9999",
-      vaga_id: 1,
-      status: "em_analise",
-      pontuacao: 85,
-      observacoes: "Perfil muito adequado à vaga"
-    },
-    {
-      id: 2,
-      nome: "Maria Santos",
-      email: "maria@email.com",
-      telefone: "(11) 88888-8888",
-      vaga_id: 1,
-      status: "novo",
-      pontuacao: 78
-    },
-    {
-      id: 3,
-      nome: "Carlos Oliveira",
-      email: "carlos@email.com",
-      telefone: "(11) 77777-7777",
-      vaga_id: 2,
-      status: "aprovado",
-      pontuacao: 92,
-      observacoes: "Excelente candidato, aprovado para próxima fase"
+  useEffect(() => {
+    loadVagas();
+    loadCandidatos();
+  }, []);
+
+  const loadVagas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_vacancies')
+        .select(`
+          id,
+          title,
+          company,
+          description,
+          requirements,
+          salary_range,
+          type,
+          level,
+          status,
+          created_at,
+          job_candidates(id)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedVagas = data?.map(vaga => ({
+        id: vaga.id,
+        titulo: vaga.title,
+        empresa: vaga.company,
+        descricao: vaga.description,
+        requisitos: vaga.requirements || [],
+        salario: vaga.salary_range || '',
+        tipo: vaga.type as 'clt' | 'pj' | 'estagio' | 'temporario',
+        nivel: vaga.level as 'junior' | 'pleno' | 'senior',
+        status: vaga.status === 'active' ? 'ativa' : vaga.status as 'ativa' | 'pausada' | 'preenchida' | 'cancelada',
+        candidatos: vaga.job_candidates?.length || 0,
+        data_criacao: vaga.created_at
+      })) || [];
+
+      setVagas(formattedVagas);
+    } catch (error) {
+      console.error('Erro ao carregar vagas:', error);
     }
-  ]);
+  };
+
+  const loadCandidatos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_candidates')
+        .select(`
+          id,
+          status,
+          score,
+          notes,
+          patients(name, email, phone),
+          job_vacancies(id, title, company)
+        `)
+        .order('applied_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedCandidatos = data?.map(candidato => ({
+        id: candidato.id,
+        nome: candidato.patients?.name || '',
+        email: candidato.patients?.email || '',
+        telefone: candidato.patients?.phone || '',
+        vaga_id: candidato.job_vacancies?.id || '',
+        status: candidato.status === 'new' ? 'novo' : candidato.status as 'novo' | 'em_analise' | 'aprovado' | 'rejeitado',
+        pontuacao: candidato.score,
+        observacoes: candidato.notes
+      })) || [];
+
+      setCandidatos(formattedCandidatos);
+    } catch (error) {
+      console.error('Erro ao carregar candidatos:', error);
+    }
+  };
 
   const getStatusBadge = (status: string, type: 'vaga' | 'candidato' = 'vaga') => {
     if (type === 'vaga') {

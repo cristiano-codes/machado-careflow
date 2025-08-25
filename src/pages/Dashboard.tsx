@@ -1,9 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserManagement } from "@/components/admin/UserManagement";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   Users, 
   Calendar, 
@@ -18,36 +19,19 @@ import {
   BarChart3
 } from "lucide-react";
 
-const stats = [
-  {
-    title: "Crianças Atendidas",
-    value: "247",
-    description: "Total ativo no instituto",
-    icon: Users,
-    color: "text-primary"
-  },
-  {
-    title: "Entrevistas Agendadas",
-    value: "12",
-    description: "Próximas 7 dias",
-    icon: Calendar,
-    color: "text-accent"
-  },
-  {
-    title: "Avaliações Pendentes",
-    value: "8",
-    description: "Aguardando análise",
-    icon: ClipboardList,
-    color: "text-warning"
-  },
-  {
-    title: "Receita Mensal",
-    value: "R$ 89.450",
-    description: "Faturamento de dezembro",
-    icon: DollarSign,
-    color: "text-success"
-  }
-];
+interface StatsData {
+  totalStudents: number;
+  scheduledInterviews: number;
+  pendingEvaluations: number;
+  monthlyRevenue: number;
+}
+
+const defaultStats: StatsData = {
+  totalStudents: 0,
+  scheduledInterviews: 0,
+  pendingEvaluations: 0,
+  monthlyRevenue: 0
+};
 
 const recentActivities = [
   {
@@ -99,8 +83,67 @@ const getStatusColor = (status: string) => {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
+  const [stats, setStats] = useState<StatsData>(defaultStats);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const { settings } = useSettings();
   const { canView: canViewUsers } = useModulePermissions('usuarios');
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      // Carregar estatísticas do banco
+      const [
+        patientsResult,
+        interviewsResult,
+        evaluationsResult,
+        financialResult
+      ] = await Promise.all([
+        supabase.from('patients').select('id', { count: 'exact' }).eq('status', 'ativo'),
+        supabase.from('interviews').select('id', { count: 'exact' }).eq('status', 'scheduled').gte('interview_date', new Date().toISOString().split('T')[0]),
+        supabase.from('evaluations').select('id', { count: 'exact' }).eq('status', 'pending'),
+        supabase.from('financial_transactions').select('amount').eq('type', 'income').gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
+      ]);
+
+      const monthlyRevenue = financialResult.data?.reduce((total, transaction) => total + Number(transaction.amount), 0) || 0;
+
+      setStats({
+        totalStudents: patientsResult.count || 0,
+        scheduledInterviews: interviewsResult.count || 0,
+        pendingEvaluations: evaluationsResult.count || 0,
+        monthlyRevenue
+      });
+
+      // Carregar atividades recentes
+      const { data: activities } = await supabase
+        .from('interviews')
+        .select(`
+          id,
+          type,
+          interview_date,
+          status,
+          patients(name)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(4);
+
+      if (activities) {
+        const formattedActivities = activities.map(activity => ({
+          id: activity.id,
+          type: 'entrevista',
+          description: `Entrevista ${activity.status === 'scheduled' ? 'agendada' : 'realizada'} - ${activity.patients?.name}`,
+          time: new Date(activity.interview_date).toLocaleDateString('pt-BR'),
+          status: activity.status,
+          icon: Calendar
+        }));
+        setRecentActivities(formattedActivities);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados do dashboard:', error);
+    }
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -112,22 +155,67 @@ export default function Dashboard() {
           <div className="space-y-4">
             {/* Stats Grid */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {stats.map((stat) => (
-                <Card key={stat.title} className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      {stat.title}
-                    </CardTitle>
-                    <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-foreground">{stat.value}</div>
-                    <p className="text-xs text-muted-foreground">
-                      {stat.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Alunos Atendidos
+                  </CardTitle>
+                  <Users className="h-4 w-4 text-primary" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-foreground">{stats.totalStudents}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Total ativo no instituto
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Entrevistas Agendadas
+                  </CardTitle>
+                  <Calendar className="h-4 w-4 text-accent" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-foreground">{stats.scheduledInterviews}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Próximas 7 dias
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Avaliações Pendentes
+                  </CardTitle>
+                  <ClipboardList className="h-4 w-4 text-warning" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-foreground">{stats.pendingEvaluations}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Aguardando análise
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Receita Mensal
+                  </CardTitle>
+                  <DollarSign className="h-4 w-4 text-success" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-foreground">
+                    R$ {stats.monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Faturamento do mês
+                  </p>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Charts and Activities */}
