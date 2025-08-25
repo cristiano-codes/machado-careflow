@@ -1,5 +1,7 @@
-const API_BASE_URL = 'http://localhost:3000/api';
-const DEMO_MODE = false; // Backend PostgreSQL local rodando
+// Detecta se está rodando localmente ou no Lovable
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE_URL = isLocal ? 'http://localhost:3000/api' : 'http://localhost:3000/api';
+const DEMO_MODE = !isLocal; // Usa demo quando não está local
 
 export interface LoginResponse {
   success: boolean;
