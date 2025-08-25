@@ -38,7 +38,8 @@ class ApiService {
       // Simulação de login para demonstração
       await new Promise(resolve => setTimeout(resolve, 500)); // Simula delay de rede
       
-      if (username === 'admin' && password === 'admin') {
+      // Aceita tanto 'admin' quanto 'admin@institutolauir.com.br' como username
+      if ((username === 'admin' || username === 'admin@institutolauir.com.br') && password === 'admin') {
         const user = {
           id: 1,
           username: 'admin',
