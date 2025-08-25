@@ -8,7 +8,7 @@ import { Calendar, MessageSquare, Clock, User } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { apiService } from "@/services/api";
 
 export default function PreAgendamento() {
   const [formData, setFormData] = useState({
@@ -30,14 +30,12 @@ export default function PreAgendamento() {
 
   const loadServices = async () => {
     try {
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('active', true)
-        .order('name');
-
-      if (error) throw error;
-      setServices(data || []);
+      const response = await fetch('http://localhost:3000/api/services');
+      const data = await response.json();
+      
+      if (data.success) {
+        setServices(data.services);
+      }
     } catch (error) {
       console.error('Erro ao carregar serviços:', error);
     }
@@ -48,20 +46,23 @@ export default function PreAgendamento() {
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('pre_appointments')
-        .insert({
+      const response = await fetch('http://localhost:3000/api/pre-appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           name: formData.nome,
           phone: formData.telefone,
           email: formData.email,
           service_type: formData.servico,
           preferred_date: formData.data_preferencia || null,
           preferred_time: formData.horario_preferencia || null,
-          notes: formData.observacoes || null,
-          status: 'pending'
-        });
+          notes: formData.observacoes || null
+        })
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+
+      if (!result.success) throw new Error(result.message);
 
       toast({
         title: "Pré-agendamento realizado!",

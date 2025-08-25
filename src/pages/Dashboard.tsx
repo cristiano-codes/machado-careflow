@@ -4,7 +4,7 @@ import { UserManagement } from "@/components/admin/UserManagement";
 import { useState, useEffect } from "react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
-import { supabase } from "@/integrations/supabase/client";
+import { apiService } from "@/services/api";
 import { 
   Users, 
   Calendar, 
@@ -92,54 +92,43 @@ export default function Dashboard() {
     loadDashboardData();
   }, []);
 
+  const loadStats = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/stats');
+      const data = await response.json();
+      
+      if (data.success) {
+        setStats({
+          totalStudents: data.stats.totalPacientes,
+          scheduledInterviews: data.stats.agendamentosHoje,
+          pendingEvaluations: data.stats.avaliacoesPendentes,
+          monthlyRevenue: data.stats.receitaMensal
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error);
+    }
+  };
+
+  const loadRecentActivities = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/activities');
+      const data = await response.json();
+      
+      if (data.success) {
+        setRecentActivities(data.activities.map((activity: any) => ({
+          ...activity,
+          icon: Calendar
+        })));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar atividades recentes:', error);
+    }
+  };
+
   const loadDashboardData = async () => {
     try {
-      // Carregar estatísticas do banco
-      const [
-        patientsResult,
-        interviewsResult,
-        evaluationsResult,
-        financialResult
-      ] = await Promise.all([
-        supabase.from('patients').select('id', { count: 'exact' }).eq('status', 'ativo'),
-        supabase.from('interviews').select('id', { count: 'exact' }).eq('status', 'scheduled').gte('interview_date', new Date().toISOString().split('T')[0]),
-        supabase.from('evaluations').select('id', { count: 'exact' }).eq('status', 'pending'),
-        supabase.from('financial_transactions').select('amount').eq('type', 'income').gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
-      ]);
-
-      const monthlyRevenue = financialResult.data?.reduce((total, transaction) => total + Number(transaction.amount), 0) || 0;
-
-      setStats({
-        totalStudents: patientsResult.count || 0,
-        scheduledInterviews: interviewsResult.count || 0,
-        pendingEvaluations: evaluationsResult.count || 0,
-        monthlyRevenue
-      });
-
-      // Carregar atividades recentes
-      const { data: activities } = await supabase
-        .from('interviews')
-        .select(`
-          id,
-          type,
-          interview_date,
-          status,
-          patients(name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(4);
-
-      if (activities) {
-        const formattedActivities = activities.map(activity => ({
-          id: activity.id,
-          type: 'entrevista',
-          description: `Entrevista ${activity.status === 'scheduled' ? 'agendada' : 'realizada'} - ${activity.patients?.name}`,
-          time: new Date(activity.interview_date).toLocaleDateString('pt-BR'),
-          status: activity.status,
-          icon: Calendar
-        }));
-        setRecentActivities(formattedActivities);
-      }
+      await Promise.all([loadStats(), loadRecentActivities()]);
     } catch (error) {
       console.error('Erro ao carregar dados do dashboard:', error);
     }

@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserCheck, Briefcase, Users, TrendingUp, Plus, Eye } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiService } from "@/services/api";
 
 interface Vaga {
   id: string;
@@ -44,40 +44,12 @@ export default function AnaliseVagas() {
 
   const loadVagas = async () => {
     try {
-      const { data, error } = await supabase
-        .from('job_vacancies')
-        .select(`
-          id,
-          title,
-          company,
-          description,
-          requirements,
-          salary_range,
-          type,
-          level,
-          status,
-          created_at,
-          job_candidates(id)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const formattedVagas = data?.map(vaga => ({
-        id: vaga.id,
-        titulo: vaga.title,
-        empresa: vaga.company,
-        descricao: vaga.description,
-        requisitos: vaga.requirements || [],
-        salario: vaga.salary_range || '',
-        tipo: vaga.type as 'clt' | 'pj' | 'estagio' | 'temporario',
-        nivel: vaga.level as 'junior' | 'pleno' | 'senior',
-        status: vaga.status === 'active' ? 'ativa' : vaga.status as 'ativa' | 'pausada' | 'preenchida' | 'cancelada',
-        candidatos: vaga.job_candidates?.length || 0,
-        data_criacao: vaga.created_at
-      })) || [];
-
-      setVagas(formattedVagas);
+      const response = await fetch('http://localhost:3000/api/job-vacancies');
+      const data = await response.json();
+      
+      if (data.success) {
+        setVagas(data.vacancies);
+      }
     } catch (error) {
       console.error('Erro ao carregar vagas:', error);
     }
@@ -85,32 +57,12 @@ export default function AnaliseVagas() {
 
   const loadCandidatos = async () => {
     try {
-      const { data, error } = await supabase
-        .from('job_candidates')
-        .select(`
-          id,
-          status,
-          score,
-          notes,
-          patients(name, email, phone),
-          job_vacancies(id, title, company)
-        `)
-        .order('applied_at', { ascending: false });
-
-      if (error) throw error;
-
-      const formattedCandidatos = data?.map(candidato => ({
-        id: candidato.id,
-        nome: candidato.patients?.name || '',
-        email: candidato.patients?.email || '',
-        telefone: candidato.patients?.phone || '',
-        vaga_id: candidato.job_vacancies?.id || '',
-        status: candidato.status === 'new' ? 'novo' : candidato.status as 'novo' | 'em_analise' | 'aprovado' | 'rejeitado',
-        pontuacao: candidato.score,
-        observacoes: candidato.notes
-      })) || [];
-
-      setCandidatos(formattedCandidatos);
+      const response = await fetch('http://localhost:3000/api/job-candidates');
+      const data = await response.json();
+      
+      if (data.success) {
+        setCandidatos(data.candidates);
+      }
     } catch (error) {
       console.error('Erro ao carregar candidatos:', error);
     }
