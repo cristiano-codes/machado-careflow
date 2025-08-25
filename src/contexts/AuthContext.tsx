@@ -58,7 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Erro no login:', error);
-      return { error: 'Erro interno. Tente novamente.' };
+      toast({
+        title: "Backend não está rodando",
+        description: "Execute 'cd institutoback && npm start' para iniciar o servidor",
+        variant: "destructive",
+        duration: 8000
+      });
+      return { error: 'Backend não está rodando. Inicie o servidor PostgreSQL e execute "cd institutoback && npm start"' };
     }
   };
 
