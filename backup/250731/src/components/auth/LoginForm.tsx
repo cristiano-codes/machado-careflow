@@ -5,24 +5,21 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, Building, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useSettings } from "@/contexts/SettingsContext";
 
 interface LoginFormProps {
-  onLogin: (credentials: { email: string; password: string }) => Promise<void>;
-  onRegister: () => void;
+  onLogin: (credentials: { username: string; password: string }) => void;
 }
 
-export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
-  const [email, setEmail] = useState("");
+export function LoginForm({ onLogin }: LoginFormProps) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { settings } = useSettings();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!username || !password) {
       toast({
         title: "Campos obrigatórios",
         description: "Por favor, preencha todos os campos.",
@@ -33,9 +30,13 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
 
     setIsLoading(true);
     try {
-      await onLogin({ email, password });
+      await onLogin({ username, password });
     } catch (error) {
-      // Erro já é tratado no Index.tsx, não precisa duplicar aqui
+      toast({
+        title: "Erro de autenticação",
+        description: "Usuário ou senha incorretos.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -50,7 +51,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-foreground">
-              {settings.instituicao_nome}
+              Instituto Lauir Machado
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
               Sistema de Gestão Institucional
@@ -61,17 +62,17 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium">
-                E-mail
+              <Label htmlFor="username" className="text-sm font-medium">
+                Usuário
               </Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  id="email"
+                  id="username"
                   type="text"
-                  placeholder="Digite admin para demo ou seu e-mail"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Digite seu usuário"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="pl-10"
                   required
                 />
@@ -111,16 +112,6 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
               {isLoading ? "Entrando..." : "Entrar"}
             </Button>
           </form>
-          
-          <div className="mt-6 text-center">
-            <Button 
-              variant="link" 
-              onClick={onRegister}
-              className="text-primary hover:text-primary-hover font-medium"
-            >
-              Primeiro Acesso? Crie sua conta
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
