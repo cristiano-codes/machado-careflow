@@ -5,6 +5,9 @@ const { body, validationResult } = require('express-validator');
 const { Pool } = require('pg');
 const router = express.Router();
 
+// Chave JWT padrão em desenvolvimento
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+
 // Configuração do banco
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -32,7 +35,14 @@ async function initDatabase() {
       )
     `);
 
-    // Verificar se existe admin
+    // Garantir colunas obrigatórias em instalações antigas
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'Usuário'`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pendente'`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_access BOOLEAN DEFAULT true`);
+
+    // Verificar se existe admin e corrigir registros antigos sem senha
     const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
     if (adminCheck.rows.length === 0) {
       const hashedPassword = await bcrypt.hash('admin', 10);
@@ -40,6 +50,14 @@ async function initDatabase() {
         INSERT INTO users (username, email, name, role, status, first_access, password)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, ['admin', 'admin@institutolauir.com.br', 'Administrador', 'Coordenador Geral', 'ativo', false, hashedPassword]);
+    } else {
+      const admin = adminCheck.rows[0];
+      if (!admin.password) {
+        await pool.query(
+          'UPDATE users SET first_access = true, status = $1, role = $2 WHERE id = $3',
+          ['ativo', 'Coordenador Geral', admin.id]
+        );
+      }
     }
 
     console.log('Banco de dados inicializado com sucesso');
@@ -87,8 +105,8 @@ router.post('/login', [
       });
     }
 
-    // Verificar se é primeiro acesso
-    if (user.first_access) {
+    // Verificar se é primeiro acesso ou se falta senha
+    if (user.first_access || !user.password) {
       return res.status(403).json({ 
         message: 'Primeiro acesso necessário. Defina sua senha primeiro.',
         firstAccess: true
@@ -96,7 +114,7 @@ router.post('/login', [
     }
 
     // Verificar senha
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password || '');
     if (!isValidPassword) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }
@@ -108,12 +126,12 @@ router.post('/login', [
         username: user.username, 
         role: user.role 
       },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     // Retornar dados do usuário sem a senha
-    const { password: _, ...userWithoutPassword } = user;
+    const { password: _pw, ...userWithoutPassword } = user;
 
     res.json({
       message: 'Login realizado com sucesso',
@@ -137,7 +155,7 @@ router.get('/verify', async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
     const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
     
     if (userResult.rows.length === 0) {
@@ -160,7 +178,8 @@ router.get('/first-access', async (req, res) => {
     const firstAccess = adminResult.rows.length > 0 ? adminResult.rows[0].first_access : false;
     res.json({ firstAccess });
   } catch (error) {
-    res.status(500).json({ firstAccess: false });
+    console.error('Erro ao verificar first-access:', error);
+    res.json({ firstAccess: false });
   }
 });
 
