@@ -5,11 +5,20 @@ import { Layout } from "@/components/layout/Layout";
 import Dashboard from "./Dashboard";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { FirstAccessForm } from "@/components/auth/FirstAccessForm";
+import { apiService } from "@/services/api";
 
 const Index = () => {
   const [showRegister, setShowRegister] = useState(false);
+  const [showFirstAccess, setShowFirstAccess] = useState(false);
   const { user, userProfile, loading, signIn, signUp, signOut } = useAuth();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!user) {
+      apiService.checkFirstAccess().then(res => setShowFirstAccess(!!res.firstAccess)).catch(() => setShowFirstAccess(false));
+    }
+  }, [user]);
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
@@ -50,6 +59,16 @@ const Index = () => {
   }
 
   if (!user) {
+    if (showFirstAccess) {
+      return (
+        <FirstAccessForm
+          onSuccess={() => {
+            setShowFirstAccess(false);
+            toast({ title: "Senha definida!", description: "Faça login com sua nova senha." });
+          }}
+        />
+      );
+    }
     return <LoginForm onLogin={handleLogin} onRegister={() => setShowRegister(true)} />;
   }
 
