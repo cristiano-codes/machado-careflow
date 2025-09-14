@@ -13,10 +13,26 @@ app.use(morgan('combined'));
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://seudominio.com'] 
-    : ['http://localhost:5173'],
-  credentials: true
+  origin: (origin, callback) => {
+    const devOrigins = [
+      'http://localhost:5000',
+      'http://localhost:5173',
+      'http://127.0.0.1:5000',
+      'http://127.0.0.1:5173',
+    ];
+    const prodOrigins = ['https://seudominio.com'];
+    const allowedOrigins = process.env.NODE_ENV === 'production' ? prodOrigins : devOrigins;
+
+    // Permitir chamadas sem origin (ex: curl, Postman) e domínios do Lovable Preview
+    const isLovablePreview = origin && /\.lovable\.app$/.test(origin);
+    if (!origin || allowedOrigins.includes(origin) || isLovablePreview) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
 }));
 
 // Middleware para parsing de JSON

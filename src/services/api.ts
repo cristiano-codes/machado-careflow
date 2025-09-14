@@ -1,7 +1,8 @@
 // Detecta se está rodando localmente ou no Lovable
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE_URL = isLocal ? 'http://localhost:3000/api' : 'http://localhost:3000/api';
-const DEMO_MODE = !isLocal; // Usa demo quando não está local
+const hostname = window.location.hostname;
+const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+const API_BASE_URL = 'http://localhost:3000/api';
+const DEMO_MODE = !isLocal; // Usa demo apenas fora de ambiente local/rede interna
 
 export interface LoginResponse {
   success: boolean;
