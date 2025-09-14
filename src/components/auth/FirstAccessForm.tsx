@@ -45,7 +45,8 @@ export function FirstAccessForm({ onSuccess }: FirstAccessFormProps) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/setup-password', {
+      const base = `http://${window.location.hostname}:3000`;
+      const response = await fetch(`${base}/api/auth/setup-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
