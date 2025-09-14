@@ -1,0 +1,40 @@
+
+copiar as patas para 
+
+C:\projeto\machado-careflow
+
+Back-End (Node.js/Express + Sequelize/PostgreSQL)
+
+cd C:\projeto\machado-careflow\institutoback
+
+npm install express cors helmet morgan bcryptjs jsonwebtoken multer pg sequelize express-validator nodemailer puppeteer dotenv
+
+npm install -D nodemon
+
+Front-End (React 18 + Vite + Tailwind + Shadcn/UI)
+
+cd C:\projeto\machado-careflow
+
+npm install react react-dom
+npm install -D typescript vite
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+
+npm install react-router-dom @tanstack/react-query @shadcn/ui lucide-react
+
+apagar tailwind.config.js
+
+trocar a porta do arquivo vite.config.ts para 5000
+
+machado-careflow/src/components/auth/LoginForm.tsx
+para trocar o nome da instituição
+
+cd C:\projeto\machado-careflow
+
+npm run dev
+
+))))))))))))))))))))))))))))))))))))))))
+
+cd institutoback
+npm install
+npm run dev

@@ -22,13 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-# --- seguran‡a ---
-.env
-.env.*
-!.env.example
-# --- node ---
-node_modules/
-dist/
-build/
-*.log
-coverage/
