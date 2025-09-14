@@ -28,9 +28,13 @@ const Index = () => {
         throw new Error(error);
       }
     } catch (error) {
+      const msg = error instanceof Error ? error.message : "E-mail ou senha incorretos";
+      if (/Primeiro acesso/i.test(msg)) {
+        setShowFirstAccess(true);
+      }
       toast({
         title: "Erro de autenticação",
-        description: error instanceof Error ? error.message : "E-mail ou senha incorretos",
+        description: msg,
         variant: "destructive",
       });
       throw error;

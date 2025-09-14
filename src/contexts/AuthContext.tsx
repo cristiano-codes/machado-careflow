@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { useToast } from '@/hooks/use-toast';
 import { apiService } from '@/services/api';
 
+const API_BASE = `http://${window.location.hostname}:3000`;
+
+
 interface AuthContextType {
   user: any | null;
   userProfile: any | null;
@@ -71,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fazer cadastro
   const signUp = async (email: string, password: string, userData: any) => {
     try {
-      const response = await fetch('http://localhost:3000/api/auth/register', {
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -127,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (!user) return { error: 'Usuário não autenticado' };
 
-      const response = await fetch(`http://localhost:3000/api/users/${user.id}`, {
+      const response = await fetch(`${API_BASE}/api/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
