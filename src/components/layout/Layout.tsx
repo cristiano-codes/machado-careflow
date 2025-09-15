@@ -20,7 +20,7 @@ export function Layout({ children, user, onLogout }: LayoutProps) {
         <AppSidebar />
         <SidebarInset className="flex flex-col">
           <Header user={user} onLogout={onLogout} />
-          <main className="flex-1 p-6 bg-muted/30">
+          <main className="flex-1 pt-20 px-6 pb-6 bg-muted/30">
             {children}
           </main>
         </SidebarInset>
