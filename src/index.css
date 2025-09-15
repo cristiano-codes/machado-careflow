@@ -121,3 +121,14 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Garantir z-index alto para dropdowns e popovers */
+@layer utilities {
+  [data-radix-popper-content-wrapper] {
+    z-index: 60 !important;
+  }
+  
+  [role="dialog"] {
+    z-index: 60 !important;
+  }
+}
