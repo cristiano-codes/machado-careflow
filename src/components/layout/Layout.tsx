@@ -18,9 +18,9 @@ export function Layout({ children, user, onLogout }: LayoutProps) {
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
-        <SidebarInset className="flex flex-col pt-16">
+        <SidebarInset className="flex flex-col pt-10">
           <Header user={user} onLogout={onLogout} />
-          <main className="flex-1 h-[calc(100vh-4rem)] overflow-y-auto px-6 py-6 bg-muted/30">
+          <main className="flex-1 h-[calc(100vh-2.5rem)] overflow-y-auto px-6 py-6 bg-muted/30">
             {children}
           </main>
         </SidebarInset>
