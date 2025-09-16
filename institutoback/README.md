@@ -1,5 +1,7 @@
 # Instituto Lauir - Backend API
 
+Backend API para o Sistema de Gestão do Instituto Lauir.
+
 ## 🚀 Como executar
 
 1. **Instalar dependências:**
@@ -13,36 +15,46 @@ cp .env.example .env
 # Editar o arquivo .env com suas configurações
 ```
 
-3. **Criar banco de dados PostgreSQL:**
-```sql
-CREATE DATABASE instituto_lauir;
+3. **Executar seeds iniciais (desenvolvimento):**
+```bash
+npm run seed
 ```
 
 4. **Executar em desenvolvimento:**
 ```bash
 npm run dev
+# ou com seeds
+npm run dev:seed
 ```
 
-5. **Executar em produção:**
-```bash
-npm start
-```
+## 🔗 Novos Endpoints
+
+### Profissionais (/api/professionals)
+- `GET /` - Listar profissionais (query: q, status, limit, offset)
+- `POST /` - Criar profissional
+- `PUT /:id` - Atualizar profissional  
+- `DELETE /:id` - Inativar profissional
+
+### Serviços (/api/services)
+- `GET /` - Listar serviços (query: q, active, limit, offset)
+- `POST /` - Criar serviço
+- `PUT /:id` - Atualizar serviço
+- `DELETE /:id` - Arquivar serviço
+
+## 🎯 Páginas Frontend
+
+- `/gestao/profissionais` - Gestão de Profissionais
+- `/gestao/servicos` - Gestão de Serviços
 
 ## 📁 Estrutura do Projeto
 
 ```
 institutoback/
-├── config/           # Configurações (database, etc)
-├── controllers/      # Lógica de negócio
-├── middleware/       # Middlewares customizados
-├── models/          # Modelos do Sequelize
-├── routes/          # Definição de rotas
-├── services/        # Serviços (email, relatórios, etc)
-├── uploads/         # Arquivos enviados
-├── utils/           # Utilitários
-├── .env.example     # Exemplo de variáveis de ambiente
-├── server.js        # Servidor principal
-└── package.json     # Dependências
+├── db/              # Pool PostgreSQL
+├── routes/          # APIs (professionals, services)
+├── seeds/           # Dados iniciais
+├── scripts/         # Scripts utilitários
+└── server.js        # Servidor principal
 ```
 
 ## 🔗 Endpoints Disponíveis

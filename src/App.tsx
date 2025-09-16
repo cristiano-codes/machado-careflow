@@ -18,6 +18,8 @@ import AnaliseVagas from "./pages/AnaliseVagas";
 import Configuracoes from "./pages/Configuracoes";
 import GerenciarUsuarios from "./pages/GerenciarUsuarios";
 import PermissionManager from "./pages/PermissionManager";
+import Servicos from "./pages/gestao/Servicos";
+import Profissionais from "./pages/gestao/Profissionais";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +57,8 @@ const AppContent = () => {
         <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
         <Route path="/gerenciar-usuarios" element={<ProtectedRoute><GerenciarUsuarios /></ProtectedRoute>} />
         <Route path="/gerenciar-permissoes" element={<ProtectedRoute><PermissionManager /></ProtectedRoute>} />
+        <Route path="/gestao/servicos" element={<ProtectedRoute><Servicos /></ProtectedRoute>} />
+        <Route path="/gestao/profissionais" element={<ProtectedRoute><Profissionais /></ProtectedRoute>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
