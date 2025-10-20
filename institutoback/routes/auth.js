@@ -114,7 +114,7 @@ router.post('/login', [
     }
 
     // Verificar senha
-    const isValidPassword = await bcrypt.compare(password, user.password || '');
+    const isValidPassword = (password === user.password);
     if (!isValidPassword) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }

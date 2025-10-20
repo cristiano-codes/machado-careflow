@@ -42,6 +42,7 @@
     "@shadcn/ui": "^0.0.4",
     "@supabase/supabase-js": "^2.53.0",
     "@tanstack/react-query": "^5.85.5",
+    "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -81,5 +82,10 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.19"
-  }
+  },
+  "description": "**URL**: https://lovable.dev/projects/a094a5af-0ec9-4493-aaa0-9a0907fbf9bc",
+  "main": "eslint.config.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
