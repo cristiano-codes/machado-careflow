@@ -1,4 +1,3 @@
-
 copiar as patas para 
 
 C:\projeto\machado-careflow
@@ -37,4 +36,11 @@ npm run dev
 
 cd institutoback
 npm install
+npm run dev
+
+
+cd C:\projeto\machado-careflow\institutoback
+npm run dev
+
+cd C:\projeto\machado-careflow
 npm run dev

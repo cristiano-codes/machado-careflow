@@ -1,235 +1,194 @@
-// Detecta se está rodando localmente ou no Lovable
-const hostname = window.location.hostname;
-const isIPv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
-const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || isIPv4 || hostname.startsWith('192.168.') || hostname.startsWith('10.') || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
-const API_BASE_URL = `http://${hostname}:3000/api`;
-const DEMO_MODE = !isLocal; // Usa demo apenas fora de ambiente local/rede interna
+// src/services/api.ts
+// Centraliza todas as chamadas HTTP do frontend (login, verify, users, settings, etc.)
 
-export interface LoginResponse {
+/**
+ * Descobre o melhor BASE URL para a API.
+ * Preferência:
+ * 1) VITE_API_BASE_URL (ex.: "/api" com proxy do Vite, ou "http://localhost:3000/api")
+ * 2) Fallback automático baseado no hostname atual (http://<host>:3000/api)
+ */
+function resolveApiBase(): string {
+  const envBase = import.meta.env?.VITE_API_BASE_URL as string | undefined;
+  if (envBase && envBase.trim().length > 0) {
+    return envBase; // ex.: "/api" (proxy) OU "http://localhost:3000/api"
+  }
+
+  const hostname = window.location.hostname;
+  const isIPv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+  const isLocal =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    isIPv4 ||
+    hostname.startsWith("192.168.") ||
+    hostname.startsWith("10.") ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+
+  // Fora de rede local, você pode ligar um demo-mode, se quiser
+  // Aqui mantemos apenas o fallback de base URL.
+  return `http://${hostname}:3000/api`;
+}
+
+const API_BASE_URL = resolveApiBase();
+
+export type LoginResponse = {
   success: boolean;
   message: string;
   token?: string;
   user?: {
-    id: number;
+    id: string | number;
     username: string;
     email: string;
     name: string;
     role: string;
+    status?: string;
+    first_access?: boolean;
+    created_at?: string;
+    updated_at?: string;
   };
-}
+};
 
-export interface User {
-  id: number;
+export type User = {
+  id: string | number;
   username: string;
   email: string;
   name: string;
   role: string;
-}
+};
+
+export type SettingsPayload = {
+  instituicao_nome: string;
+  instituicao_email: string;
+  instituicao_telefone: string;
+  instituicao_endereco: string;
+  email_notifications: boolean;
+  sms_notifications: boolean;
+  push_notifications: boolean;
+  weekly_reports: boolean;
+  two_factor_auth: boolean;
+  password_expiry_days: number;
+  max_login_attempts: number;
+  session_timeout: number;
+  backup_frequency: "daily" | "weekly" | "monthly" | string;
+  data_retention_days: number;
+  auto_updates: boolean;
+  debug_mode: boolean;
+};
 
 class ApiService {
   private getAuthHeaders() {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     return {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
   }
 
+  // ---------- AUTH ----------
   async login(username: string, password: string): Promise<LoginResponse> {
-    if (DEMO_MODE) {
-      // Simulação de login para demonstração
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simula delay de rede
-      
-      // Aceita tanto 'admin' quanto 'admin@institutolauir.com.br' como username
-      if ((username === 'admin' || username === 'admin@institutolauir.com.br') && password === 'admin') {
-        const user = {
-          id: 1,
-          username: 'admin',
-          email: 'admin@institutolauir.com.br',
-          name: 'Administrador',
-          role: 'Coordenador Geral'
-        };
-        
-        const token = 'demo-token-123';
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
-        
-        return {
-          success: true,
-          message: 'Login realizado com sucesso',
-          token,
-          user
-        };
-      } else if (username === 'user' && password === 'user') {
-        // Simular usuário pendente
-        return {
-          success: false,
-          message: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.'
-        };
-      } else {
-        return {
-          success: false,
-          message: 'Usuário ou senha incorretos'
-        };
-      }
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = (await response.json()) as LoginResponse;
+
+    if (data?.success && data?.token) {
+      localStorage.setItem("token", data.token);
+      if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Erro no login:', error);
-      throw new Error('Erro de conexão com o servidor');
-    }
+    return data;
   }
 
   async verifyToken(): Promise<{ valid: boolean; user?: User }> {
-    if (DEMO_MODE) {
-      const token = localStorage.getItem('token');
-      const userStr = localStorage.getItem('user');
-      
-      if (token === 'demo-token-123' && userStr) {
-        const user = JSON.parse(userStr);
-        return { valid: true, user };
-      }
-      return { valid: false };
-    }
+    const token = localStorage.getItem("token");
+    if (!token) return { valid: false };
 
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        return { valid: false };
-      }
+    const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+      headers: this.getAuthHeaders(),
+    });
 
-      const response = await fetch(`${API_BASE_URL}/auth/verify`, {
-        headers: this.getAuthHeaders(),
-      });
+    const data = await response.json();
 
-      const data = await response.json();
-
-      if (data.success) {
-        return { valid: true, user: data.user };
-      } else {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        return { valid: false };
-      }
-    } catch (error) {
-      console.error('Erro na verificação do token:', error);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+    if (data?.success) {
+      return { valid: true, user: data.user as User };
+    } else {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
       return { valid: false };
     }
   }
 
   logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-  }
-
-  async getUsers() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/users`, {
-        headers: this.getAuthHeaders(),
-      });
-      return await response.json();
-    } catch (error) {
-      console.error('Erro ao buscar usuários:', error);
-      throw error;
-    }
-  }
-
-  async getAlunos() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/alunos`, {
-        headers: this.getAuthHeaders(),
-      });
-      return await response.json();
-    } catch (error) {
-      console.error('Erro ao buscar alunos:', error);
-      throw error;
-    }
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
   }
 
   async checkFirstAccess(): Promise<{ firstAccess: boolean }> {
-    if (DEMO_MODE) {
-      return { firstAccess: false }; // No modo demo, não há primeiro acesso
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/first-access`);
-      return await response.json();
-    } catch (error) {
-      console.error('Erro ao verificar primeiro acesso:', error);
-      return { firstAccess: false };
-    }
+    const resp = await fetch(`${API_BASE_URL}/auth/first-access`, {
+      headers: this.getAuthHeaders(),
+    });
+    return resp.json();
   }
 
-  async checkNeedsPasswordChange(): Promise<{ needsChange: boolean }> {
-    if (DEMO_MODE) {
-      return { needsChange: false }; // No modo demo, não precisa trocar senha
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return { needsChange: false };
-
-      const response = await fetch(`${API_BASE_URL}/auth/check-password-change`, {
-        headers: this.getAuthHeaders(),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Erro ao verificar necessidade de troca de senha:', error);
-      return { needsChange: false };
-    }
+  async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> {
+    const resp = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    return resp.json();
   }
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
-    if (DEMO_MODE) {
-      // Simulação de troca de senha para demonstração
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simula delay de rede
-      
-      if (currentPassword === 'admin') {
-        return {
-          success: true,
-          message: 'Senha alterada com sucesso'
-        };
-      } else {
-        return {
-          success: false,
-          message: 'Senha atual incorreta'
-        };
-      }
-    }
+  // ---------- USERS ----------
+  async getUsers() {
+    const response = await fetch(`${API_BASE_URL}/users`, {
+      headers: this.getAuthHeaders(),
+    });
+    return response.json();
+  }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
-        method: 'PUT',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-
-      return await response.json();
-    } catch (error) {
-      console.error('Erro ao alterar senha:', error);
-      throw new Error('Erro de conexão com o servidor');
+  // ---------- SETTINGS ----------
+  /**
+   * Busca as configurações atuais
+   */
+  async getSettings(): Promise<{ success: boolean; settings: SettingsPayload }> {
+    const r = await fetch(`${API_BASE_URL}/settings`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!r.ok) {
+      throw new Error("Falha ao carregar configurações");
     }
+    return r.json();
+  }
+
+  /**
+   * Salva as configurações no backend (usa exatamente as chaves snake_case
+   * que o backend espera no body).
+   */
+  async saveSettings(payload: SettingsPayload): Promise<{
+    success: boolean;
+    message?: string;
+    settings?: SettingsPayload;
+  }> {
+    const r = await fetch(`${API_BASE_URL}/settings`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(
+        `Falha ao salvar configurações (HTTP ${r.status}): ${txt}`
+      );
+    }
+    return r.json();
   }
 }
 
 export const apiService = new ApiService();
+export { API_BASE_URL };

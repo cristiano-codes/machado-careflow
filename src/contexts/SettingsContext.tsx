@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiService } from '@/services/api';
+// src/contexts/SettingsContext.tsx
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { apiService } from "@/services/api";
 
-interface Settings {
+export interface Settings {
   instituicao_nome: string;
   instituicao_email: string;
   instituicao_telefone: string;
@@ -23,7 +24,15 @@ interface Settings {
 interface SettingsContextType {
   settings: Settings;
   updateSettings: (newSettings: Partial<Settings>) => void;
-  saveSettings: () => void;
+  /**
+   * Salva as configurações no backend.
+   * Se payload for passado, ele será mesclado sobre o estado atual e enviado.
+   * Se não for passado, envia o estado atual.
+   */
+  saveSettings: (payload?: Partial<Settings>) => Promise<void>;
+  reloadSettings: () => Promise<void>;
+  loading: boolean;
+  error: string | null;
 }
 
 const defaultSettings: Settings = {
@@ -42,71 +51,80 @@ const defaultSettings: Settings = {
   backup_frequency: "daily",
   data_retention_days: 365,
   auto_updates: true,
-  debug_mode: false
+  debug_mode: false,
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Carregar configurações do banco de dados ao inicializar
   useEffect(() => {
-    loadSettings();
+    reloadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadSettings = async () => {
+  async function reloadSettings() {
     try {
-      const response = await fetch('http://localhost:3000/api/settings');
-      const data = await response.json();
-
-      if (data && data.success) {
-        setSettings(prevSettings => ({
-          ...prevSettings,
-          ...data.settings
-        }));
+      setLoading(true);
+      setError(null);
+      const { success, settings: serverSettings } = await apiService.getSettings();
+      if (success && serverSettings) {
+        setSettings((prev) => ({ ...prev, ...serverSettings }));
       }
-    } catch (error) {
-      console.error('Erro ao carregar configurações:', error);
+    } catch (err: any) {
+      console.error("Erro ao carregar configurações:", err);
+      setError(err?.message ?? "Erro ao carregar configurações");
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const updateSettings = (newSettings: Partial<Settings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
-  };
+  function updateSettings(newSettings: Partial<Settings>) {
+    setSettings((prev) => ({ ...prev, ...newSettings }));
+  }
 
-  const saveSettings = async () => {
+  async function saveSettings(payload?: Partial<Settings>) {
     try {
-      const response = await fetch('http://localhost:3000/api/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings)
-      });
+      setError(null);
 
-      const data = await response.json();
+      // Se vier payload (ex.: tempSettings da tela), usamos ele para salvar,
+      // evitando a race condition com o setState.
+      const toSave: Settings = {
+        ...settings,
+        ...(payload ?? {}),
+      };
 
-      if (!data.success) {
-        throw new Error(data.message || 'Erro ao salvar configurações');
+      // Atualiza o estado local para refletir o que está sendo salvo (opcional, bom para UX)
+      setSettings(toSave);
+
+      const resp = await apiService.saveSettings(toSave as any);
+      if (!resp.success) {
+        throw new Error(resp?.message || "Erro ao salvar configurações");
       }
-    } catch (error) {
-      console.error('Erro ao salvar configurações:', error);
-      throw error;
+
+      // Garante que o estado final = o que o banco salvou (evita “atraso”)
+      await reloadSettings();
+    } catch (err: any) {
+      console.error("Erro ao salvar configurações:", err);
+      setError(err?.message ?? "Erro ao salvar configurações");
+      throw err;
     }
-  };
+  }
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, saveSettings }}>
+    <SettingsContext.Provider
+      value={{ settings, updateSettings, saveSettings, reloadSettings, loading, error }}
+    >
       {children}
     </SettingsContext.Provider>
   );
 }
 
 export function useSettings() {
-  const context = useContext(SettingsContext);
-  if (context === undefined) {
-    throw new Error('useSettings deve ser usado dentro de um SettingsProvider');
-  }
-  return context;
+  const ctx = useContext(SettingsContext);
+  if (!ctx) throw new Error("useSettings deve ser usado dentro de um SettingsProvider");
+  return ctx;
 }
