@@ -1,0 +1,255 @@
+Microsoft Windows [versão 10.0.19045.6456]
+(c) Microsoft Corporation. Todos os direitos reservados.
+
+C:\Program Files\PostgreSQL\17\pgAdmin 4\runtime>"C:\Program Files\PostgreSQL\17
+\pgAdmin 4\runtime\psql.exe" "host=localhost port=5432 dbname=sistema user=postg
+res sslmode=prefer connect_timeout=10" 2>>&1
+psql (17.5)
+WARNING: Console code page (850) differs from Windows code page (1252)
+         8-bit characters might not work correctly. See psql reference
+         page "Notes for Windows users" for details.
+Type "help" for help.
+
+sistema=# \dt;
+                 List of relations
+ Schema |          Name          | Type  |  Owner
+--------+------------------------+-------+----------
+ public | appointments           | table | postgres
+ public | attendance             | table | postgres
+ public | evaluations            | table | postgres
+ public | financial_transactions | table | postgres
+ public | interviews             | table | postgres
+ public | job_candidates         | table | postgres
+ public | job_vacancies          | table | postgres
+ public | login_attempts         | table | postgres
+ public | modules                | table | postgres
+ public | patients               | table | postgres
+ public | permissions            | table | postgres
+ public | pre_appointments       | table | postgres
+ public | professionals          | table | postgres
+ public | profiles               | table | postgres
+ public | reports                | table | postgres
+ public | services               | table | postgres
+ public | system_settings        | table | postgres
+ public | user_permissions       | table | postgres
+ public | users                  | table | postgres
+(19 rows)
+
+
+sistema=# SELECT
+sistema-#     table_name,
+sistema-#     column_name,
+sistema-#     data_type
+sistema-# FROM information_schema.columns
+sistema-# WHERE table_schema = 'public'
+sistema-# ORDER BY table_name, ordinal_position;
+       table_name       |     column_name      |        data_type
+------------------------+----------------------+--------------------------
+ appointments           | id                   | uuid
+ appointments           | patient_id           | uuid
+ appointments           | professional_id      | uuid
+ appointments           | service_id           | uuid
+ appointments           | appointment_date     | date
+ appointments           | appointment_time     | time without time zone
+ appointments           | status               | text
+ appointments           | notes                | text
+ appointments           | created_by           | uuid
+ appointments           | created_at           | timestamp with time zone
+ appointments           | updated_at           | timestamp with time zone
+ attendance             | id                   | uuid
+ attendance             | patient_id           | uuid
+ attendance             | appointment_id       | uuid
+ attendance             | attendance_date      | date
+ attendance             | status               | text
+ attendance             | notes                | text
+ attendance             | recorded_by          | uuid
+ attendance             | created_at           | timestamp with time zone
+ attendance             | updated_at           | timestamp with time zone
+ evaluations            | id                   | uuid
+ evaluations            | patient_id           | uuid
+ evaluations            | professional_id      | uuid
+ evaluations            | type                 | text
+ evaluations            | start_date           | date
+ evaluations            | end_date             | date
+ evaluations            | status               | text
+ evaluations            | result               | text
+ evaluations            | report               | text
+ evaluations            | notes                | text
+ evaluations            | created_by           | uuid
+ evaluations            | created_at           | timestamp with time zone
+ evaluations            | updated_at           | timestamp with time zone
+ financial_transactions | id                   | uuid
+ financial_transactions | patient_id           | uuid
+ financial_transactions | appointment_id       | uuid
+ financial_transactions | type                 | text
+ financial_transactions | category             | text
+ financial_transactions | amount               | numeric
+ financial_transactions | description          | text
+ financial_transactions | payment_method       | text
+ financial_transactions | payment_status       | text
+ financial_transactions | due_date             | date
+ financial_transactions | payment_date         | date
+ financial_transactions | notes                | text
+ financial_transactions | created_by           | uuid
+ financial_transactions | created_at           | timestamp with time zone
+ financial_transactions | updated_at           | timestamp with time zone
+ interviews             | id                   | uuid
+ interviews             | patient_id           | uuid
+ interviews             | professional_id      | uuid
+ interviews             | interview_date       | date
+ interviews             | interview_time       | time without time zone
+ interviews             | type                 | text
+ interviews             | status               | text
+ interviews             | notes                | text
+ interviews             | report               | text
+ interviews             | created_by           | uuid
+ interviews             | created_at           | timestamp with time zone
+ interviews             | updated_at           | timestamp with time zone
+ job_candidates         | id                   | uuid
+ job_candidates         | vacancy_id           | uuid
+ job_candidates         | patient_id           | uuid
+ job_candidates         | status               | text
+ job_candidates         | score                | integer
+ job_candidates         | notes                | text
+ job_candidates         | applied_at           | timestamp with time zone
+ job_candidates         | updated_at           | timestamp with time zone
+ job_vacancies          | id                   | uuid
+ job_vacancies          | title                | text
+ job_vacancies          | company              | text
+ job_vacancies          | description          | text
+ job_vacancies          | requirements         | ARRAY
+ job_vacancies          | salary_range         | text
+ job_vacancies          | type                 | text
+ job_vacancies          | level                | text
+ job_vacancies          | status               | text
+ job_vacancies          | created_by           | uuid
+ job_vacancies          | created_at           | timestamp with time zone
+ job_vacancies          | updated_at           | timestamp with time zone
+ login_attempts         | id                   | uuid
+ login_attempts         | email                | text
+ login_attempts         | ip_address           | inet
+ login_attempts         | user_agent           | text
+ login_attempts         | success              | boolean
+ login_attempts         | attempt_time         | timestamp with time zone
+ modules                | id                   | uuid
+ modules                | name                 | character varying
+ modules                | display_name         | character varying
+ modules                | description          | text
+ modules                | created_at           | timestamp with time zone
+ patients               | id                   | uuid
+ patients               | name                 | text
+ patients               | cpf                  | text
+ patients               | rg                   | text
+ patients               | date_of_birth        | date
+ patients               | email                | text
+ patients               | phone                | text
+ patients               | mobile               | text
+ patients               | address              | text
+ patients               | number               | text
+ patients               | complement           | text
+ patients               | neighborhood         | text
+ patients               | city                 | text
+ patients               | state                | text
+ patients               | zip_code             | text
+ patients               | profession           | text
+ patients               | marital_status       | text
+ patients               | education            | text
+ patients               | insurance_plan       | text
+ patients               | insurance_number     | text
+ patients               | notes                | text
+ patients               | status               | text
+ patients               | created_by           | uuid
+ patients               | created_at           | timestamp with time zone
+ patients               | updated_at           | timestamp with time zone
+ permissions            | id                   | uuid
+ permissions            | name                 | character varying
+ permissions            | display_name         | character varying
+ permissions            | description          | text
+ permissions            | created_at           | timestamp with time zone
+ pre_appointments       | id                   | uuid
+ pre_appointments       | name                 | text
+ pre_appointments       | phone                | text
+ pre_appointments       | email                | text
+ pre_appointments       | service_type         | text
+ pre_appointments       | preferred_date       | date
+ pre_appointments       | preferred_time       | text
+ pre_appointments       | notes                | text
+ pre_appointments       | status               | text
+ pre_appointments       | created_at           | timestamp with time zone
+ pre_appointments       | updated_at           | timestamp with time zone
+ professionals          | id                   | uuid
+ professionals          | user_id              | uuid
+ professionals          | crp                  | text
+ professionals          | specialty            | text
+ professionals          | bio                  | text
+ professionals          | phone                | text
+ professionals          | email                | text
+ professionals          | status               | text
+ professionals          | created_at           | timestamp with time zone
+ professionals          | updated_at           | timestamp with time zone
+ profiles               | id                   | uuid
+ profiles               | user_id              | uuid
+ profiles               | name                 | text
+ profiles               | username             | text
+ profiles               | avatar_url           | text
+ profiles               | bio                  | text
+ profiles               | phone                | text
+ profiles               | date_of_birth        | date
+ profiles               | department           | text
+ profiles               | position             | text
+ profiles               | created_at           | timestamp with time zone
+ profiles               | updated_at           | timestamp with time zone
+ reports                | id                   | uuid
+ reports                | title                | text
+ reports                | type                 | text
+ reports                | content              | jsonb
+ reports                | file_url             | text
+ reports                | created_by           | uuid
+ reports                | created_at           | timestamp with time zone
+ services               | id                   | uuid
+ services               | name                 | text
+ services               | description          | text
+ services               | duration             | integer
+ services               | price                | numeric
+ services               | active               | boolean
+ services               | created_at           | timestamp with time zone
+ services               | updated_at           | timestamp with time zone
+ system_settings        | id                   | uuid
+ system_settings        | instituicao_nome     | text
+ system_settings        | instituicao_email    | text
+ system_settings        | instituicao_telefone | text
+ system_settings        | instituicao_endereco | text
+ system_settings        | email_notifications  | boolean
+ system_settings        | sms_notifications    | boolean
+ system_settings        | push_notifications   | boolean
+ system_settings        | weekly_reports       | boolean
+ system_settings        | two_factor_auth      | boolean
+ system_settings        | password_expiry_days | integer
+ system_settings        | max_login_attempts   | integer
+ system_settings        | session_timeout      | integer
+ system_settings        | backup_frequency     | text
+ system_settings        | data_retention_days  | integer
+ system_settings        | auto_updates         | boolean
+ system_settings        | debug_mode           | boolean
+ system_settings        | updated_by           | uuid
+ system_settings        | created_at           | timestamp with time zone
+ system_settings        | updated_at           | timestamp with time zone
+ user_permissions       | id                   | uuid
+ user_permissions       | user_id              | uuid
+ user_permissions       | module_id            | uuid
+ user_permissions       | permission_id        | uuid
+ user_permissions       | granted_by           | uuid
+ user_permissions       | created_at           | timestamp with time zone
+ users                  | id                   | uuid
+ users                  | username             | character varying
+ users                  | email                | character varying
+ users                  | name                 | character varying
+ users                  | phone                | character varying
+ users                  | role                 | character varying
+ users                  | status               | character varying
+ users                  | created_at           | timestamp with time zone
+ users                  | updated_at           | timestamp with time zone
+ users                  | password             | character varying
+ users                  | first_access         | boolean
+(206 rows)
+

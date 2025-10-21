@@ -1,73 +1,136 @@
-# Welcome to your Lovable project
+🧾 README.md — versão revisada e atualizada
+# 🧠 Machado CareFlow
 
-## Project info
+Sistema de gestão clínica desenvolvido para o **Instituto Lauir Machado**, com foco em **atendimento psicológico, agendamento e gestão de pacientes**.  
+O projeto integra módulos administrativos, clínicos e financeiros em uma plataforma única.
 
-**URL**: https://lovable.dev/projects/a094a5af-0ec9-4493-aaa0-9a0907fbf9bc
+---
 
-## How can I edit this code?
+## 🚀 Visão Geral
 
-There are several ways of editing your application.
+O **Machado CareFlow** tem como objetivo centralizar as operações de uma clínica em um só sistema, permitindo:
 
-**Use Lovable**
+- 📅 **Agendamentos e Pré-Atendimentos**  
+  Controle de consultas, entrevistas iniciais e fila de espera.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/a094a5af-0ec9-4493-aaa0-9a0907fbf9bc) and start prompting.
+- 👩‍⚕️ **Gestão de Profissionais**  
+  Cadastro de psicólogos, agendas individuais e controle de atendimentos.
 
-Changes made via Lovable will be committed automatically to this repo.
+- 👨‍💻 **Área Administrativa**  
+  Controle de usuários, permissões e gestão financeira.
 
-**Use your preferred IDE**
+- 💾 **Banco de Dados Local (PostgreSQL)**  
+  Todos os dados são armazenados localmente, garantindo performance e segurança sem dependência de serviços externos.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🧩 Estrutura do Projeto
 
-Follow these steps:
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+machado-careflow/
+│
+├── institutoback/ # Backend (API Node.js + PostgreSQL)
+│ ├── src/
+│ │ ├── routes/ # Rotas da API
+│ │ ├── controllers/ # Regras de negócio
+│ │ ├── services/ # Serviços e integrações
+│ │ └── db.ts # Conexão com PostgreSQL
+│ └── package.json
+│
+├── src/ # Frontend (React + Vite + TypeScript)
+│ ├── pages/ # Páginas e componentes principais
+│ ├── components/ # Componentes reutilizáveis
+│ ├── hooks/ # Hooks personalizados
+│ └── main.tsx
+│
+├── public/ # Assets estáticos
+├── .env.example # Variáveis de ambiente (exemplo)
+├── package.json # Dependências do frontend
+├── vite.config.ts # Configuração Vite
+└── README.md
 
-# Step 3: Install the necessary dependencies.
-npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+---
+
+## ⚙️ Tecnologias Utilizadas
+
+| Camada | Tecnologias |
+|:-------|:-------------|
+| **Frontend** | React, TypeScript, Vite, TailwindCSS, ShadCN/UI |
+| **Backend** | Node.js, Express, TypeScript |
+| **Banco de Dados** | PostgreSQL local |
+| **Autenticação** | JWT + bcrypt |
+| **Outros** | ESLint, Prettier, Git, GitHub |
+
+---
+
+## 💻 Instalação e Configuração
+
+### 1️⃣ Clonar o Repositório
+```bash
+git clone https://github.com/cristiano-codes/machado-careflow.git
+cd machado-careflow
+
+2️⃣ Configurar o Backend
+cd institutoback
+npm install
+cp .env.example .env
+# edite o arquivo .env com as suas credenciais locais do PostgreSQL
 npm run dev
-```
 
-**Edit a file directly in GitHub**
+3️⃣ Configurar o Frontend
+cd ../
+npm install
+npm run dev
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+🧱 Estrutura do Banco de Dados
 
-**Use GitHub Codespaces**
+Principais tabelas:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+patients — cadastro de pacientes
 
-## What technologies are used for this project?
+professionals — psicólogos e colaboradores
 
-This project is built with:
+appointments — agendamentos e atendimentos
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+users — autenticação e permissões
 
-## How can I deploy this project?
+transactions — controle financeiro
 
-Simply open [Lovable](https://lovable.dev/projects/a094a5af-0ec9-4493-aaa0-9a0907fbf9bc) and click on Share -> Publish.
+🔐 Variáveis de Ambiente (.env.example)
+PGHOST=localhost
+PGPORT=5432
+PGUSER=postgres
+PGPASSWORD=sua_senha
+PGDATABASE=machado_careflow
+JWT_SECRET=chave_super_secreta
+NODE_ENV=development
 
-## Can I connect a custom domain to my Lovable project?
+🧠 Roadmap
 
-Yes, you can!
+ Configuração do ambiente React + Vite
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+ API Node.js com Express
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+ Conexão com PostgreSQL local
+
+ Autenticação com JWT
+
+ Painel Administrativo completo
+
+ Dashboard de relatórios em Power BI
+
+ Integração com módulo financeiro
+
+🧑‍💻 Autor
+
+Cristiano Oliveira (Chat Salvador)
+📊 Analista de Dados & Desenvolvedor Full Stack
+📍 Rio de Janeiro, Brasil
+🔗 linkedin.com/in/cristiano-oliveira
+
+📄 Licença
+
+Este projeto é de uso educacional e institucional.
+© 2025 - Instituto Lauir Machado.

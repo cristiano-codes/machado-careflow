@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, XCircle, Lock, Unlock } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface User {
   id: string;
@@ -24,27 +23,47 @@ export function UserManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  // Base URL do backend (defina VITE_API_URL no .env do front se quiser)
+  const API_BASE = useMemo(
+    () => (import.meta.env.VITE_API_URL as string) || "http://localhost:3000",
+    []
+  );
+
+  function getAuthHeaders() {
+    const raw = sessionStorage.getItem("token") || localStorage.getItem("token");
+    const token = raw ? raw : "";
+    return {
+      "Content-Type": "application/json",
+      Authorization: token ? `Bearer ${token}` : "",
+    };
+  }
+
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
-      
-      // Buscar todos os usuários
-      const { data: allUsersData, error: allUsersError } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
 
-      if (allUsersError) {
-        throw allUsersError;
+      // Chama o backend local em vez do supabase
+      const res = await fetch(`${API_BASE}/admin/users`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!res.ok) {
+        throw new Error(`GET /admin/users -> ${res.status}`);
       }
 
-      // Filtrar usuários pendentes
-      const pendingUsersData = allUsersData?.filter(user => user.status === 'pendente') || [];
+      const data: User[] = await res.json();
 
-      setAllUsers(allUsersData || []);
-      setPendingUsers(pendingUsersData);
+      // Ordena por created_at desc (garantia no front, caso o backend não ordene)
+      const ordered = [...data].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      const pendentes = ordered.filter((u) => u.status === "pendente");
+
+      setAllUsers(ordered);
+      setPendingUsers(pendentes);
     } catch (error) {
-      console.error('Erro ao buscar usuários:', error);
+      console.error("Erro ao buscar usuários:", error);
       toast({
         title: "Erro",
         description: "Erro ao carregar usuários",
@@ -57,37 +76,39 @@ export function UserManagement() {
 
   useEffect(() => {
     fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleUserAction = async (userId: string, action: 'approve' | 'reject' | 'block') => {
+  const handleUserAction = async (userId: string, action: "approve" | "reject" | "block") => {
     try {
       let newStatus: string;
       let message: string;
 
       switch (action) {
-        case 'approve':
-          newStatus = 'ativo';
-          message = 'Usuário aprovado com sucesso';
+        case "approve":
+          newStatus = "ativo";
+          message = "Usuário aprovado com sucesso";
           break;
-        case 'reject':
-          newStatus = 'rejeitado';
-          message = 'Usuário rejeitado';
+        case "reject":
+          newStatus = "rejeitado";
+          message = "Usuário rejeitado";
           break;
-        case 'block':
-          newStatus = 'bloqueado';
-          message = 'Usuário bloqueado';
+        case "block":
+          newStatus = "bloqueado";
+          message = "Usuário bloqueado";
           break;
         default:
           return;
       }
 
-      const { error } = await supabase
-        .from('users')
-        .update({ status: newStatus })
-        .eq('id', userId);
+      const res = await fetch(`${API_BASE}/admin/users/${userId}/status`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: newStatus }),
+      });
 
-      if (error) {
-        throw error;
+      if (!res.ok) {
+        throw new Error(`PATCH /admin/users/${userId}/status -> ${res.status}`);
       }
 
       toast({
@@ -96,10 +117,9 @@ export function UserManagement() {
         variant: "default",
       });
 
-      // Recarregar dados
       await fetchUsers();
     } catch (error) {
-      console.error('Erro na ação do usuário:', error);
+      console.error("Erro na ação do usuário:", error);
       toast({
         title: "Erro",
         description: "Erro ao processar ação",
@@ -110,21 +130,37 @@ export function UserManagement() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'ativo':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" /> Ativo</Badge>;
-      case 'pendente':
-        return <Badge variant="secondary"><XCircle className="w-3 h-3 mr-1" /> Pendente</Badge>;
-      case 'bloqueado':
-        return <Badge variant="destructive"><Lock className="w-3 h-3 mr-1" /> Bloqueado</Badge>;
-      case 'rejeitado':
-        return <Badge variant="outline"><XCircle className="w-3 h-3 mr-1" /> Rejeitado</Badge>;
+      case "ativo":
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            <CheckCircle className="w-3 h-3 mr-1" /> Ativo
+          </Badge>
+        );
+      case "pendente":
+        return (
+          <Badge variant="secondary">
+            <XCircle className="w-3 h-3 mr-1" /> Pendente
+          </Badge>
+        );
+      case "bloqueado":
+        return (
+          <Badge variant="destructive">
+            <Lock className="w-3 h-3 mr-1" /> Bloqueado
+          </Badge>
+        );
+      case "rejeitado":
+        return (
+          <Badge variant="outline">
+            <XCircle className="w-3 h-3 mr-1" /> Rejeitado
+          </Badge>
+        );
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+    return new Date(dateString).toLocaleDateString("pt-BR");
   };
 
   if (isLoading) {
@@ -146,9 +182,7 @@ export function UserManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pendingUsers.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Aguardando aprovação
-            </p>
+            <p className="text-xs text-muted-foreground">Aguardando aprovação</p>
           </CardContent>
         </Card>
         <Card>
@@ -158,9 +192,7 @@ export function UserManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{allUsers.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Todos os usuários no sistema
-            </p>
+            <p className="text-xs text-muted-foreground">Todos os usuários no sistema</p>
           </CardContent>
         </Card>
       </div>
@@ -171,14 +203,12 @@ export function UserManagement() {
           <TabsTrigger value="pending">Pendentes ({pendingUsers.length})</TabsTrigger>
           <TabsTrigger value="all">Todos os Usuários ({allUsers.length})</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="pending">
           <Card>
             <CardHeader>
               <CardTitle>Usuários Pendentes</CardTitle>
-              <CardDescription>
-                Usuários aguardando aprovação para acessar o sistema
-              </CardDescription>
+              <CardDescription>Usuários aguardando aprovação para acessar o sistema</CardDescription>
             </CardHeader>
             <CardContent>
               {pendingUsers.length === 0 ? (
@@ -210,14 +240,14 @@ export function UserManagement() {
                             <Button
                               variant="default"
                               size="sm"
-                              onClick={() => handleUserAction(user.id, 'approve')}
+                              onClick={() => handleUserAction(user.id, "approve")}
                             >
                               Aprovar
                             </Button>
                             <Button
                               variant="destructive"
                               size="sm"
-                              onClick={() => handleUserAction(user.id, 'reject')}
+                              onClick={() => handleUserAction(user.id, "reject")}
                             >
                               Rejeitar
                             </Button>
@@ -236,9 +266,7 @@ export function UserManagement() {
           <Card>
             <CardHeader>
               <CardTitle>Todos os Usuários</CardTitle>
-              <CardDescription>
-                Gerenciar todos os usuários do sistema
-              </CardDescription>
+              <CardDescription>Gerenciar todos os usuários do sistema</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -264,20 +292,20 @@ export function UserManagement() {
                       <TableCell>{getStatusBadge(user.status)}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          {user.status === 'ativo' ? (
+                          {user.status === "ativo" ? (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleUserAction(user.id, 'block')}
+                              onClick={() => handleUserAction(user.id, "block")}
                             >
                               <Lock className="w-3 h-3 mr-1" />
                               Bloquear
                             </Button>
-                          ) : user.status === 'bloqueado' ? (
+                          ) : user.status === "bloqueado" ? (
                             <Button
                               variant="default"
                               size="sm"
-                              onClick={() => handleUserAction(user.id, 'approve')}
+                              onClick={() => handleUserAction(user.id, "approve")}
                             >
                               <Unlock className="w-3 h-3 mr-1" />
                               Ativar

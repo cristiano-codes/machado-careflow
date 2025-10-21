@@ -17,7 +17,7 @@ const pool = new Pool({
   password: process.env.DB_PASS
 });
 
-// Função para criar tabelas se não existirem
+// Função para criar tabelas se não existirem (mantido do seu código)
 async function initDatabase() {
   try {
     await pool.query(`
@@ -113,18 +113,34 @@ router.post('/login', [
       });
     }
 
-    // Verificar senha
-    const isValidPassword = (password === user.password);
+    // Verificar senha (compatível com hash e texto puro legado)
+    let isValidPassword = false;
+    if (user.password && user.password.startsWith('$2')) {
+      isValidPassword = await bcrypt.compare(password, user.password);
+    } else {
+      isValidPassword = (password === user.password);
+    }
     if (!isValidPassword) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }
 
-    // Gerar token JWT
+    // >>> NOVO: buscar permissões do usuário
+    const permsRes = await pool.query(
+      `SELECT p.name
+         FROM user_permissions up
+         JOIN permissions p ON p.id = up.permission_id
+        WHERE up.user_id = $1`,
+      [user.id]
+    );
+    const permissions = permsRes.rows.map(r => r.name);
+
+    // Gerar token JWT (mantido 24h neste passo)
     const token = jwt.sign(
       { 
         id: user.id, 
         username: user.username, 
-        role: user.role 
+        role: user.role,
+        permissions // <<< inclui no payload
       },
       JWT_SECRET,
       { expiresIn: '24h' }
@@ -137,7 +153,7 @@ router.post('/login', [
       message: 'Login realizado com sucesso',
       success: true,
       token,
-      user: userWithoutPassword
+      user: { ...userWithoutPassword, permissions } // <<< inclui no JSON
     });
 
   } catch (error) {
@@ -163,8 +179,19 @@ router.get('/verify', async (req, res) => {
     }
 
     const user = userResult.rows[0];
+
+    // >>> NOVO: buscar permissões também no verify
+    const permsRes = await pool.query(
+      `SELECT p.name
+         FROM user_permissions up
+         JOIN permissions p ON p.id = up.permission_id
+        WHERE up.user_id = $1`,
+      [user.id]
+    );
+    const permissions = permsRes.rows.map(r => r.name);
+
     const { password: _, ...userWithoutPassword } = user;
-    res.json({ success: true, user: userWithoutPassword });
+    res.json({ success: true, user: { ...userWithoutPassword, permissions } });
 
   } catch (error) {
     res.status(401).json({ message: 'Token inválido' });

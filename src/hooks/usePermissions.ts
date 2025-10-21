@@ -1,260 +1,133 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useMemo } from 'react';
 
-export interface Permission {
-  id: string;
-  name: string;
-  display_name: string;
-  description?: string;
+type RawPerm =
+  | string
+  | { module?: string; permission?: string }
+  | { name?: string; module?: string; action?: string };
+
+type NormalizedPerm = { module: string; permission: string };
+
+function readStoredUser(): any | null {
+  // Tenta sessionStorage primeiro (reabre → limpa), depois localStorage (fallback)
+  const raw =
+    sessionStorage.getItem('user') ??
+    localStorage.getItem('user');
+
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
-export interface Module {
-  id: string;
-  name: string;
-  display_name: string;
-  description?: string;
-}
+function normalize(raw: RawPerm): NormalizedPerm[] {
+  // Aceita formatos:
+  // 1) "ADMIN_PANEL_ACCESS"
+  // 2) "admin:access"
+  // 3) { module: 'admin', permission: 'view' }
+  // 4) { module: 'admin', action: 'view' }
+  // 5) { name: 'ADMIN_PANEL_ACCESS' }
+  if (typeof raw === 'string') {
+    if (raw.includes(':')) {
+      const [module, permission] = raw.split(':').map(s => s.trim().toLowerCase());
+      return [{ module, permission }];
+    }
+    return [{ module: '*', permission: raw.trim().toLowerCase() }];
+  }
 
-export interface UserPermission {
-  id: string;
-  user_id: string;
-  module_id: string;
-  permission_id: string;
-  module: Module;
-  permission: Permission;
+  const module =
+    (raw as any).module?.toString().trim().toLowerCase() ||
+    (raw as any).modulo?.toString().trim().toLowerCase() ||
+    '*';
+
+  const permission =
+    (raw as any).permission?.toString().trim().toLowerCase() ||
+    (raw as any).action?.toString().trim().toLowerCase() ||
+    (raw as any).name?.toString().trim().toLowerCase() ||
+    'access';
+
+  return [{ module, permission }];
 }
 
 export function usePermissions() {
-  const [userPermissions, setUserPermissions] = useState<UserPermission[]>([]);
-  const [allModules, setAllModules] = useState<Module[]>([]);
-  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+  // Lê o usuário armazenado (definido após login no teu front)
+  const user = useMemo(() => readStoredUser(), []);
 
-  // Carregar permissões do usuário atual
-  const loadUserPermissions = async () => {
-    try {
-      // Primeiro verificar se é o admin nativo (localStorage ou contexto)
-      const adminProfile = localStorage.getItem('admin_profile');
-      if (adminProfile) {
-        const admin = JSON.parse(adminProfile);
-        if (admin.email === 'admin@admin.com') {
-          // Admin nativo tem todas as permissões
-          const { data: modules } = await supabase.from('modules').select('*');
-          const { data: permissions } = await supabase.from('permissions').select('*');
-          
-          if (modules && permissions) {
-            const adminPermissions: UserPermission[] = [];
-            modules.forEach(module => {
-              permissions.forEach(permission => {
-                adminPermissions.push({
-                  id: `${module.id}-${permission.id}`,
-                  user_id: admin.id,
-                  module_id: module.id,
-                  permission_id: permission.id,
-                  module,
-                  permission
-                });
-              });
-            });
-            setUserPermissions(adminPermissions);
-          }
-          return;
-        }
-      }
+  // role do usuário (super admin)
+  const role = user?.role?.toString().trim().toLowerCase();
 
-      // Para usuários normais, usar Supabase Auth
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  const normalizedPermissions = useMemo<NormalizedPerm[]>(() => {
+    const raw = (user as any)?.permissions as RawPerm[] | undefined;
+    if (!raw || !Array.isArray(raw)) return [];
+    const list: NormalizedPerm[] = [];
+    for (const item of raw) list.push(...normalize(item));
+    return list;
+  }, [user]);
 
-      const { data, error } = await supabase
-        .from('user_permissions')
-        .select(`
-          *,
-          module:modules(*),
-          permission:permissions(*)
-        `)
-        .eq('user_id', user.id);
+  function hasPermission(module: string, permission: string) {
+    // 1) super admin passa em tudo
+    if (role === 'admin') return true;
 
-      if (error) throw error;
-      setUserPermissions(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar permissões:', error);
-    }
-  };
+    // 2) normalização de inputs
+    const mod = (module || '').toString().trim().toLowerCase();
+    const perm = (permission || '').toString().trim().toLowerCase();
 
-  // Carregar todos os módulos
-  const loadModules = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('modules')
-        .select('*')
-        .order('display_name');
-
-      if (error) throw error;
-      setAllModules(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar módulos:', error);
-    }
-  };
-
-  // Carregar todas as permissões
-  const loadPermissions = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('permissions')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-      setAllPermissions(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar permissões:', error);
-    }
-  };
-
-  // Verificar se usuário tem permissão específica
-  const hasPermission = (moduleName: string, permissionName: string): boolean => {
-    return userPermissions.some(up => 
-      up.module.name === moduleName && up.permission.name === permissionName
+    // 3) match direto module/permission
+    const matchPair = normalizedPermissions.some(
+      p => (p.module === mod || p.module === '*') && (p.permission === perm || p.permission === '*')
     );
-  };
+    if (matchPair) return true;
 
-  // Obter permissões de um módulo
-  const getModulePermissions = (moduleName: string): string[] => {
-    return userPermissions
-      .filter(up => up.module.name === moduleName)
-      .map(up => up.permission.name);
-  };
+    // 4) fallback: macro de admin para módulo admin
+    const hasAdminMacro = normalizedPermissions.some(
+      p =>
+        p.permission === 'admin_panel_access' ||
+        p.permission === 'adminpanelaccess' ||
+        p.permission === 'admin_access'
+    );
+    if (hasAdminMacro && mod === 'admin') return true;
 
-  // Conceder permissão a um usuário
-  const grantPermission = async (userId: string, moduleId: string, permissionId: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+    return false;
+  }
 
-      const { error } = await supabase
-        .from('user_permissions')
-        .insert({
-          user_id: userId,
-          module_id: moduleId,
-          permission_id: permissionId,
-          granted_by: user.id
-        });
+  function getModulePermissions(module: string) {
+    const mod = (module || '').toString().trim().toLowerCase();
+    const perms = new Set<string>();
 
-      if (error) throw error;
-
-      toast({
-        title: "Permissão concedida",
-        description: "Permissão adicionada com sucesso",
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Erro ao conceder permissão:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao conceder permissão",
-        variant: "destructive"
-      });
-      return false;
+    if (role === 'admin') {
+      return new Set<string>(['view', 'create', 'edit', 'delete', 'access', '*']);
     }
-  };
 
-  // Revogar permissão de um usuário
-  const revokePermission = async (userId: string, moduleId: string, permissionId: string) => {
-    try {
-      const { error } = await supabase
-        .from('user_permissions')
-        .delete()
-        .eq('user_id', userId)
-        .eq('module_id', moduleId)
-        .eq('permission_id', permissionId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Permissão revogada",
-        description: "Permissão removida com sucesso",
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Erro ao revogar permissão:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao revogar permissão",
-        variant: "destructive"
-      });
-      return false;
+    for (const p of normalizedPermissions) {
+      if (p.module === mod || p.module === '*') perms.add(p.permission);
     }
-  };
 
-  // Carregar permissões de um usuário específico (para admins)
-  const loadUserPermissionsByUserId = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_permissions')
-        .select(`
-          *,
-          module:modules(*),
-          permission:permissions(*)
-        `)
-        .eq('user_id', userId);
+    const hasAdminMacro = normalizedPermissions.some(
+      p =>
+        p.permission === 'admin_panel_access' ||
+        p.permission === 'adminpanelaccess' ||
+        p.permission === 'admin_access'
+    );
+    if (hasAdminMacro && mod === 'admin') perms.add('access');
 
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Erro ao carregar permissões do usuário:', error);
-      return [];
-    }
-  };
+    return perms;
+  }
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      await Promise.all([
-        loadUserPermissions(),
-        loadModules(),
-        loadPermissions()
-      ]);
-      setLoading(false);
-    };
+  // Sem depender de carregamento externo agora
+  const loading = false;
 
-    loadData();
+  return { hasPermission, getModulePermissions, loading };
+}
 
-    // Configurar real-time updates para permissões do usuário
-    const channel = supabase
-      .channel('user-permissions-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_permissions'
-        },
-        () => {
-          loadUserPermissions();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
+// Hook auxiliar exportado no teu arquivo original:
+export function useModulePermissions(module: string) {
+  const { hasPermission, getModulePermissions } = usePermissions();
   return {
-    userPermissions,
-    allModules,
-    allPermissions,
-    loading,
-    hasPermission,
-    getModulePermissions,
-    grantPermission,
-    revokePermission,
-    loadUserPermissionsByUserId,
-    refreshPermissions: loadUserPermissions
+    canView: hasPermission(module, 'view'),
+    canCreate: hasPermission(module, 'create'),
+    canEdit: hasPermission(module, 'edit'),
+    canDelete: hasPermission(module, 'delete'),
+    permissions: getModulePermissions(module),
   };
 }
