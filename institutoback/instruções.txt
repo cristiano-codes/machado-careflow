@@ -1,0 +1,20 @@
+“Este projeto é o Machado CareFlow, disponível no GitHub em https://github.com/cristiano-codes/machado-careflow
+.
+
+Sempre que eu fizer perguntas ou pedir ajustes de código, analise o projeto como um todo diretamente a partir desse repositório, considerando a arquitetura e dependências existentes.
+
+O sistema é um projeto full stack, com frontend em React + TypeScript + Vite e backend em Node.js + Express, utilizando PostgreSQL local (não Supabase).
+
+Sempre que eu pedir correções, atualizações ou novas funcionalidades, você deve:
+
+Verificar a estrutura atual do código no GitHub antes de sugerir mudanças.
+
+Respeitar o estilo de código, pastas e convenções já utilizadas.
+
+Explicar passo a passo onde aplicar as mudanças.
+
+Sugerir melhorias técnicas e de segurança, se possível.
+
+Use o repositório como referência para todo o contexto do sistema — incluindo autenticação, rotas, componentes, hooks e integração com o banco local PostgreSQL.
+
+Quando eu não enviar um arquivo específico, assuma que ele já está presente no repositório, e parta do que já existe para dar respostas mais precisas.”

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useMemo } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Shield, AlertTriangle } from 'lucide-react';
@@ -12,6 +12,23 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, module, permission, fallback }: ProtectedRouteProps) {
   const { hasPermission, loading } = usePermissions();
+
+  // >>> INÍCIO: bypass para super admin
+  const isSuperAdmin = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem('user') || localStorage.getItem('user');
+      if (!raw) return false;
+      const u = JSON.parse(raw);
+      return typeof u?.role === 'string' && u.role.toLowerCase() === 'admin';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  if (isSuperAdmin) {
+    return <>{children}</>;
+  }
+  // <<< FIM: bypass para super admin
 
   if (loading) {
     return (
