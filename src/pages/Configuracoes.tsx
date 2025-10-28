@@ -1,6 +1,12 @@
 // src/pages/Configuracoes.tsx
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,18 +25,22 @@ export default function Configuracoes() {
   const [tempSettings, setTempSettings] = useState(settings);
 
   useEffect(() => {
-    // sempre que o contexto atualizar (ex.: reloadSettings após salvar),
-    // sincroniza o formulário temporário
     setTempSettings(settings);
   }, [settings]);
 
-  const isAdmin = userProfile?.role === "Coordenador Geral";
+  // 🔓 Permitir acesso no ambiente de desenvolvimento
+  const devBypass = import.meta.env.DEV; // true quando "npm run dev"
+  const isAdminRole =
+    userProfile?.role === "Coordenador Geral" ||
+    userProfile?.role === "admin" ||
+    userProfile?.role === "Administrador";
+
+  const canAccess = devBypass || isAdminRole;
 
   async function handleSettingsUpdate(e?: React.FormEvent) {
     e?.preventDefault();
     try {
       setSaving(true);
-      // evita race condition: envia o que está no formulário (tempSettings)
       await saveSettings(tempSettings);
       setIsEditingSettings(false);
       toast({
@@ -48,20 +58,27 @@ export default function Configuracoes() {
     }
   }
 
-  // Acesso apenas para admin
-  if (!isAdmin) {
+  // 🔒 Bloqueio (exceto se bypass ativo)
+  if (!canAccess) {
     return (
       <div className="max-w-7xl mx-auto space-y-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Configurações do Sistema</h1>
-          <p className="text-muted-foreground text-sm">Configurações gerais da aplicação</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Configurações do Sistema
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Configurações gerais da aplicação
+          </p>
         </div>
 
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3 text-muted-foreground">
               <Shield className="w-5 h-5" />
-              <p>Acesso negado. Apenas administradores podem acessar esta página.</p>
+              <p>
+                Acesso negado. Apenas administradores podem acessar esta
+                página.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -69,11 +86,16 @@ export default function Configuracoes() {
     );
   }
 
+  // 🔧 Página principal de configurações
   return (
     <div className="max-w-7xl mx-auto space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Configurações do Sistema</h1>
-        <p className="text-muted-foreground text-sm">Configurações gerais da aplicação</p>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Configurações do Sistema
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          Configurações gerais da aplicação
+        </p>
       </div>
 
       <Card>
@@ -91,14 +113,24 @@ export default function Configuracoes() {
           <form className="space-y-4" onSubmit={handleSettingsUpdate}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="instituicao_nome" className="text-sm font-medium">
+                <Label
+                  htmlFor="instituicao_nome"
+                  className="text-sm font-medium"
+                >
                   Nome da Instituição
                 </Label>
                 <Input
                   id="instituicao_nome"
-                  value={isEditingSettings ? tempSettings.instituicao_nome : settings.instituicao_nome}
+                  value={
+                    isEditingSettings
+                      ? tempSettings.instituicao_nome
+                      : settings.instituicao_nome
+                  }
                   onChange={(e) =>
-                    setTempSettings((prev) => ({ ...prev, instituicao_nome: e.target.value }))
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      instituicao_nome: e.target.value,
+                    }))
                   }
                   disabled={!isEditingSettings || saving}
                   className="text-sm"
@@ -106,15 +138,25 @@ export default function Configuracoes() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="instituicao_email" className="text-sm font-medium">
+                <Label
+                  htmlFor="instituicao_email"
+                  className="text-sm font-medium"
+                >
                   E-mail da Instituição
                 </Label>
                 <Input
                   id="instituicao_email"
                   type="email"
-                  value={isEditingSettings ? tempSettings.instituicao_email : settings.instituicao_email}
+                  value={
+                    isEditingSettings
+                      ? tempSettings.instituicao_email
+                      : settings.instituicao_email
+                  }
                   onChange={(e) =>
-                    setTempSettings((prev) => ({ ...prev, instituicao_email: e.target.value }))
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      instituicao_email: e.target.value,
+                    }))
                   }
                   disabled={!isEditingSettings || saving}
                   className="text-sm"
@@ -122,16 +164,24 @@ export default function Configuracoes() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="instituicao_telefone" className="text-sm font-medium">
+                <Label
+                  htmlFor="instituicao_telefone"
+                  className="text-sm font-medium"
+                >
                   Telefone da Instituição
                 </Label>
                 <Input
                   id="instituicao_telefone"
                   value={
-                    isEditingSettings ? tempSettings.instituicao_telefone : settings.instituicao_telefone
+                    isEditingSettings
+                      ? tempSettings.instituicao_telefone
+                      : settings.instituicao_telefone
                   }
                   onChange={(e) =>
-                    setTempSettings((prev) => ({ ...prev, instituicao_telefone: e.target.value }))
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      instituicao_telefone: e.target.value,
+                    }))
                   }
                   disabled={!isEditingSettings || saving}
                   className="text-sm"
@@ -139,16 +189,24 @@ export default function Configuracoes() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="instituicao_endereco" className="text-sm font-medium">
+                <Label
+                  htmlFor="instituicao_endereco"
+                  className="text-sm font-medium"
+                >
                   Endereço da Instituição
                 </Label>
                 <Input
                   id="instituicao_endereco"
                   value={
-                    isEditingSettings ? tempSettings.instituicao_endereco : settings.instituicao_endereco
+                    isEditingSettings
+                      ? tempSettings.instituicao_endereco
+                      : settings.instituicao_endereco
                   }
                   onChange={(e) =>
-                    setTempSettings((prev) => ({ ...prev, instituicao_endereco: e.target.value }))
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      instituicao_endereco: e.target.value,
+                    }))
                   }
                   disabled={!isEditingSettings || saving}
                   className="text-sm"
@@ -164,7 +222,7 @@ export default function Configuracoes() {
                     variant="outline"
                     onClick={() => {
                       setIsEditingSettings(false);
-                      setTempSettings(settings); // descarta alterações
+                      setTempSettings(settings);
                     }}
                     size="sm"
                     disabled={saving}
@@ -176,7 +234,11 @@ export default function Configuracoes() {
                   </Button>
                 </>
               ) : (
-                <Button type="button" onClick={() => setIsEditingSettings(true)} size="sm">
+                <Button
+                  type="button"
+                  onClick={() => setIsEditingSettings(true)}
+                  size="sm"
+                >
                   Editar Configurações
                 </Button>
               )}
