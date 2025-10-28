@@ -17,9 +17,27 @@ router.use(authMiddleware);
 
 // Middleware para verificar se é admin
 const adminMiddleware = (req, res, next) => {
-  if (req.user.role !== 'Coordenador Geral') {
-    return res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
+  const role = (req.user?.role || '').toString().trim().toLowerCase();
+  const allowedRoles = ['coordenador geral', 'administrador', 'admin'];
+
+  const hasPermissionFromRole = allowedRoles.includes(role);
+
+  const hasPermissionFromScope = Array.isArray(req.user?.permissions)
+    ? req.user.permissions
+        .map((permission) =>
+          typeof permission === 'string' ? permission.trim().toLowerCase() : ''
+        )
+        .some((permission) =>
+          ['admin:all', 'admin', 'manage:users', 'users:manage'].includes(permission)
+        )
+    : false;
+
+  if (!hasPermissionFromRole && !hasPermissionFromScope) {
+    return res
+      .status(403)
+      .json({ message: 'Acesso negado. Apenas administradores.' });
   }
+
   next();
 };
 
