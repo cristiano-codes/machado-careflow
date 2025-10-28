@@ -43,15 +43,16 @@ export function UserManagement() {
       setIsLoading(true);
 
       // Chama o backend local em vez do supabase
-      const res = await fetch(`${API_BASE}/admin/users`, {
+      const res = await fetch(`${API_BASE}/api/users`, {
         headers: getAuthHeaders(),
       });
 
       if (!res.ok) {
-        throw new Error(`GET /admin/users -> ${res.status}`);
+        throw new Error(`GET /api/users -> ${res.status}`);
       }
 
-      const data: User[] = await res.json();
+      const payload = await res.json();
+      const data: User[] = Array.isArray(payload) ? payload : payload?.users ?? [];
 
       // Ordena por created_at desc (garantia no front, caso o backend não ordene)
       const ordered = [...data].sort(
@@ -83,32 +84,36 @@ export function UserManagement() {
     try {
       let newStatus: string;
       let message: string;
+      let endpoint: string;
 
       switch (action) {
         case "approve":
           newStatus = "ativo";
           message = "Usuário aprovado com sucesso";
+          endpoint = `${API_BASE}/api/users/${userId}/approve`;
           break;
         case "reject":
           newStatus = "rejeitado";
           message = "Usuário rejeitado";
+          endpoint = `${API_BASE}/api/users/${userId}/reject`;
           break;
         case "block":
           newStatus = "bloqueado";
           message = "Usuário bloqueado";
+          endpoint = `${API_BASE}/api/users/${userId}/block`;
           break;
         default:
           return;
       }
 
-      const res = await fetch(`${API_BASE}/admin/users/${userId}/status`, {
+      const res = await fetch(endpoint, {
         method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify({ status: newStatus }),
       });
 
       if (!res.ok) {
-        throw new Error(`PATCH /admin/users/${userId}/status -> ${res.status}`);
+        throw new Error(`PATCH ${endpoint} -> ${res.status}`);
       }
 
       toast({
