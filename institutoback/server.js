@@ -43,6 +43,7 @@ app.use('/uploads', express.static('uploads'));
 // Importar rotas
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
+const permissionRoutes = require('./routes/permissions');
 const pacientRoutes = require('./routes/pacientes');
 const settingsRoutes = require('./routes/settings');
 const statsRoutes = require('./routes/stats');
@@ -55,6 +56,7 @@ const jobCandidatesRoutes = require('./routes/jobCandidates');
 // Usar rotas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/permissions', permissionRoutes);
 app.use('/api/pacientes', pacientRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/stats', statsRoutes);
