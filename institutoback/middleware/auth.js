@@ -15,7 +15,8 @@ const authMiddleware = (req, res, next) => {
       id: 'd1aa940b-2c48-4d29-bdfa-9b4ec08fe409',
       email: 'admin@admin.com',
       name: 'Administrador',
-      role: 'admin',
+      role: 'Coordenador Geral',
+      permissions: ['*'],
     };
     return next();
   }
