@@ -24,18 +24,42 @@ export function UserManagement() {
   const { toast } = useToast();
 
   // Base URL do backend (defina VITE_API_URL no .env do front se quiser)
-  const API_BASE = useMemo(
-    () => (import.meta.env.VITE_API_URL as string) || "http://localhost:3000",
-    []
-  );
+  const API_BASE = useMemo(() => {
+    const envBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+    const fallback =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "http://localhost:3000";
 
-  function getAuthHeaders() {
+    const base = envBase && envBase.length > 0 ? envBase : fallback;
+    return base.replace(/\/$/, "");
+  }, []);
+
+  function getAuthHeaders(withJson = false) {
     const raw = sessionStorage.getItem("token") || localStorage.getItem("token");
-    const token = raw ? raw : "";
-    return {
-      "Content-Type": "application/json",
-      Authorization: token ? `Bearer ${token}` : "",
+    let token = "";
+
+    if (raw) {
+      try {
+        token = JSON.parse(raw);
+      } catch (error) {
+        token = raw;
+      }
+    }
+
+    const headers: Record<string, string> = {
+      Accept: "application/json",
     };
+
+    if (withJson) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return headers;
   }
 
   const fetchUsers = async () => {
@@ -48,7 +72,10 @@ export function UserManagement() {
       });
 
       if (!res.ok) {
-        throw new Error(`GET /api/users -> ${res.status}`);
+        const errorPayload = await res.json().catch(() => null);
+        const message =
+          errorPayload?.message || `GET /api/users -> ${res.status}`;
+        throw new Error(message);
       }
 
       const payload = await res.json();
@@ -65,9 +92,14 @@ export function UserManagement() {
       setPendingUsers(pendentes);
     } catch (error) {
       console.error("Erro ao buscar usuários:", error);
+      setAllUsers([]);
+      setPendingUsers([]);
       toast({
         title: "Erro",
-        description: "Erro ao carregar usuários",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao carregar usuários",
         variant: "destructive",
       });
     } finally {
@@ -108,12 +140,15 @@ export function UserManagement() {
 
       const res = await fetch(endpoint, {
         method: "PATCH",
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(true),
         body: JSON.stringify({ status: newStatus }),
       });
 
       if (!res.ok) {
-        throw new Error(`PATCH ${endpoint} -> ${res.status}`);
+        const errorPayload = await res.json().catch(() => null);
+        const responseMessage =
+          errorPayload?.message || `PATCH ${endpoint} -> ${res.status}`;
+        throw new Error(responseMessage);
       }
 
       toast({
@@ -127,7 +162,10 @@ export function UserManagement() {
       console.error("Erro na ação do usuário:", error);
       toast({
         title: "Erro",
-        description: "Erro ao processar ação",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao processar ação",
         variant: "destructive",
       });
     }
