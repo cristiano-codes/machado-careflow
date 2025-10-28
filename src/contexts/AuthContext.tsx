@@ -1,9 +1,9 @@
+// src/contexts/AuthContext.tsx
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { apiService } from '@/services/api';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
-
 
 interface AuthContextType {
   user: any | null;
@@ -23,21 +23,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Verificar autenticação no localStorage
+  // Verificar autenticação no localStorage + bypass em dev
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
-    
+
     if (token && userStr) {
       try {
         const userData = JSON.parse(userStr);
         setUser(userData);
         setUserProfile(userData);
+        setLoading(false);
+        return;
       } catch (error) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
     }
+
+    // 🔓 BYPASS DEV: se está em ambiente de desenvolvimento e não há user salvo,
+    // injeta um usuário "Coordenador Geral" para liberar as telas protegidas.
+    if (import.meta.env.DEV) {
+      const devUser = {
+        id: 'd1aa940b-2c48-4d29-bdfa-9b4ec08fe409',
+        email: 'admin@admin.com',
+        name: 'Administrador',
+        role: 'Coordenador Geral',
+      };
+      setUser(devUser);
+      setUserProfile(devUser);
+      // opcional: persistir no localStorage para refresh automático
+      localStorage.setItem('user', JSON.stringify(devUser));
+      localStorage.setItem('token', 'dev-bypass');
+      console.log('🧩 BYPASS DEV ativo — usuário Admin local criado automaticamente');
+    }
+
     setLoading(false);
   }, []);
 
@@ -45,16 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       const result = await apiService.login(email, password);
-      
+
       if (result.success && result.user) {
         setUser(result.user);
         setUserProfile(result.user);
-        
         toast({
-          title: "Login realizado com sucesso!",
+          title: 'Login realizado com sucesso!',
           description: `Bem-vindo, ${result.user.name}`,
         });
-        
         return {};
       } else {
         return { error: result.message };
@@ -62,10 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Erro no login:', error);
       toast({
-        title: "Backend não está rodando",
+        title: 'Backend não está rodando',
         description: "Execute 'cd institutoback && npm start' para iniciar o servidor",
-        variant: "destructive",
-        duration: 8000
+        variant: 'destructive',
+        duration: 8000,
       });
       return { error: 'Backend não está rodando. Inicie o servidor PostgreSQL e execute "cd institutoback && npm start"' };
     }
@@ -82,17 +100,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           username: userData.username,
           name: userData.name,
-          phone: userData.phone
-        })
+          phone: userData.phone,
+        }),
       });
 
       const result = await response.json();
 
       if (result.success) {
         toast({
-          title: "Cadastro realizado com sucesso!",
-          description: "Sua solicitação foi enviada para aprovação do administrador.",
-          duration: 5000
+          title: 'Cadastro realizado com sucesso!',
+          description: 'Sua solicitação foi enviada para aprovação do administrador.',
+          duration: 5000,
         });
         return {};
       } else {
@@ -110,17 +128,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       apiService.logout();
       setUser(null);
       setUserProfile(null);
-      
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+
       toast({
-        title: "Logout realizado",
-        description: "Até logo!",
+        title: 'Logout realizado',
+        description: 'Até logo!',
       });
     } catch (error) {
       console.error('Erro no logout:', error);
       toast({
-        title: "Erro no logout",
-        description: "Ocorreu um erro ao fazer logout",
-        variant: "destructive"
+        title: 'Erro no logout',
+        description: 'Ocorreu um erro ao fazer logout',
+        variant: 'destructive',
       });
     }
   };
@@ -134,21 +154,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       });
 
       const result = await response.json();
 
       if (result.success) {
         setUserProfile({ ...userProfile, ...data });
-        
         toast({
-          title: "Perfil atualizado",
-          description: "Suas informações foram atualizadas com sucesso",
+          title: 'Perfil atualizado',
+          description: 'Suas informações foram atualizadas com sucesso',
         });
-
         return {};
       } else {
         return { error: result.message };
@@ -160,15 +178,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      userProfile,
-      loading,
-      signIn,
-      signUp,
-      signOut,
-      updateProfile
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        userProfile,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+        updateProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
