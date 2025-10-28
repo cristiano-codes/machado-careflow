@@ -24,16 +24,22 @@ const adminMiddleware = (req, res, next) => {
         .map((permission) =>
           typeof permission === 'string' ? permission.trim().toLowerCase() : ''
         )
-        .some((permission) =>
-          [
+        .some((permission) => {
+          if (!permission) return false;
+
+          if (permission === '*' || permission === 'admin:*') {
+            return true;
+          }
+
+          return [
             'admin:all',
             'admin',
             'manage:permissions',
             'permissions:manage',
             'manage:users',
             'users:manage',
-          ].includes(permission)
-        )
+          ].includes(permission);
+        })
     : false;
 
   if (!hasPermissionFromRole && !hasPermissionFromScope) {

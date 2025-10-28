@@ -26,12 +26,27 @@ export function UserManagement() {
   // Base URL do backend (defina VITE_API_URL no .env do front se quiser)
   const API_BASE = useMemo(() => {
     const envBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-    const fallback =
-      typeof window !== "undefined" && window.location?.origin
-        ? window.location.origin
-        : "http://localhost:3000";
+    const fallback = "http://localhost:3000";
 
-    const base = envBase && envBase.length > 0 ? envBase : fallback;
+    let base = envBase && envBase.length > 0 ? envBase : fallback;
+
+    if (!envBase && typeof window !== "undefined" && window.location?.origin) {
+      try {
+        const originUrl = new URL(window.location.origin);
+        if (
+          originUrl.hostname === "localhost" &&
+          ["5000", "5173", "4173"].includes(originUrl.port || "")
+        ) {
+          originUrl.port = "3000";
+          base = originUrl.toString();
+        } else {
+          base = window.location.origin;
+        }
+      } catch (error) {
+        base = fallback;
+      }
+    }
+
     return base.replace(/\/$/, "");
   }, []);
 
