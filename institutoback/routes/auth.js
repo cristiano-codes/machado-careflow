@@ -17,6 +17,17 @@ const pool = new Pool({
   password: process.env.DB_PASS
 });
 
+// Mapeamento simples para remover acentuação de nomes de usuário
+const ACCENT_FROM = 'ÁÀÃÂÄáàãâäÉÈÊËéèêëÍÌÎÏíìîïÓÒÕÔÖóòõôöÚÙÛÜúùûüÇçÑñ';
+const ACCENT_TO = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
+
+const removeDiacritics = (value = '') =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 // Função para criar tabelas se não existirem (mantido do seu código)
 async function initDatabase() {
   try {
@@ -77,20 +88,36 @@ router.post('/login', [
     // Verificar erros de validação
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        message: 'Dados inválidos', 
-        errors: errors.array() 
+      return res.status(400).json({
+        message: 'Dados inválidos',
+        errors: errors.array()
       });
     }
 
-    const { username, password } = req.body;
+    const identifier = (req.body?.username || '').trim();
+    const password = (req.body?.password || '').toString();
 
-    // Encontrar usuário no banco
-    const userResult = await pool.query(
-      'SELECT * FROM users WHERE username = $1 OR email = $1', 
-      [username]
+    if (!identifier) {
+      return res.status(400).json({ message: 'Credenciais inválidas' });
+    }
+
+    const loweredIdentifier = identifier.toLowerCase();
+    const normalizedIdentifier = removeDiacritics(identifier);
+
+    // Encontrar usuário no banco (case-insensitive para username/email)
+    let userResult = await pool.query(
+      'SELECT * FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $1',
+      [loweredIdentifier]
     );
-    
+
+    // Fallback para permitir login com nomes sem acentuação (ex.: Gestao → Gestão)
+    if (userResult.rows.length === 0 && identifier && !identifier.includes('@') && normalizedIdentifier) {
+      userResult = await pool.query(
+        'SELECT * FROM users WHERE LOWER(TRANSLATE(username, $2, $3)) = $1',
+        [normalizedIdentifier, ACCENT_FROM, ACCENT_TO]
+      );
+    }
+
     if (userResult.rows.length === 0) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }
@@ -98,8 +125,9 @@ router.post('/login', [
     const user = userResult.rows[0];
 
     // Verificar se usuário está ativo
-    if (user.status !== 'ativo') {
-      return res.status(403).json({ 
+    const userStatus = (user.status || '').toString().trim().toLowerCase();
+    if (userStatus !== 'ativo') {
+      return res.status(403).json({
         message: 'Seu acesso ainda não foi liberado pelo administrador. Aguarde aprovação.',
         status: user.status
       });
@@ -107,7 +135,7 @@ router.post('/login', [
 
     // Verificar se é primeiro acesso ou se falta senha
     if (user.first_access || !user.password) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         message: 'Primeiro acesso necessário. Defina sua senha primeiro.',
         firstAccess: true
       });
@@ -117,8 +145,8 @@ router.post('/login', [
     let isValidPassword = false;
     if (user.password && user.password.startsWith('$2')) {
       isValidPassword = await bcrypt.compare(password, user.password);
-    } else {
-      isValidPassword = (password === user.password);
+    } else if (typeof user.password === 'string') {
+      isValidPassword = password === user.password;
     }
     if (!isValidPassword) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
@@ -136,9 +164,9 @@ router.post('/login', [
 
     // Gerar token JWT (mantido 24h neste passo)
     const token = jwt.sign(
-      { 
-        id: user.id, 
-        username: user.username, 
+      {
+        id: user.id,
+        username: user.username,
         role: user.role,
         permissions // <<< inclui no payload
       },
@@ -173,7 +201,7 @@ router.get('/verify', async (req, res) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
-    
+
     if (userResult.rows.length === 0) {
       return res.status(401).json({ message: 'Usuário não encontrado' });
     }
@@ -210,6 +238,127 @@ router.get('/first-access', async (req, res) => {
   }
 });
 
+// Rota para verificar se um usuário existe (por username ou email)
+router.get('/check-user', async (req, res) => {
+  const identifier = (req.query?.identifier || '').trim();
+
+  if (!identifier) {
+    return res.status(400).json({
+      message: 'Parâmetro "identifier" é obrigatório'
+    });
+  }
+
+  try {
+    const loweredIdentifier = identifier.toLowerCase();
+    const normalizedIdentifier = removeDiacritics(identifier);
+
+    let result = await pool.query(
+      `SELECT id, username, email, status, first_access
+         FROM users
+        WHERE LOWER(username) = $1
+           OR LOWER(email) = $1
+        LIMIT 1`,
+      [loweredIdentifier]
+    );
+
+    if (result.rows.length === 0 && identifier && !identifier.includes('@') && normalizedIdentifier) {
+      result = await pool.query(
+        `SELECT id, username, email, status, first_access
+           FROM users
+          WHERE LOWER(TRANSLATE(username, $2, $3)) = $1
+          LIMIT 1`,
+        [normalizedIdentifier, ACCENT_FROM, ACCENT_TO]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.json({ exists: false });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      exists: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        status: user.status,
+        firstAccess: user.first_access
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao verificar usuário:', error);
+    res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
+// Rota para listar usuários sem executar SQL manualmente
+router.get('/users', async (req, res) => {
+  const search = (req.query?.search || '').trim();
+
+  try {
+    const params = [];
+    const whereClauses = [];
+
+    if (search) {
+      const loweredSearch = `%${search.toLowerCase()}%`;
+      params.push(loweredSearch);
+      const usernameIndex = params.length;
+      whereClauses.push(`LOWER(username) LIKE $${usernameIndex}`);
+
+      params.push(loweredSearch);
+      const emailIndex = params.length;
+      whereClauses.push(`LOWER(email) LIKE $${emailIndex}`);
+
+      params.push(loweredSearch);
+      const nameIndex = params.length;
+      whereClauses.push(`LOWER(name) LIKE $${nameIndex}`);
+
+      const normalizedSearch = `%${removeDiacritics(search)}%`;
+      params.push(ACCENT_FROM);
+      const accentFromIndex = params.length;
+      params.push(ACCENT_TO);
+      const accentToIndex = params.length;
+      params.push(normalizedSearch);
+      const normalizedIndex = params.length;
+
+      whereClauses.push(
+        `LOWER(TRANSLATE(username, $${accentFromIndex}, $${accentToIndex})) LIKE $${normalizedIndex}`
+      );
+      whereClauses.push(
+        `LOWER(TRANSLATE(name, $${accentFromIndex}, $${accentToIndex})) LIKE $${normalizedIndex}`
+      );
+    }
+
+    const baseQuery = `SELECT id, username, email, name, phone, role, status, first_access, created_at
+                         FROM users`;
+    const whereQuery = whereClauses.length ? ` WHERE ${whereClauses.join(' OR ')}` : '';
+    const orderQuery = ' ORDER BY created_at DESC';
+
+    const result = await pool.query(`${baseQuery}${whereQuery}${orderQuery}`, params);
+
+    const users = result.rows.map((user) => ({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      role: user.role,
+      status: user.status,
+      firstAccess: user.first_access,
+      createdAt: user.created_at
+    }));
+
+    res.json({
+      count: users.length,
+      users
+    });
+  } catch (error) {
+    console.error('Erro ao listar usuários:', error);
+    res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
 // Rota para definir senha no primeiro acesso
 router.post('/setup-password', [
   body('username').notEmpty().withMessage('Username é obrigatório'),
@@ -224,14 +373,15 @@ router.post('/setup-password', [
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        message: 'Dados inválidos', 
-        errors: errors.array() 
+      return res.status(400).json({
+        message: 'Dados inválidos',
+        errors: errors.array()
       });
     }
 
-    const { username, password } = req.body;
-    
+    const username = (req.body?.username || '').trim();
+    const password = (req.body?.password || '').toString();
+
     const userResult = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -244,15 +394,15 @@ router.post('/setup-password', [
 
     // Criptografar nova senha
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     // Atualizar usuário
     await pool.query(
       'UPDATE users SET password = $1, first_access = false WHERE id = $2',
       [hashedPassword, user.id]
     );
 
-    res.json({ 
-      message: 'Senha definida com sucesso! Agora você pode fazer login.' 
+    res.json({
+      message: 'Senha definida com sucesso! Agora você pode fazer login.'
     });
 
   } catch (error) {
@@ -278,37 +428,54 @@ router.post('/register', [
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        message: 'Dados inválidos', 
-        errors: errors.array() 
+      return res.status(400).json({
+        message: 'Dados inválidos',
+        errors: errors.array()
       });
     }
 
-    const { username, email, name, phone, password } = req.body;
-    
+    const username = (req.body?.username || '').trim();
+    const email = (req.body?.email || '').trim();
+    const name = (req.body?.name || '').trim();
+    const phone = (req.body?.phone || '').trim();
+    const password = (req.body?.password || '').toString();
+
+    if (!username || !email || !name || !phone) {
+      return res.status(400).json({ message: 'Dados obrigatórios ausentes' });
+    }
+
     // Verificar se usuário já existe
     const existingUser = await pool.query(
       'SELECT * FROM users WHERE username = $1 OR email = $2',
       [username, email]
     );
-    
+
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({ 
-        message: 'Usuário ou email já existe' 
+      return res.status(400).json({
+        message: 'Usuário ou email já existe'
       });
     }
 
     // Criptografar senha
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     // Criar novo usuário (status pendente para aprovação do admin)
     await pool.query(`
       INSERT INTO users (username, email, name, phone, password, role, status, first_access)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [username, email, name, phone, hashedPassword, 'Usuário', 'pendente', false]);
+    `, [
+      username,
+      email.toLowerCase(),
+      name,
+      phone,
+      hashedPassword,
+      'Usuário',
+      'pendente',
+      false,
+    ]);
 
-    res.json({ 
-      message: 'Usuário cadastrado com sucesso! Aguarde a aprovação do administrador para acessar o sistema.' 
+    res.json({
+      message: 'Usuário cadastrado com sucesso! Aguarde a aprovação do administrador para acessar o sistema.'
     });
 
   } catch (error) {
