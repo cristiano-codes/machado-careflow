@@ -1,13 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, User, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -32,10 +32,18 @@ export function Header({ user, onLogout }: HeaderProps) {
       <div className="flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="h-8 w-8" />
-          <div className="hidden md:block">
-            <h1 className="text-lg font-semibold text-foreground">
-              Sistema de Gestão - {settings.instituicao_nome}
-            </h1>
+          <div className="flex items-center gap-3">
+            <img
+              src="/logo.svg"
+              alt="Instituto Lauir Machado"
+              className="hidden sm:block h-8 w-auto drop-shadow-sm"
+              loading="lazy"
+            />
+            <div className="hidden md:block">
+              <h1 className="text-lg font-semibold text-foreground">
+                Sistema de Gestao - {settings.instituicao_nome}
+              </h1>
+            </div>
           </div>
         </div>
 
@@ -61,28 +69,27 @@ export function Header({ user, onLogout }: HeaderProps) {
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">{user.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user.email}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user.role}
-                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user.role}</p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('/perfil')}>
+                <DropdownMenuItem onClick={() => navigate("/perfil")}>
                   <User className="mr-2 h-4 w-4" />
                   <span>Perfil</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
+                <DropdownMenuItem onClick={() => navigate("/configuracoes")}>
                   <Settings className="mr-2 h-4 w-4" />
-                  <span>Configurações</span>
+                  <span>Configuracoes</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => {
-                  console.log('Clicou em Sair - Header');
-                  onLogout();
-                }} className="text-destructive">
+                <DropdownMenuItem
+                  onClick={() => {
+                    console.log("Clicou em Sair - Header");
+                    onLogout();
+                  }}
+                  className="text-destructive"
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sair</span>
                 </DropdownMenuItem>

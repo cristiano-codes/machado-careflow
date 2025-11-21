@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, EyeOff, Building, Lock, User } from "lucide-react";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -45,8 +45,13 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 p-4">
       <Card className="w-full max-w-md shadow-lg border-0" style={{ boxShadow: 'var(--shadow-medium)' }}>
         <CardHeader className="space-y-4 text-center pb-6">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center">
-            <Building className="w-8 h-8 text-white" />
+          <div className="flex justify-center">
+            <img
+              src="/logo.svg"
+              alt="Instituto Lauir Machado"
+              className="h-16 w-auto drop-shadow-sm"
+              loading="lazy"
+            />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-foreground">

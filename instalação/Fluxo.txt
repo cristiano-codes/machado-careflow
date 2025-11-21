@@ -1,0 +1,12 @@
+
+1 - Ajustar permissão
+
+
+2 - Proximo passo
+Fluxo 
+
+Pré agendamento: Onde será realizado o primeiro contato com o responsavel com recepção, onde será anotado os dados do responsável (Nome, telefone) e identificação da criança (Nome, data de nasc. , turno da escola, tem laudo, quai a nessecidade, Bairro) a recepção já terá acesso a agenda do seviço social e já disponibilizar a data e hora da entrevista.
+
+
+
+Essa informação vai pra agenda de Entrevistas

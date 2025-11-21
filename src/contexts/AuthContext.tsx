@@ -23,39 +23,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Verificar autenticação no localStorage + bypass em dev
+  // Verificar autenticação no armazenamento local (sem bypass de dev)
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
 
     if (token && userStr) {
       try {
-        const userData = JSON.parse(userStr);
-        setUser(userData);
-        setUserProfile(userData);
-        setLoading(false);
-        return;
-      } catch (error) {
+        // Limpa artefatos antigos do bypass de desenvolvimento
+        if (token === 'dev-bypass') {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        } else {
+          const userData = JSON.parse(userStr);
+          setUser(userData);
+          setUserProfile(userData);
+          setLoading(false);
+          return;
+        }
+      } catch {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
-    }
-
-    // 🔓 BYPASS DEV: se está em ambiente de desenvolvimento e não há user salvo,
-    // injeta um usuário "Coordenador Geral" para liberar as telas protegidas.
-    if (import.meta.env.DEV) {
-      const devUser = {
-        id: 'd1aa940b-2c48-4d29-bdfa-9b4ec08fe409',
-        email: 'admin@admin.com',
-        name: 'Administrador',
-        role: 'Coordenador Geral',
-      };
-      setUser(devUser);
-      setUserProfile(devUser);
-      // opcional: persistir no localStorage para refresh automático
-      localStorage.setItem('user', JSON.stringify(devUser));
-      localStorage.setItem('token', 'dev-bypass');
-      console.log('🧩 BYPASS DEV ativo — usuário Admin local criado automaticamente');
     }
 
     setLoading(false);
@@ -85,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         variant: 'destructive',
         duration: 8000,
       });
-      return { error: 'Backend não está rodando. Inicie o servidor PostgreSQL e execute "cd institutoback && npm start"' };
+      return { error: 'Backend não está rodando. Inicie o servidor PostgreSQL e execute \"cd institutoback && npm start\"' };
     }
   };
 
