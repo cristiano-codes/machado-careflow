@@ -52,6 +52,7 @@ const servicesRoutes = require('./routes/services');
 const preAppointmentsRoutes = require('./routes/preAppointments');
 const jobVacanciesRoutes = require('./routes/jobVacancies');
 const jobCandidatesRoutes = require('./routes/jobCandidates');
+const profissionaisRoutes = require('./routes/profissionais');
 
 // Usar rotas
 app.use('/api/auth', authRoutes);
@@ -65,6 +66,7 @@ app.use('/api/services', servicesRoutes);
 app.use('/api/pre-appointments', preAppointmentsRoutes);
 app.use('/api/job-vacancies', jobVacanciesRoutes);
 app.use('/api/job-candidates', jobCandidatesRoutes);
+app.use('/api/profissionais', profissionaisRoutes);
 
 // Rota de teste
 app.get('/api/health', (req, res) => {

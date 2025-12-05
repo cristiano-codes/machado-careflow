@@ -71,6 +71,17 @@ async function initDatabase() {
       }
     }
 
+    // Garantir conta demo para apresentações
+    const demoCheck = await pool.query('SELECT * FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2', ['demo', 'demo@demo.com']);
+    if (demoCheck.rows.length === 0) {
+      const hashedPassword = await bcrypt.hash('demo123', 10);
+      await pool.query(`
+        INSERT INTO users (username, email, name, role, status, first_access, password)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, ['demo', 'demo@demo.com', 'Conta Demo', 'Usuário', 'ativo', false, hashedPassword]);
+      console.log('Conta demo criada: demo@demo.com / demo123');
+    }
+
     console.log('Banco de dados inicializado com sucesso');
   } catch (error) {
     console.error('Erro ao inicializar banco:', error);
@@ -229,9 +240,10 @@ router.get('/verify', async (req, res) => {
 // Rota para verificar se é primeiro acesso
 router.get('/first-access', async (req, res) => {
   try {
-    const adminResult = await pool.query('SELECT first_access FROM users WHERE username = $1', ['admin']);
+    const adminResult = await pool.query('SELECT username, first_access FROM users WHERE username = $1', ['admin']);
     const firstAccess = adminResult.rows.length > 0 ? adminResult.rows[0].first_access : false;
-    res.json({ firstAccess });
+    const username = adminResult.rows.length > 0 ? adminResult.rows[0].username : undefined;
+    res.json({ firstAccess, username });
   } catch (error) {
     console.error('Erro ao verificar first-access:', error);
     res.json({ firstAccess: false });

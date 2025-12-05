@@ -11,26 +11,38 @@ import { apiService } from "@/services/api";
 const Index = () => {
   const [showRegister, setShowRegister] = useState(false);
   const [showFirstAccess, setShowFirstAccess] = useState(false);
+  const [firstAccessUsername, setFirstAccessUsername] = useState<string | undefined>(undefined);
   const { user, userProfile, loading, signIn, signUp, signOut } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!user) {
-      apiService.checkFirstAccess().then(res => setShowFirstAccess(!!res.firstAccess)).catch(() => setShowFirstAccess(false));
+      apiService
+        .checkFirstAccess()
+        .then((res) => {
+          const isFirst = !!res.firstAccess;
+          setShowFirstAccess(isFirst);
+          if (isFirst) setFirstAccessUsername(res.username || "admin");
+        })
+        .catch(() => {
+          setShowFirstAccess(false);
+          setFirstAccessUsername(undefined);
+        });
     }
   }, [user]);
 
-  const handleLogin = async (credentials: { email: string; password: string }) => {
-    try {
-      const { error } = await signIn(credentials.email, credentials.password);
-      
-      if (error) {
-        throw new Error(error);
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "E-mail ou senha incorretos";
-      if (/Primeiro acesso/i.test(msg)) {
+const handleLogin = async (credentials: { email: string; password: string }) => {
+  try {
+    const { error } = await signIn(credentials.email, credentials.password);
+    
+    if (error) {
+      throw new Error(error);
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "E-mail ou senha incorretos";
+    if (/Primeiro acesso/i.test(msg)) {
         setShowFirstAccess(true);
+        setFirstAccessUsername(credentials.email);
       }
       toast({
         title: "Erro de autenticação",
@@ -66,8 +78,10 @@ const Index = () => {
     if (showFirstAccess) {
       return (
         <FirstAccessForm
+          username={firstAccessUsername}
           onSuccess={() => {
             setShowFirstAccess(false);
+            setFirstAccessUsername(undefined);
             toast({ title: "Senha definida!", description: "Faça login com sua nova senha." });
           }}
         />

@@ -67,14 +67,14 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
-                E-mail
+                Usuário ou e-mail
               </Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="email"
                   type="text"
-                  placeholder="Digite admin para demo ou seu e-mail"
+                  placeholder="Digite seu usuário ou e-mail (demo: demo@demo.com)"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
@@ -115,6 +115,10 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
             >
               {isLoading ? "Entrando..." : "Entrar"}
             </Button>
+
+            <p className="text-xs text-muted-foreground text-center">
+              Conta demo: <span className="font-medium">demo@demo.com</span> / senha <span className="font-medium">demo123</span>
+            </p>
           </form>
           
           <div className="mt-6 text-center">

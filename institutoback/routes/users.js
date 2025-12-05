@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
+const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 
 // Configuração do banco
@@ -18,7 +19,7 @@ router.use(authMiddleware);
 // Middleware para verificar se é admin
 const adminMiddleware = (req, res, next) => {
   const role = (req.user?.role || '').toString().trim().toLowerCase();
-  const allowedRoles = ['coordenador geral', 'administrador', 'admin'];
+  const allowedRoles = ['coordenador geral', 'administrador', 'admin', 'gestao', 'gestão', 'gestor'];
 
   const hasPermissionFromRole = allowedRoles.includes(role);
 
@@ -173,6 +174,43 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Erro ao buscar usuário:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
+// Redefinir senha de um usuário (apenas admin/gestão; admin só por admin)
+router.post('/:id/reset-password', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body || {};
+
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ message: 'Senha inválida. Mínimo 6 caracteres.' });
+    }
+
+    const targetUser = await pool.query('SELECT id, role FROM users WHERE id = $1', [id]);
+    if (targetUser.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuário não encontrado' });
+    }
+
+    const requesterRole = (req.user?.role || '').toString().trim().toLowerCase();
+    const targetRole = (targetUser.rows[0].role || '').toString().trim().toLowerCase();
+
+    // Apenas outro admin pode resetar senha de admin
+    if (targetRole === 'admin' && requesterRole !== 'admin') {
+      return res.status(403).json({ message: 'Apenas administrador pode redefinir senha de outro administrador' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      'UPDATE users SET password = $1, first_access = true, updated_at = NOW() WHERE id = $2',
+      [hashedPassword, id]
+    );
+
+    return res.json({ message: 'Senha redefinida com sucesso' });
+  } catch (error) {
+    console.error('Erro ao redefinir senha:', error);
+    return res.status(500).json({ message: 'Erro interno do servidor' });
   }
 });
 

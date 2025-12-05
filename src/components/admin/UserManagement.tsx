@@ -4,6 +4,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, XCircle, Lock, Unlock } from "lucide-react";
 
@@ -21,6 +24,12 @@ export function UserManagement() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [resetModal, setResetModal] = useState<{ open: boolean; user: User | null }>({
+    open: false,
+    user: null,
+  });
+  const [resetPasswords, setResetPasswords] = useState({ password: "", confirm: "" });
+  const [isResetting, setIsResetting] = useState(false);
   const { toast } = useToast();
 
   // Base URL do backend (defina VITE_API_URL no .env do front se quiser)
@@ -49,6 +58,26 @@ export function UserManagement() {
 
     return base.replace(/\/$/, "");
   }, []);
+
+  const currentUserRole = useMemo(() => {
+    const raw = sessionStorage.getItem("user") ?? localStorage.getItem("user");
+    if (!raw) return "";
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.role?.toString().trim().toLowerCase() || "";
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const canResetPassword = (target: User) => {
+    const targetRole = target.role?.toString().trim().toLowerCase();
+    const allowedManagerRoles = ["admin", "gestao", "gestão", "gestor"];
+    if (targetRole === "admin") {
+      return currentUserRole === "admin";
+    }
+    return allowedManagerRoles.includes(currentUserRole);
+  };
 
   function getAuthHeaders(withJson = false) {
     const raw = sessionStorage.getItem("token") || localStorage.getItem("token");
@@ -126,6 +155,63 @@ export function UserManagement() {
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleResetPassword = async () => {
+    if (!resetModal.user) return;
+
+    if (resetPasswords.password !== resetPasswords.confirm) {
+      toast({
+        title: "Erro",
+        description: "As senhas n\u00e3o coincidem",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (resetPasswords.password.length < 6) {
+      toast({
+        title: "Erro",
+        description: "A nova senha deve ter pelo menos 6 caracteres",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const endpoint = `${API_BASE}/api/users/${resetModal.user.id}/reset-password`;
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ password: resetPasswords.password }),
+      });
+
+      if (!res.ok) {
+        const errorPayload = await res.json().catch(() => null);
+        const responseMessage =
+          errorPayload?.message || `POST ${endpoint} -> ${res.status}`;
+        throw new Error(responseMessage);
+      }
+
+      toast({
+        title: "Senha redefinida",
+        description: `Senha de ${resetModal.user.name} redefinida com sucesso`,
+      });
+      setResetModal({ open: false, user: null });
+      setResetPasswords({ password: "", confirm: "" });
+      await fetchUsers();
+    } catch (error) {
+      console.error("Erro ao redefinir senha:", error);
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error ? error.message : "Erro ao redefinir senha",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleUserAction = async (userId: string, action: "approve" | "reject" | "block") => {
     try {
@@ -369,6 +455,14 @@ export function UserManagement() {
                               Ativar
                             </Button>
                           ) : null}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={!canResetPassword(user)}
+                            onClick={() => setResetModal({ open: true, user })}
+                          >
+                            Redefinir senha
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -379,6 +473,55 @@ export function UserManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={resetModal.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setResetModal({ open: false, user: null });
+            setResetPasswords({ password: "", confirm: "" });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Redefinir senha</DialogTitle>
+            <DialogDescription>
+              Defina uma nova senha para {resetModal.user?.name}. Apenas administradores podem redefinir a senha de outro administrador.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="new-password">Nova senha</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={resetPasswords.password}
+                onChange={(e) => setResetPasswords((prev) => ({ ...prev, password: e.target.value }))}
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="confirm-password">Confirmar nova senha</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={resetPasswords.confirm}
+                onChange={(e) => setResetPasswords((prev) => ({ ...prev, confirm: e.target.value }))}
+                placeholder="Repita a nova senha"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetModal({ open: false, user: null })}>
+              Cancelar
+            </Button>
+            <Button onClick={handleResetPassword} disabled={isResetting}>
+              {isResetting ? "Salvando..." : "Salvar nova senha"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -188,6 +188,95 @@ class ApiService {
     }
     return r.json();
   }
+
+  // ---------- PROFISSIONAIS ----------
+  async getProfessionals(date?: string) {
+    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    const response = await fetch(`${API_BASE_URL}/profissionais${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+    return response.json();
+  }
+
+  async createProfessional(payload: {
+    name: string;
+    email: string;
+    phone?: string;
+    username: string;
+    role?: string;
+    specialty?: string;
+    crp?: string;
+    status?: string;
+  }) {
+    const response = await fetch(`${API_BASE_URL}/profissionais`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return response.json();
+  }
+
+  async getProfessionalAgenda(id: string, date?: string) {
+    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    const response = await fetch(`${API_BASE_URL}/profissionais/${id}/agenda${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+    return response.json();
+  }
+
+  async getProfessionalsStats(date?: string) {
+    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    const response = await fetch(`${API_BASE_URL}/profissionais/stats/resumo${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+    return response.json();
+  }
+
+  // ---------- PACIENTES ----------
+  async getPatients() {
+    const response = await fetch(`${API_BASE_URL}/patients`, {
+      headers: this.getAuthHeaders(),
+    });
+    return response.json();
+  }
+
+  // ---------- ENTREVISTAS SOCIAIS ----------
+  async getSocialInterviews(patientId?: string) {
+    const query = patientId ? `?patient_id=${encodeURIComponent(patientId)}` : "";
+    const response = await fetch(`${API_BASE_URL}/social-interviews${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error("Falha ao carregar entrevistas sociais");
+    }
+    return response.json();
+  }
+
+  async createSocialInterview(payload: Record<string, unknown>) {
+    const response = await fetch(`${API_BASE_URL}/social-interviews`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Erro ao criar entrevista social: ${text}`);
+    }
+    return response.json();
+  }
+
+  async updateSocialInterview(id: string, payload: Record<string, unknown>) {
+    const response = await fetch(`${API_BASE_URL}/social-interviews/${id}`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Erro ao atualizar entrevista social: ${text}`);
+    }
+    return response.json();
+  }
 }
 
 export const apiService = new ApiService();
