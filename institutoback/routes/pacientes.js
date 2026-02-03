@@ -1,55 +1,30 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
+const sequelize = require('../config/database');
 
-// Middleware de autenticação
+// Protege a rota
 router.use(authMiddleware);
 
-// Listar pacientes
-router.get('/', (req, res) => {
-  res.json({
-    message: 'Lista de pacientes',
-    pacientes: [
-      {
-        id: 1,
-        nome: 'Maria Santos',
-        cpf: '123.456.789-00',
-        telefone: '(11) 99999-9999',
-        email: 'maria@email.com',
-        dataNascimento: '1980-05-15',
-        status: 'Ativo'
-      }
-    ]
-  });
-});
+// LISTAR PACIENTES (REAL)
+router.get('/', async (req, res) => {
+  try {
+    const [pacientes] = await sequelize.query(`
+      SELECT id, nome, cpf, telefone, email, data_nascimento AS "dataNascimento", status
+      FROM pacientes
+      ORDER BY id DESC
+      LIMIT 100
+    `);
 
-// Buscar paciente por ID
-router.get('/:id', (req, res) => {
-  const { id } = req.params;
-  res.json({
-    message: `Dados do paciente ${id}`,
-    paciente: {
-      id: parseInt(id),
-      nome: 'Maria Santos',
-      cpf: '123.456.789-00',
-      telefone: '(11) 99999-9999',
-      email: 'maria@email.com',
-      dataNascimento: '1980-05-15',
-      status: 'Ativo'
-    }
-  });
-});
-
-// Criar novo paciente
-router.post('/', (req, res) => {
-  const dadosPaciente = req.body;
-  res.status(201).json({
-    message: 'Paciente criado com sucesso',
-    paciente: {
-      id: Date.now(),
-      ...dadosPaciente
-    }
-  });
+    res.json({
+      message: 'Lista de pacientes',
+      total: pacientes.length,
+      pacientes
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Erro ao listar pacientes' });
+  }
 });
 
 module.exports = router;
