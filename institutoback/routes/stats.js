@@ -1,71 +1,100 @@
 const express = require('express');
 const router = express.Router();
-const { Pool } = require('pg');
+const sequelize = require('../config/database');
 
-const isProd = process.env.NODE_ENV === 'production';
+// helpers
+async function tableExists(tableName) {
+  const [rows] = await sequelize.query(
+    `
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = :table
+    ) AS exists
+    `,
+    { replacements: { table: tableName } }
+  );
+  return !!rows?.[0]?.exists;
+}
 
-// Pool compatível com Railway (DATABASE_URL) e local (DB_*)
-const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: isProd ? { rejectUnauthorized: false } : false,
-    })
-  : new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: Number(process.env.DB_PORT || 5432),
-      database: process.env.DB_NAME || 'sistema',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASS || '110336',
-    });
+async function safeCount(tableName, whereSql = '', replacements = {}) {
+  try {
+    const exists = await tableExists(tableName);
+    if (!exists) return 0;
+
+    const sql = `SELECT COUNT(*)::int AS count FROM "${tableName}" ${whereSql}`;
+    const [rows] = await sequelize.query(sql, { replacements });
+    return rows?.[0]?.count ?? 0;
+  } catch (err) {
+    console.error(`[stats] erro no COUNT em ${tableName}:`, err.message);
+    return 0;
+  }
+}
+
+async function safeSum(tableName, sumColumn, whereSql = '', replacements = {}) {
+  try {
+    const exists = await tableExists(tableName);
+    if (!exists) return 0;
+
+    const sql = `
+      SELECT COALESCE(SUM("${sumColumn}"), 0)::numeric AS total
+      FROM "${tableName}"
+      ${whereSql}
+    `;
+    const [rows] = await sequelize.query(sql, { replacements });
+    return Number(rows?.[0]?.total ?? 0);
+  } catch (err) {
+    console.error(`[stats] erro no SUM em ${tableName}.${sumColumn}:`, err.message);
+    return 0;
+  }
+}
 
 // GET - Buscar estatísticas do dashboard
 router.get('/', async (req, res) => {
   try {
-    // Melhor que string "YYYY-MM-DD" se sua coluna for DATE.
-    // Se appointment_date for TIMESTAMP, depois ajustamos.
-    const today = new Date();
-    const yyyy = today.getUTCFullYear();
-    const mm = String(today.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(today.getUTCDate()).padStart(2, '0');
-    const todayStr = `${yyyy}-${mm}-${dd}`;
+    // Ajuste os nomes abaixo se suas tabelas tiverem outros nomes no banco
+    const TABLES = {
+      patients: 'patients',
+      appointments: 'appointments',
+      evaluations: 'evaluations',
+      financial: 'financial_transactions',
+    };
 
-    const [
-      patientsResult,
-      appointmentsTodayResult,
-      evaluationsPendingResult,
-      revenueResult,
-    ] = await Promise.all([
-      pool.query('SELECT COUNT(*)::int AS count FROM patients'),
-      pool.query(
-        'SELECT COUNT(*)::int AS count FROM appointments WHERE appointment_date = $1::date',
-        [todayStr]
-      ),
-      pool.query("SELECT COUNT(*)::int AS count FROM evaluations WHERE status = 'scheduled'"),
-      pool.query(
-        `
-        SELECT COALESCE(SUM(amount), 0)::numeric AS total
-        FROM financial_transactions
-        WHERE date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)
-        `
-      ),
-    ]);
+    const totalPacientes = await safeCount(TABLES.patients);
 
-    res.json({
+    // Mais robusto que comparar string: pega "hoje" via CURRENT_DATE
+    const agendamentosHoje = await safeCount(
+      TABLES.appointments,
+      `WHERE DATE("appointment_date") = CURRENT_DATE`
+    );
+
+    const avaliacoesPendentes = await safeCount(
+      TABLES.evaluations,
+      `WHERE "status" = :status`,
+      { status: 'scheduled' }
+    );
+
+    const receitaMensal = await safeSum(
+      TABLES.financial,
+      'amount',
+      `WHERE DATE_TRUNC('month', "created_at") = DATE_TRUNC('month', CURRENT_DATE)`
+    );
+
+    return res.json({
       success: true,
       stats: {
-        totalPacientes: patientsResult.rows[0]?.count ?? 0,
-        agendamentosHoje: appointmentsTodayResult.rows[0]?.count ?? 0,
-        avaliacoesPendentes: evaluationsPendingResult.rows[0]?.count ?? 0,
-        receitaMensal: Number(revenueResult.rows[0]?.total ?? 0),
+        totalPacientes,
+        agendamentosHoje,
+        avaliacoesPendentes,
+        receitaMensal,
       },
     });
   } catch (error) {
-    console.error('Erro ao buscar estatísticas:', error?.message || error);
-    res.status(500).json({
+    console.error('[stats] Erro ao buscar estatísticas:', error);
+    return res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
-      // em produção não vaza detalhe; em dev ajuda
-      error: isProd ? undefined : (error?.message || String(error)),
     });
   }
 });
