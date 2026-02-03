@@ -4,28 +4,30 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
+// === APP ===
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middlewares de segurança e logging
+// === BANCO (Sequelize) ===
+const sequelize = require('./config/database'); // ajuste se o caminho for diferente
+
+// === MIDDLEWARES ===
 app.use(helmet());
 app.use(morgan('combined'));
 
-// CORS configuration
 app.use(cors({
   origin: (origin, callback) => {
-    // Em desenvolvimento, libera todas as origens para facilitar testes em rede local
     if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
 
     const prodOrigins = ['https://seudominio.com'];
-
-    // Permitir chamadas sem origin (ex: curl, Postman) e domínios do Lovable Preview
     const isLovablePreview = origin && /\.lovable\.app$/.test(origin);
-    if (!origin || (origin && prodOrigins.includes(origin)) || isLovablePreview) {
+
+    if (!origin || prodOrigins.includes(origin) || isLovablePreview) {
       return callback(null, true);
     }
+
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -33,14 +35,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization']
 }));
 
-// Middleware para parsing de JSON
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Servir arquivos estáticos (uploads)
+// === ARQUIVOS ESTÁTICOS ===
 app.use('/uploads', express.static('uploads'));
 
-// Importar rotas
+// === ROTAS ===
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const permissionRoutes = require('./routes/permissions');
@@ -54,7 +55,6 @@ const jobVacanciesRoutes = require('./routes/jobVacancies');
 const jobCandidatesRoutes = require('./routes/jobCandidates');
 const profissionaisRoutes = require('./routes/profissionais');
 
-// Usar rotas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/permissions', permissionRoutes);
@@ -68,7 +68,7 @@ app.use('/api/job-vacancies', jobVacanciesRoutes);
 app.use('/api/job-candidates', jobCandidatesRoutes);
 app.use('/api/profissionais', profissionaisRoutes);
 
-// Rota de teste
+// === HEALTH CHECK ===
 app.get('/api/health', (req, res) => {
   res.json({
     message: 'API Instituto Lauir funcionando!',
@@ -77,7 +77,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Middleware de tratamento de erros
+// === ERROS ===
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
@@ -86,14 +86,24 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Middleware para rotas não encontradas
 app.use('*', (req, res) => {
   res.status(404).json({ message: 'Rota não encontrada' });
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  console.log(`📊 Ambiente: ${process.env.NODE_ENV}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
-});
+// === BOOTSTRAP (BANCO → SERVIDOR) ===
+(async () => {
+  try {
+    await sequelize.authenticate();
+    console.log('✅ PostgreSQL conectado com sucesso.');
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor rodando na porta ${PORT}`);
+      console.log(`📊 Ambiente: ${process.env.NODE_ENV}`);
+      console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+    });
+
+  } catch (err) {
+    console.error('❌ Falha ao conectar no PostgreSQL:', err.message);
+    process.exit(1);
+  }
+})();
