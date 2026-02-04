@@ -3,27 +3,37 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const sequelize = require('../config/database');
 
-// Protege a rota
+// Protege a rota (JWT obrigatório)
 router.use(authMiddleware);
 
-// LISTAR PACIENTES (REAL)
+// LISTAR PACIENTES (RAILWAY / POSTGRES REAL)
 router.get('/', async (req, res) => {
   try {
     const [pacientes] = await sequelize.query(`
-      SELECT id, nome, cpf, telefone, email, data_nascimento AS "dataNascimento", status
-      FROM pacientes
-      ORDER BY id DESC
+      SELECT
+        id,
+        name AS "nome",
+        cpf,
+        phone AS "telefone",
+        email,
+        date_of_birth AS "dataNascimento",
+        status
+      FROM patients
+      ORDER BY created_at DESC
       LIMIT 100
     `);
 
     res.json({
-      message: 'Lista de pacientes',
+      success: true,
       total: pacientes.length,
       pacientes
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao listar pacientes' });
+    console.error('Erro ao listar pacientes:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao listar pacientes'
+    });
   }
 });
 
