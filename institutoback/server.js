@@ -14,31 +14,37 @@ const sequelize = require('./config/database'); // ajuste se o caminho for difer
 // === MIDDLEWARES ===
 app.use(helmet());
 app.use(morgan('combined'));
-
 app.use(cors({
   origin: (origin, callback) => {
+    // Em dev, libera tudo
     if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
 
-const prodOrigins = [
-  'http://localhost:4173',
-  'http://127.0.0.1:4173',
-  'https://friendly-insight-production.up.railway.app'
-];
+    const prodOrigins = [
+      'http://localhost:4173',
+      'http://127.0.0.1:4173',
+      'https://friendly-insight-production.up.railway.app',
+      'https://home-production-7dda.up.railway.app'
+    ];
+
     const isLovablePreview = origin && /\.lovable\.app$/.test(origin);
 
+    // Libera chamadas sem Origin (curl/healthcheck) + whitelisted + previews
     if (!origin || prodOrigins.includes(origin) || isLovablePreview) {
       return callback(null, true);
     }
 
-    return callback(new Error('Not allowed by CORS'));
+    // Nega CORS sem explodir (evita 500)
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization']
 }));
 
+// ✅ ESSA LINHA RESOLVE O PRE-FLIGHT
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
