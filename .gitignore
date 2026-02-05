@@ -32,3 +32,10 @@ dist/
 build/
 *.log
 coverage/
+
+# backups/exports locais
+backup/
+*.dump
+*.backup
+bfg-*.jar
+

@@ -32,9 +32,9 @@ export function UserManagement() {
   const [isResetting, setIsResetting] = useState(false);
   const { toast } = useToast();
 
-  // Base URL do backend (defina VITE_API_URL no .env do front se quiser)
+// Base URL do backend (defina VITE_API_BASE_URL no .env do front se quiser)
   const API_BASE = useMemo(() => {
-    const envBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+    const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
     const fallback = "http://localhost:3000";
 
     let base = envBase && envBase.length > 0 ? envBase : fallback;

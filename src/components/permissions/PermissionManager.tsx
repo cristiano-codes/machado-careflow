@@ -65,7 +65,7 @@ export function PermissionManager() {
   const { toast } = useToast();
 
   const API_BASE = useMemo(() => {
-    const envBase = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+    const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
     const fallback = 'http://localhost:3000';
 
     let base = envBase && envBase.length > 0 ? envBase : fallback;
