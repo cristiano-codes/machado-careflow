@@ -21,7 +21,11 @@ app.use(cors({
       return callback(null, true);
     }
 
-    const prodOrigins = ['https://seudominio.com'];
+const prodOrigins = [
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+  'https://friendly-insight-production.up.railway.app'
+];
     const isLovablePreview = origin && /\.lovable\.app$/.test(origin);
 
     if (!origin || prodOrigins.includes(origin) || isLovablePreview) {
