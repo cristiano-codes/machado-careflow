@@ -1,136 +1,184 @@
-🧾 README.md — versão revisada e atualizada
-# 🧠 Machado CareFlow
+﻿# Machado CareFlow
 
-Sistema de gestão clínica desenvolvido para o **Instituto Lauir Machado**, com foco em **atendimento psicológico, agendamento e gestão de pacientes**.  
-O projeto integra módulos administrativos, clínicos e financeiros em uma plataforma única.
+Sistema de gestao clinica do Instituto Lauir Machado.
 
----
+Atualizado em 2026-02-06.
 
-## 🚀 Visão Geral
+## Estado atual
 
-O **Machado CareFlow** tem como objetivo centralizar as operações de uma clínica em um só sistema, permitindo:
+- Frontend: React 18 + Vite 5 + TypeScript + Tailwind + shadcn/ui.
+- Backend: Node.js + Express + Sequelize (PostgreSQL).
+- Autenticacao: JWT + bcryptjs.
+- Deploy atual: `deploy.ps1` -> GitHub (`main`) -> Railway build/run.
 
-- 📅 **Agendamentos e Pré-Atendimentos**  
-  Controle de consultas, entrevistas iniciais e fila de espera.
+## Estrutura real do repositorio
 
-- 👩‍⚕️ **Gestão de Profissionais**  
-  Cadastro de psicólogos, agendas individuais e controle de atendimentos.
-
-- 👨‍💻 **Área Administrativa**  
-  Controle de usuários, permissões e gestão financeira.
-
-- 💾 **Banco de Dados Local (PostgreSQL)**  
-  Todos os dados são armazenados localmente, garantindo performance e segurança sem dependência de serviços externos.
-
----
-
-## 🧩 Estrutura do Projeto
-
-
-
+```text
 machado-careflow/
-│
-├── institutoback/ # Backend (API Node.js + PostgreSQL)
-│ ├── src/
-│ │ ├── routes/ # Rotas da API
-│ │ ├── controllers/ # Regras de negócio
-│ │ ├── services/ # Serviços e integrações
-│ │ └── db.ts # Conexão com PostgreSQL
-│ └── package.json
-│
-├── src/ # Frontend (React + Vite + TypeScript)
-│ ├── pages/ # Páginas e componentes principais
-│ ├── components/ # Componentes reutilizáveis
-│ ├── hooks/ # Hooks personalizados
-│ └── main.tsx
-│
-├── public/ # Assets estáticos
-├── .env.example # Variáveis de ambiente (exemplo)
-├── package.json # Dependências do frontend
-├── vite.config.ts # Configuração Vite
-└── README.md
+|-- src/                     # Frontend React
+|   |-- components/
+|   |-- contexts/
+|   |-- hooks/
+|   |-- pages/
+|   `-- services/
+|-- public/
+|-- institutoback/           # Backend Express
+|   |-- config/
+|   |-- middleware/
+|   |-- routes/
+|   |-- uploads/
+|   |-- .env.example
+|   `-- server.js
+|-- deploy.ps1               # Commit + push para deploy
+|-- package.json             # Scripts do frontend
+`-- README.md
+```
 
+## Modulos principais no frontend
 
----
+Paginas em `src/pages`:
 
-## ⚙️ Tecnologias Utilizadas
+- `Index`
+- `Dashboard`
+- `Profile`
+- `PreAgendamento`
+- `PreCadastro`
+- `Agenda`
+- `Entrevistas`
+- `Avaliacoes`
+- `AnaliseVagas`
+- `Profissionais`
+- `NovoProfissional`
+- `GerenciarUsuarios`
+- `PermissionManager`
+- `Configuracoes`
 
-| Camada | Tecnologias |
-|:-------|:-------------|
-| **Frontend** | React, TypeScript, Vite, TailwindCSS, ShadCN/UI |
-| **Backend** | Node.js, Express, TypeScript |
-| **Banco de Dados** | PostgreSQL local |
-| **Autenticação** | JWT + bcrypt |
-| **Outros** | ESLint, Prettier, Git, GitHub |
+## Requisitos
 
----
+- Node.js 18+
+- npm 9+
+- PostgreSQL 14+ (ou `DATABASE_URL`)
 
-## 💻 Instalação e Configuração
+## Como rodar localmente
 
-### 1️⃣ Clonar o Repositório
-```bash
-git clone https://github.com/cristiano-codes/machado-careflow.git
-cd machado-careflow
+### 1) Backend
 
-2️⃣ Configurar o Backend
-cd institutoback
+```powershell
+cd C:\projeto\machado-careflow\institutoback
 npm install
-cp .env.example .env
-# edite o arquivo .env com as suas credenciais locais do PostgreSQL
+Copy-Item .env.example .env
 npm run dev
+```
 
-3️⃣ Configurar o Frontend
-cd ../
+### 2) Frontend
+
+Em outro terminal:
+
+```powershell
+cd C:\projeto\machado-careflow
 npm install
 npm run dev
+```
 
-🧱 Estrutura do Banco de Dados
+- Frontend local: `http://localhost:5000`
+- API health check: `http://localhost:3000/api/health`
 
-Principais tabelas:
+## Variaveis de ambiente
 
-patients — cadastro de pacientes
+### Backend (`institutoback/.env`)
 
-professionals — psicólogos e colaboradores
+Minimo recomendado:
 
-appointments — agendamentos e atendimentos
-
-users — autenticação e permissões
-
-transactions — controle financeiro
-
-🔐 Variáveis de Ambiente (.env.example)
-PGHOST=localhost
-PGPORT=5432
-PGUSER=postgres
-PGPASSWORD=sua_senha
-PGDATABASE=machado_careflow
-JWT_SECRET=chave_super_secreta
+```env
+PORT=3000
 NODE_ENV=development
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=instituto_lauir
+DB_USER=postgres
+DB_PASS=sua_senha
+JWT_SECRET=troque_esta_chave
+```
 
-🧠 Roadmap
+Opcional para deploy:
 
- Configuração do ambiente React + Vite
+```env
+DATABASE_URL=postgres://usuario:senha@host:5432/banco
+```
 
- API Node.js com Express
+### Frontend
 
- Conexão com PostgreSQL local
+Opcional:
 
- Autenticação com JWT
+```env
+VITE_API_BASE_URL=/api
+```
 
- Painel Administrativo completo
+Observacao:
 
- Dashboard de relatórios em Power BI
+- O Vite ja tem proxy `"/api" -> "http://localhost:3000"` em `vite.config.ts`.
+- Sem `VITE_API_BASE_URL`, o `apiService` usa fallback para `http://<host>:3000/api`.
 
- Integração com módulo financeiro
+## Scripts
 
-🧑‍💻 Autor
+### Frontend (raiz)
 
-Cristiano Oliveira (Chat Salvador)
-📊 Analista de Dados & Desenvolvedor Full Stack
-📍 Rio de Janeiro, Brasil
-🔗 linkedin.com/in/cristiano-oliveira
+```powershell
+npm run dev
+npm run build
+npm run build:dev
+npm run lint
+npm run preview
+```
 
-📄 Licença
+### Backend (`institutoback`)
 
-Este projeto é de uso educacional e institucional.
-© 2025 - Instituto Lauir Machado.
+```powershell
+npm run dev
+npm start
+```
+
+## Fluxo de deploy atual
+
+Script recomendado:
+
+```powershell
+cd C:\projeto\machado-careflow
+.\deploy.ps1
+```
+
+O script faz:
+
+1. `git add --all`
+2. commit com timestamp quando ha mudancas
+3. commit vazio `chore: redeploy railway` quando nao ha mudancas
+4. `git push origin main`
+
+Depois disso, o Railway executa build e run.
+
+## Endpoints registrados no backend
+
+Prefixo: `/api`
+
+- `/auth`
+- `/users`
+- `/permissions`
+- `/pacientes`
+- `/settings`
+- `/stats`
+- `/activities`
+- `/services`
+- `/pre-appointments`
+- `/job-vacancies`
+- `/job-candidates`
+- `/profissionais`
+- `/health`
+
+## Observacoes tecnicas
+
+- O projeto ainda tem `old/` e arquivos locais auxiliares (`schema.sql`, `sistema.dump`, etc.).
+- Se quiser lint focado no codigo ativo, prefira: `npx eslint src tailwind.config.ts`.
+
+## Licenca
+
+Uso educacional e institucional.
