@@ -1,14 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'sistema',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASS || '110336'
-});
+const pool = require('../config/pg');
 
 // GET - Buscar vagas de emprego
 router.get('/', async (req, res) => {
