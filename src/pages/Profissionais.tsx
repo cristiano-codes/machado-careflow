@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
 import { apiService } from "@/services/api";
+import { getServiceLabel } from "@/utils/serviceLabels";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -475,7 +476,9 @@ export default function Profissionais() {
                             <Badge variant="secondary">{slot.appointment_time?.slice(0, 5)}</Badge>
                             <div>
                               <p className="font-medium leading-tight">{slot.patient_name}</p>
-                              <p className="text-xs text-muted-foreground">{slot.service_name || "Serviço"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {slot.service_name ? getServiceLabel(slot.service_name) : "Serviço"}
+                              </p>
                             </div>
                           </div>
                         ))}

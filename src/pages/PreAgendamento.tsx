@@ -8,7 +8,22 @@ import { Calendar, MessageSquare, Clock, User } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { apiService } from "@/services/api";
+import { API_BASE_URL } from "@/services/api";
+import { getServiceLabel } from "@/utils/serviceLabels";
+
+type Service = {
+  id: number | string;
+  name: string;
+  description: string | null;
+  duration: number;
+  price: number;
+  active: boolean;
+};
+
+type ServicesResponse = {
+  success?: boolean;
+  services?: Service[];
+};
 
 export default function PreAgendamento() {
   const [formData, setFormData] = useState({
@@ -20,7 +35,7 @@ export default function PreAgendamento() {
     horario_preferencia: '',
     observacoes: ''
   });
-  const [services, setServices] = useState<any[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -30,10 +45,10 @@ export default function PreAgendamento() {
 
   const loadServices = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/services');
-      const data = await response.json();
+      const response = await fetch(`${API_BASE_URL}/services`);
+      const data = (await response.json()) as ServicesResponse;
       
-      if (data.success) {
+      if (data.success && Array.isArray(data.services)) {
         setServices(data.services);
       }
     } catch (error) {
@@ -46,7 +61,7 @@ export default function PreAgendamento() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/pre-appointments', {
+      const response = await fetch(`${API_BASE_URL}/pre-appointments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -156,8 +171,15 @@ export default function PreAgendamento() {
                     </SelectTrigger>
                     <SelectContent>
                       {services.map((service) => (
-                        <SelectItem key={service.id} value={service.name}>
-                          {service.name}
+                        <SelectItem key={service.id} value={service.name} className="py-2">
+                          <div className="flex flex-col">
+                            <span>{getServiceLabel(service.name)}</span>
+                            {service.description && (
+                              <span className="text-xs text-muted-foreground">
+                                {service.description}
+                              </span>
+                            )}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
