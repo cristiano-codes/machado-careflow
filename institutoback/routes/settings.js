@@ -1,14 +1,15 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const { randomUUID } = require('crypto');
 const pool = require('../config/pg');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const DEFAULT_SETTINGS = {
-  instituicao_nome: "Instituto Lauir Machado",
-  instituicao_email: "contato@institutolauir.com.br",
-  instituicao_telefone: "(11) 3456-7890",
-  instituicao_endereco: "Rua das Flores, 123 - Sao Paulo, SP",
+  instituicao_nome: 'Instituto Lauir Machado',
+  instituicao_email: 'contato@institutolauir.com.br',
+  instituicao_telefone: '(11) 3456-7890',
+  instituicao_endereco: 'Rua das Flores, 123 - Sao Paulo, SP',
   email_notifications: true,
   sms_notifications: false,
   push_notifications: true,
@@ -17,11 +18,18 @@ const DEFAULT_SETTINGS = {
   password_expiry_days: 90,
   max_login_attempts: 3,
   session_timeout: 60,
-  backup_frequency: "daily",
+  backup_frequency: 'daily',
   data_retention_days: 365,
   auto_updates: true,
   debug_mode: false,
 };
+
+const SETTINGS_EDITABLE_FIELDS = [
+  'instituicao_nome',
+  'instituicao_email',
+  'instituicao_telefone',
+  'instituicao_endereco',
+];
 
 // --- helper: extrai userId do token Bearer ---
 function getUserIdFromReq(req) {
@@ -30,172 +38,157 @@ function getUserIdFromReq(req) {
     const [, token] = auth.split(' ');
     if (!token) return null;
     const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded?.id || null; // no seu JWT, id e UUID do users.id
+    return decoded?.id || null;
   } catch {
     return null;
   }
 }
 
+async function selectSingletonSettings() {
+  const { rows } = await pool.query('SELECT * FROM system_settings LIMIT 1');
+  return rows[0] || null;
+}
+
+async function createSingletonSettings(seed = {}) {
+  const values = [
+    seed.instituicao_nome ?? DEFAULT_SETTINGS.instituicao_nome,
+    seed.instituicao_email ?? DEFAULT_SETTINGS.instituicao_email,
+    seed.instituicao_telefone ?? DEFAULT_SETTINGS.instituicao_telefone,
+    seed.instituicao_endereco ?? DEFAULT_SETTINGS.instituicao_endereco,
+  ];
+
+  try {
+    const { rows } = await pool.query(
+      `
+        INSERT INTO system_settings (
+          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco
+        ) VALUES (
+          gen_random_uuid(), $1, $2, $3, $4
+        )
+        RETURNING *
+      `,
+      values
+    );
+
+    return rows[0];
+  } catch (error) {
+    // 42883 = undefined_function (gen_random_uuid indisponivel)
+    if (error?.code !== '42883') throw error;
+
+    const fallbackValues = [randomUUID(), ...values];
+    const { rows } = await pool.query(
+      `
+        INSERT INTO system_settings (
+          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco
+        ) VALUES (
+          $1, $2, $3, $4, $5
+        )
+        RETURNING *
+      `,
+      fallbackValues
+    );
+
+    return rows[0];
+  }
+}
+
+async function ensureSingletonSettings(seed = {}) {
+  const existing = await selectSingletonSettings();
+  if (existing) return existing;
+
+  try {
+    return await createSingletonSettings(seed);
+  } catch (error) {
+    // 23505 = unique_violation (corrida entre requests)
+    if (error?.code === '23505') {
+      const row = await selectSingletonSettings();
+      if (row) return row;
+    }
+
+    throw error;
+  }
+}
+
+function normalizePayload(body) {
+  if (!body || typeof body !== 'object') return {};
+
+  const normalized = {};
+  for (const field of SETTINGS_EDITABLE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      normalized[field] = body[field];
+    }
+  }
+
+  return normalized;
+}
+
+function successResponse(res, data) {
+  return res.json({
+    success: true,
+    data,
+    settings: data,
+  });
+}
+
 // GET - Buscar configuracoes
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM system_settings LIMIT 1');
-    const row = result?.rows?.[0];
-
-    if (!row) {
-      return res.json({ success: true, settings: DEFAULT_SETTINGS });
-    }
-
-    return res.json({ success: true, settings: row });
-  } catch (err) {
-    // 42P01 = undefined_table (tabela nao existe)
-    if (err && err.code === '42P01') {
-      console.warn('[settings] system_settings nao existe. Retornando defaults.');
-      return res.json({ success: true, settings: DEFAULT_SETTINGS });
-    }
-
-    console.error('[settings] erro inesperado ao buscar configuracoes:', {
-      code: err?.code,
-      message: err?.message,
+    const row = await ensureSingletonSettings();
+    return successResponse(res, row);
+  } catch (error) {
+    console.error('[settings][GET] erro ao buscar configuracoes:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
     });
 
     return res.status(500).json({ success: false, message: 'Erro interno do servidor' });
   }
 });
 
-// POST - Salvar configuracoes (requer token; grava updated_by)
-router.post('/', async (req, res) => {
+async function saveSettingsHandler(req, res) {
   try {
     const userId = getUserIdFromReq(req);
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Token ausente ou invalido' });
     }
 
-    const p = req.body;
+    const payload = normalizePayload(req.body);
+    const singleton = await ensureSingletonSettings(payload);
 
-    // (opcional) normalizacao de tipos simples
-    const toBool = (v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : !!v);
-    const toInt = (v, def = null) => {
-      const n = parseInt(v, 10);
-      return Number.isFinite(n) ? n : def;
-    };
-
-    const settings = {
-      instituicao_nome:      p.instituicao_nome ?? null,
-      instituicao_email:     p.instituicao_email ?? null,
-      instituicao_telefone:  p.instituicao_telefone ?? null,
-      instituicao_endereco:  p.instituicao_endereco ?? null,
-
-      email_notifications:   toBool(p.email_notifications),
-      sms_notifications:     toBool(p.sms_notifications),
-      push_notifications:    toBool(p.push_notifications),
-      weekly_reports:        toBool(p.weekly_reports),
-      two_factor_auth:       toBool(p.two_factor_auth),
-
-      password_expiry_days:  toInt(p.password_expiry_days, 90),
-      max_login_attempts:    toInt(p.max_login_attempts, 3),
-      session_timeout:       toInt(p.session_timeout, 60),
-
-      backup_frequency:      p.backup_frequency ?? 'daily',
-      data_retention_days:   toInt(p.data_retention_days, 365),
-      auto_updates:          toBool(p.auto_updates),
-      debug_mode:            toBool(p.debug_mode),
-    };
-
-    // Verificar se ja existe configuracao
-    const existing = await pool.query('SELECT id FROM system_settings LIMIT 1');
-
-    if (existing.rows.length > 0) {
-      // Atualizar existente (inclui updated_by)
-      await pool.query(`
-        UPDATE system_settings SET
-          instituicao_nome = $1,
-          instituicao_email = $2,
-          instituicao_telefone = $3,
-          instituicao_endereco = $4,
-          email_notifications = $5,
-          sms_notifications = $6,
-          push_notifications = $7,
-          weekly_reports = $8,
-          two_factor_auth = $9,
-          password_expiry_days = $10,
-          max_login_attempts = $11,
-          session_timeout = $12,
-          backup_frequency = $13,
-          data_retention_days = $14,
-          auto_updates = $15,
-          debug_mode = $16,
-          updated_by = $17,
-          updated_at = NOW()
-        WHERE id = $18
-      `, [
-        settings.instituicao_nome,
-        settings.instituicao_email,
-        settings.instituicao_telefone,
-        settings.instituicao_endereco,
-        settings.email_notifications,
-        settings.sms_notifications,
-        settings.push_notifications,
-        settings.weekly_reports,
-        settings.two_factor_auth,
-        settings.password_expiry_days,
-        settings.max_login_attempts,
-        settings.session_timeout,
-        settings.backup_frequency,
-        settings.data_retention_days,
-        settings.auto_updates,
-        settings.debug_mode,
-        userId,
-        existing.rows[0].id
-      ]);
-    } else {
-      // Inserir novo (inclui updated_by)
-      await pool.query(`
-        INSERT INTO system_settings (
-          instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco,
-          email_notifications, sms_notifications, push_notifications, weekly_reports,
-          two_factor_auth, password_expiry_days, max_login_attempts, session_timeout,
-          backup_frequency, data_retention_days, auto_updates, debug_mode, updated_by
-        ) VALUES (
-          $1, $2, $3, $4,
-          $5, $6, $7, $8,
-          $9, $10, $11, $12,
-          $13, $14, $15, $16, $17
-        )
-      `, [
-        settings.instituicao_nome,
-        settings.instituicao_email,
-        settings.instituicao_telefone,
-        settings.instituicao_endereco,
-        settings.email_notifications,
-        settings.sms_notifications,
-        settings.push_notifications,
-        settings.weekly_reports,
-        settings.two_factor_auth,
-        settings.password_expiry_days,
-        settings.max_login_attempts,
-        settings.session_timeout,
-        settings.backup_frequency,
-        settings.data_retention_days,
-        settings.auto_updates,
-        settings.debug_mode,
-        userId
-      ]);
+    const fieldsToUpdate = Object.keys(payload);
+    if (fieldsToUpdate.length === 0) {
+      return successResponse(res, singleton);
     }
 
-    // Retornar registro atualizado (facilita sincronizar o front)
-    const { rows } = await pool.query('SELECT * FROM system_settings LIMIT 1');
+    const setClauses = fieldsToUpdate.map((field, index) => `${field} = $${index + 1}`);
+    const values = fieldsToUpdate.map((field) => payload[field]);
+    values.push(singleton.id);
 
-    res.json({
-      success: true,
-      message: 'Configuracoes salvas com sucesso',
-      settings: rows[0]
+    const { rows } = await pool.query(
+      `
+        UPDATE system_settings
+        SET ${setClauses.join(', ')}, updated_at = NOW()
+        WHERE id = $${fieldsToUpdate.length + 1}
+        RETURNING *
+      `,
+      values
+    );
+
+    return successResponse(res, rows[0]);
+  } catch (error) {
+    console.error('[settings][SAVE] erro ao salvar configuracoes:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
     });
 
-  } catch (error) {
-    console.error('Erro ao salvar configuracoes:', error);
-    res.status(500).json({ success: false, message: 'Erro interno do servidor' });
+    return res.status(500).json({ success: false, message: 'Erro interno do servidor' });
   }
-});
+}
+
+// POST/PUT - Salvar configuracoes (mantem auth atual)
+router.post('/', saveSettingsHandler);
+router.put('/', saveSettingsHandler);
 
 module.exports = router;
