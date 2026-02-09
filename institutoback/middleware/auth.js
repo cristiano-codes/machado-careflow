@@ -3,8 +3,8 @@
 const jwt = require('jsonwebtoken');
 
 /**
- * Middleware de autentica??o do sistema Instituto Machado-CareFlow
- * - Sempre valida JWT; n?o existe mais bypass por vari?vel de ambiente.
+ * Middleware de autenticação do sistema AcolherFlow (IDSLM)
+ * - Sempre valida JWT; não existe mais bypass por variável de ambiente.
  */
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
