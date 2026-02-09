@@ -234,10 +234,13 @@ class ApiService {
 
   // ---------- PACIENTES ----------
   async getPatients() {
-    const response = await fetch(`${API_BASE_URL}/patients`, {
+    const response = await fetch(`${API_BASE_URL}/pacientes`, {
       headers: this.getAuthHeaders(),
     });
-    return response.json();
+    const data = await response.json();
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.pacientes)) return data.pacientes;
+    return [];
   }
 
   // ---------- ENTREVISTAS SOCIAIS ----------

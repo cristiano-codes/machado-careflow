@@ -4,7 +4,7 @@ import { UserManagement } from "@/components/admin/UserManagement";
 import { useState, useEffect } from "react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
-import { apiService } from "@/services/api";
+import { API_BASE_URL } from "@/services/api";
 import { 
   Users, 
   Calendar, 
@@ -94,7 +94,7 @@ export default function Dashboard() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/stats');
+      const response = await fetch(`${API_BASE_URL}/stats`);
       const data = await response.json();
       
       if (data.success) {
@@ -112,7 +112,7 @@ export default function Dashboard() {
 
   const loadRecentActivities = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/activities');
+      const response = await fetch(`${API_BASE_URL}/activities`);
       const data = await response.json();
       
       if (data.success) {
