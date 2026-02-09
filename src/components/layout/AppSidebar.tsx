@@ -66,7 +66,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      className="transition-all duration-300 border-r border-border bg-card"
+      className="pt-16 transition-all duration-300 border-r border-border bg-card"
       collapsible="icon"
     >
       <SidebarContent className="p-0">
