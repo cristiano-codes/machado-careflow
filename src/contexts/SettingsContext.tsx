@@ -64,6 +64,7 @@ function toApiSettingsPayload(settings: Settings): SettingsPayload {
     instituicao_email: settings.instituicao_email,
     instituicao_telefone: settings.instituicao_telefone,
     instituicao_endereco: settings.instituicao_endereco,
+    instituicao_logo_base64: settings.instituicao_logo_base64 ?? null,
     email_notifications: settings.email_notifications,
     sms_notifications: settings.sms_notifications,
     push_notifications: settings.push_notifications,
@@ -125,7 +126,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       // Atualiza o estado local para refletir o que está sendo salvo (opcional, bom para UX)
       setSettings(toSave);
 
-      // TODO(back): incluir campos de logo na API/persistencia e remover este filtro.
       const resp = await apiService.saveSettings(toApiSettingsPayload(toSave));
       if (!resp.success) {
         throw new Error(resp?.message || "Erro ao salvar configurações");

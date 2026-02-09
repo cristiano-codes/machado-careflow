@@ -186,7 +186,12 @@ export default function InstitutionSettingsSection() {
     e?.preventDefault();
     try {
       setSaving(true);
-      await saveSettings(tempSettings);
+      const payloadToSave = {
+        ...tempSettings,
+        instituicao_logo_base64:
+          tempSettings.instituicao_logo_base64 ?? settings.instituicao_logo_base64 ?? null,
+      };
+      await saveSettings(payloadToSave);
       setIsEditingSettings(false);
       clearTemporaryLogoSelection();
       toast({

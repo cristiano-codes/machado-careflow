@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   instituicao_email: 'contato@institutolauir.com.br',
   instituicao_telefone: '(11) 3456-7890',
   instituicao_endereco: 'Rua das Flores, 123 - Sao Paulo, SP',
+  instituicao_logo_base64: null,
   email_notifications: true,
   sms_notifications: false,
   push_notifications: true,
@@ -24,11 +25,15 @@ const DEFAULT_SETTINGS = {
   debug_mode: false,
 };
 
+const LOGO_DATA_URL_PREFIX = 'data:image/png;base64,';
+const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
+
 const SETTINGS_EDITABLE_FIELDS = [
   'instituicao_nome',
   'instituicao_email',
   'instituicao_telefone',
   'instituicao_endereco',
+  'instituicao_logo_base64',
 ];
 
 // --- helper: extrai userId do token Bearer ---
@@ -55,15 +60,16 @@ async function createSingletonSettings(seed = {}) {
     seed.instituicao_email ?? DEFAULT_SETTINGS.instituicao_email,
     seed.instituicao_telefone ?? DEFAULT_SETTINGS.instituicao_telefone,
     seed.instituicao_endereco ?? DEFAULT_SETTINGS.instituicao_endereco,
+    seed.instituicao_logo_base64 ?? DEFAULT_SETTINGS.instituicao_logo_base64,
   ];
 
   try {
     const { rows } = await pool.query(
       `
         INSERT INTO system_settings (
-          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco
+          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco, instituicao_logo_base64
         ) VALUES (
-          gen_random_uuid(), $1, $2, $3, $4
+          gen_random_uuid(), $1, $2, $3, $4, $5
         )
         RETURNING *
       `,
@@ -79,9 +85,9 @@ async function createSingletonSettings(seed = {}) {
     const { rows } = await pool.query(
       `
         INSERT INTO system_settings (
-          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco
+          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco, instituicao_logo_base64
         ) VALUES (
-          $1, $2, $3, $4, $5
+          $1, $2, $3, $4, $5, $6
         )
         RETURNING *
       `,
@@ -115,11 +121,52 @@ function normalizePayload(body) {
   const normalized = {};
   for (const field of SETTINGS_EDITABLE_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(body, field)) {
-      normalized[field] = body[field];
+      if (field === 'instituicao_logo_base64' && body[field] === '') {
+        normalized[field] = null;
+      } else {
+        normalized[field] = body[field];
+      }
     }
   }
 
   return normalized;
+}
+
+function estimateBase64Bytes(base64) {
+  const trimmed = base64.trim();
+  const padding = trimmed.endsWith('==') ? 2 : trimmed.endsWith('=') ? 1 : 0;
+  return Math.floor((trimmed.length * 3) / 4) - padding;
+}
+
+function validateInstitutionLogoDataUrl(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    return 'Campo instituicao_logo_base64 deve ser uma string data URL PNG ou null.';
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue.startsWith(LOGO_DATA_URL_PREFIX)) {
+    return 'Logo invalida: envie no formato data:image/png;base64,...';
+  }
+
+  const base64Payload = trimmedValue.slice(LOGO_DATA_URL_PREFIX.length);
+  if (!base64Payload) {
+    return 'Logo invalida: conteudo base64 ausente.';
+  }
+
+  if (base64Payload.length % 4 !== 0 || !/^[A-Za-z0-9+/]+=*$/.test(base64Payload)) {
+    return 'Logo invalida: conteudo base64 malformado.';
+  }
+
+  const logoBytes = estimateBase64Bytes(base64Payload);
+  if (logoBytes > MAX_LOGO_BYTES) {
+    return 'Logo excede o limite de 1.5MB.';
+  }
+
+  return null;
 }
 
 function successResponse(res, data) {
@@ -154,6 +201,13 @@ async function saveSettingsHandler(req, res) {
     }
 
     const payload = normalizePayload(req.body);
+    if (Object.prototype.hasOwnProperty.call(payload, 'instituicao_logo_base64')) {
+      const logoValidationError = validateInstitutionLogoDataUrl(payload.instituicao_logo_base64);
+      if (logoValidationError) {
+        return res.status(400).json({ success: false, message: logoValidationError });
+      }
+    }
+
     const singleton = await ensureSingletonSettings(payload);
 
     const fieldsToUpdate = Object.keys(payload);
@@ -162,6 +216,10 @@ async function saveSettingsHandler(req, res) {
     }
 
     const setClauses = fieldsToUpdate.map((field, index) => `${field} = $${index + 1}`);
+    if (fieldsToUpdate.includes('instituicao_logo_base64')) {
+      setClauses.push('instituicao_logo_updated_at = NOW()');
+    }
+
     const values = fieldsToUpdate.map((field) => payload[field]);
     values.push(singleton.id);
 

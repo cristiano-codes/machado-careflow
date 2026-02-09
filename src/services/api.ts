@@ -60,6 +60,7 @@ export type SettingsPayload = {
   instituicao_email: string;
   instituicao_telefone: string;
   instituicao_endereco: string;
+  instituicao_logo_base64?: string | null;
   email_notifications: boolean;
   sms_notifications: boolean;
   push_notifications: boolean;
