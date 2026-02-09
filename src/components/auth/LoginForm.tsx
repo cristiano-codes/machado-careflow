@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Eye, EyeOff, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/contexts/SettingsContext";
+import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
 
 interface LoginFormProps {
   onLogin: (credentials: { email: string; password: string }) => Promise<void>;
@@ -19,6 +20,10 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const { settings } = useSettings();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,16 +47,11 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 px-4 py-6">
       <Card className="w-full max-w-md shadow-lg border-0" style={{ boxShadow: 'var(--shadow-medium)' }}>
         <CardHeader className="space-y-4 text-center pb-6">
           <div className="flex justify-center">
-            <img
-              src="/logo.svg"
-              alt="Instituto Lauir Machado"
-              className="h-16 w-auto drop-shadow-sm"
-              loading="lazy"
-            />
+            <InstitutionLogo size={64} className="justify-center" />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-foreground">

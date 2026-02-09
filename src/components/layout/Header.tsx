@@ -12,18 +12,7 @@ import {
 import { LogOut, User, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
-
-function getInstitutionInitials(name: string): string {
-  const cleaned = name.trim();
-  if (!cleaned) return "IN";
-
-  return cleaned
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
-    .slice(0, 2);
-}
+import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
 
 interface HeaderProps {
   user?: {
@@ -38,8 +27,6 @@ interface HeaderProps {
 export function Header({ user, onLogout }: HeaderProps) {
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const institutionLogoSrc =
-    settings.instituicao_logo_base64 ?? settings.instituicao_logo_url ?? null;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-border bg-card backdrop-blur supports-[backdrop-filter]:bg-card/95">
@@ -47,20 +34,7 @@ export function Header({ user, onLogout }: HeaderProps) {
         <div className="flex items-center gap-4">
           <SidebarTrigger className="h-8 w-8" />
           <div className="flex items-center gap-3">
-            <div className="hidden h-8 w-8 items-center justify-center overflow-hidden rounded-md border bg-muted sm:flex">
-              {institutionLogoSrc ? (
-                <img
-                  src={institutionLogoSrc}
-                  alt={`Logo ${settings.instituicao_nome}`}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <span className="text-xs font-semibold text-muted-foreground">
-                  {getInstitutionInitials(settings.instituicao_nome)}
-                </span>
-              )}
-            </div>
+            <InstitutionLogo size={32} className="hidden sm:inline-flex" />
             <div className="hidden md:block">
               <h1 className="text-lg font-semibold text-foreground">
                 Sistema de Gestao - {settings.instituicao_nome}

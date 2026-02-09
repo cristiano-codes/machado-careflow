@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Calendar,
@@ -10,7 +9,6 @@ import {
   FileText,
   DollarSign,
   Settings,
-  Home,
   Building,
   UserCheck,
   BookOpen,
@@ -26,10 +24,10 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSettings } from "@/contexts/SettingsContext";
+import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
 
 const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: BarChart3 },
@@ -75,9 +73,7 @@ export function AppSidebar() {
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center">
-              <Building className="w-5 h-5 text-white" />
-            </div>
+            <InstitutionLogo size={32} className="shrink-0" />
             {!isCollapsed && (
               <div>
                 <h2 className="font-semibold text-sm text-foreground">{settings.instituicao_nome}</h2>

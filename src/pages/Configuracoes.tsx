@@ -37,7 +37,7 @@ export default function Configuracoes() {
   // Bloqueio (exceto se bypass ativo)
   if (!canAccess) {
     return (
-      <div className="relative z-0 mx-auto min-h-[calc(100vh-64px)] max-w-7xl space-y-3 pb-2">
+      <div className="relative z-0 mx-auto max-w-7xl space-y-3 pb-2">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
             Configuracoes do Sistema
@@ -64,7 +64,7 @@ export default function Configuracoes() {
 
   // Pagina principal de configuracoes
   return (
-    <div className="relative z-0 mx-auto min-h-[calc(100vh-64px)] max-w-7xl space-y-3 pb-2">
+    <div className="relative z-0 mx-auto max-w-7xl space-y-3 pb-2">
       <div>
         <h1 className="text-xl font-bold tracking-tight">
           Configuracoes do Sistema

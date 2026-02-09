@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserPlus, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { InstitutionLogo } from '@/components/branding/InstitutionLogo';
 
 interface RegisterFormProps {
   onSuccess: () => void;
@@ -89,12 +90,7 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img
-              src="/logo.svg"
-              alt="Instituto Lauir Machado"
-              className="h-14 w-auto"
-              loading="lazy"
-            />
+            <InstitutionLogo size={56} className="justify-center" />
           </div>
           <CardTitle className="text-2xl font-bold text-foreground">
             Cadastrar Nova Conta
