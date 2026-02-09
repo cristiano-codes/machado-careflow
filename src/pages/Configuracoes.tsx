@@ -32,7 +32,7 @@ export default function Configuracoes() {
   // Bloqueio (exceto se bypass ativo)
   if (!canAccess) {
     return (
-      <div className="relative z-0 mx-auto max-w-7xl space-y-3 pb-2">
+      <div className="relative z-0 mx-auto max-w-7xl space-y-2 pb-1">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
             Configuracoes do Sistema
@@ -59,7 +59,7 @@ export default function Configuracoes() {
 
   // Pagina principal de configuracoes
   return (
-    <div className="relative z-0 mx-auto max-w-7xl space-y-3 pb-2">
+    <div className="relative z-0 mx-auto max-w-7xl space-y-2 pb-1">
       <div>
         <h1 className="text-xl font-bold tracking-tight">
           Configuracoes do Sistema
@@ -69,45 +69,48 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <Accordion type="single" collapsible className="space-y-3">
+      <Accordion type="single" collapsible className="space-y-2">
         <AccordionItem
           value="instituicao"
-          className="rounded-lg border bg-card px-2"
+          className="rounded-lg border bg-card px-1.5"
         >
-          <AccordionTrigger className="py-2 hover:no-underline">
+          <AccordionTrigger className="py-1.5 hover:no-underline">
             <span className="flex items-center gap-2 text-sm font-medium">
               <Building2 className="h-4 w-4" />
               Instituicao
             </span>
           </AccordionTrigger>
-          <AccordionContent className="pb-2">
+          <AccordionContent className="pb-1">
             <InstitutionSettingsSection />
           </AccordionContent>
         </AccordionItem>
 
         <AccordionItem
           value="operacional"
-          className="rounded-lg border bg-card px-2"
+          className="rounded-lg border bg-card px-1.5"
         >
-          <AccordionTrigger className="py-2 hover:no-underline">
+          <AccordionTrigger className="py-1.5 hover:no-underline">
             <span className="flex items-center gap-2 text-sm font-medium">
               <Wrench className="h-4 w-4" />
               Operacional
             </span>
           </AccordionTrigger>
-          <AccordionContent className="pb-2">
+          <AccordionContent className="pb-1">
             <OperationalSettingsSection />
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="sistema" className="rounded-lg border bg-card px-2">
-          <AccordionTrigger className="py-2 hover:no-underline">
+        <AccordionItem
+          value="sistema"
+          className="rounded-lg border bg-card px-1.5"
+        >
+          <AccordionTrigger className="py-1.5 hover:no-underline">
             <span className="flex items-center gap-2 text-sm font-medium">
               <Cog className="h-4 w-4" />
               Sistema
             </span>
           </AccordionTrigger>
-          <AccordionContent className="pb-2">
+          <AccordionContent className="pb-1">
             <SystemSettingsSection />
           </AccordionContent>
         </AccordionItem>
