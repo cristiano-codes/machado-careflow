@@ -75,6 +75,13 @@ export type SettingsPayload = {
   debug_mode: boolean;
 };
 
+type SettingsResponse = {
+  success: boolean;
+  settings?: SettingsPayload;
+  data?: SettingsPayload;
+  message?: string;
+};
+
 class ApiService {
   private getAuthHeaders() {
     const token = localStorage.getItem("token");
@@ -157,7 +164,7 @@ class ApiService {
   /**
    * Busca as configurações atuais
    */
-  async getSettings(): Promise<{ success: boolean; settings: SettingsPayload }> {
+  async getSettings(): Promise<SettingsResponse> {
     const r = await fetch(`${API_BASE_URL}/settings`, {
       headers: this.getAuthHeaders(),
     });
@@ -171,11 +178,7 @@ class ApiService {
    * Salva as configurações no backend (usa exatamente as chaves snake_case
    * que o backend espera no body).
    */
-  async saveSettings(payload: SettingsPayload): Promise<{
-    success: boolean;
-    message?: string;
-    settings?: SettingsPayload;
-  }> {
+  async saveSettings(payload: SettingsPayload): Promise<SettingsResponse> {
     const r = await fetch(`${API_BASE_URL}/settings`, {
       method: "POST",
       headers: this.getAuthHeaders(),

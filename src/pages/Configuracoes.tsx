@@ -18,11 +18,6 @@ export default function Configuracoes() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-
-    const scrollContainer = document.querySelector("main.overflow-y-auto");
-    if (scrollContainer instanceof HTMLElement) {
-      scrollContainer.scrollTo(0, 0);
-    }
   }, []);
 
   // Permitir acesso no ambiente de desenvolvimento

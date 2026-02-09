@@ -58,6 +58,8 @@ const defaultSettings: Settings = {
   debug_mode: false,
 };
 
+const SETTINGS_CACHE_KEY = "settings_cache";
+
 function toApiSettingsPayload(settings: Settings): SettingsPayload {
   return {
     instituicao_nome: settings.instituicao_nome,
@@ -80,6 +82,35 @@ function toApiSettingsPayload(settings: Settings): SettingsPayload {
   };
 }
 
+function readCachedSettings(): Partial<Settings> | null {
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as Partial<Settings>;
+  } catch {
+    return null;
+  }
+}
+
+function persistSettingsCache(value: Partial<Settings>) {
+  try {
+    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(value));
+  } catch {
+    // cache é opcional; erro não deve bloquear a app
+  }
+}
+
+function extractSettingsFromResponse(
+  response: Partial<{ settings: unknown; data: unknown }>
+): Partial<Settings> | null {
+  const candidate = response.settings ?? response.data;
+  if (!candidate || typeof candidate !== "object") return null;
+  return candidate as Partial<Settings>;
+}
+
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
@@ -88,17 +119,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    reloadSettings();
+    fetchSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function reloadSettings() {
+  async function fetchSettings() {
     try {
       setLoading(true);
       setError(null);
-      const { success, settings: serverSettings } = await apiService.getSettings();
-      if (success && serverSettings) {
+
+      const cached = readCachedSettings();
+      if (cached) {
+        setSettings((prev) => ({ ...prev, ...cached }));
+      }
+
+      const response = await apiService.getSettings();
+      const serverSettings = extractSettingsFromResponse(response);
+      if (response.success && serverSettings) {
         setSettings((prev) => ({ ...prev, ...serverSettings }));
+        persistSettingsCache(serverSettings);
       }
     } catch (err: any) {
       console.error("Erro ao carregar configurações:", err);
@@ -132,12 +171,22 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Garante que o estado final = o que o banco salvou (evita “atraso”)
-      await reloadSettings();
+      const persistedSettings = extractSettingsFromResponse(resp);
+      if (persistedSettings) {
+        setSettings((prev) => ({ ...prev, ...persistedSettings }));
+        persistSettingsCache(persistedSettings);
+      } else {
+        await fetchSettings();
+      }
     } catch (err: any) {
       console.error("Erro ao salvar configurações:", err);
       setError(err?.message ?? "Erro ao salvar configurações");
       throw err;
     }
+  }
+
+  async function reloadSettings() {
+    await fetchSettings();
   }
 
   return (
