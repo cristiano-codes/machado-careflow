@@ -1,4 +1,5 @@
 // src/pages/Configuracoes.tsx
+import { useEffect } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -15,6 +16,15 @@ import { Building2, Cog, Shield, Wrench } from "lucide-react";
 export default function Configuracoes() {
   const { userProfile } = useAuth();
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+
+    const scrollContainer = document.querySelector("main.overflow-y-auto");
+    if (scrollContainer instanceof HTMLElement) {
+      scrollContainer.scrollTo(0, 0);
+    }
+  }, []);
+
   // Permitir acesso no ambiente de desenvolvimento
   const devBypass = import.meta.env.DEV; // true quando "npm run dev"
   const isAdminRole =
@@ -27,7 +37,7 @@ export default function Configuracoes() {
   // Bloqueio (exceto se bypass ativo)
   if (!canAccess) {
     return (
-      <div className="max-w-7xl mx-auto space-y-3 pb-2">
+      <div className="relative z-0 mx-auto min-h-[calc(100vh-64px)] max-w-7xl space-y-3 pb-2">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
             Configuracoes do Sistema
@@ -54,7 +64,7 @@ export default function Configuracoes() {
 
   // Pagina principal de configuracoes
   return (
-    <div className="max-w-7xl mx-auto space-y-3 pb-2">
+    <div className="relative z-0 mx-auto min-h-[calc(100vh-64px)] max-w-7xl space-y-3 pb-2">
       <div>
         <h1 className="text-xl font-bold tracking-tight">
           Configuracoes do Sistema

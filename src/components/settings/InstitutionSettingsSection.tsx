@@ -44,6 +44,37 @@ function getInstitutionInitials(name: string): string {
     .slice(0, 2);
 }
 
+const MAX_LOGO_SIZE_BYTES = 1024 * 1024;
+const RECOMMENDED_LOGO_DIMENSION = 256;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Nao foi possivel ler a imagem."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      resolve({ width: image.width, height: image.height });
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    image.onerror = () => {
+      reject(new Error("Nao foi possivel validar as dimensoes da imagem."));
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    image.src = objectUrl;
+  });
+}
+
 export default function InstitutionSettingsSection() {
   const { settings, saveSettings } = useSettings();
   const { toast } = useToast();
@@ -67,23 +98,88 @@ export default function InstitutionSettingsSection() {
     };
   }, [logoPreviewUrl]);
 
-  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function clearTemporaryLogoSelection() {
+    setLogoFile(null);
+    setLogoPreviewUrl((prevUrl) => {
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      return null;
+    });
+    if (logoInputRef.current) {
+      logoInputRef.current.value = "";
+    }
+  }
+
+  const displayedLogoSrc =
+    logoPreviewUrl ??
+    (isEditingSettings
+      ? tempSettings.instituicao_logo_base64 ?? tempSettings.instituicao_logo_url ?? null
+      : settings.instituicao_logo_base64 ?? settings.instituicao_logo_url ?? null);
+
+  async function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0] ?? null;
-    setLogoFile(selected);
 
     if (!selected) {
-      setLogoPreviewUrl((prevUrl) => {
-        if (prevUrl) URL.revokeObjectURL(prevUrl);
-        return null;
-      });
+      clearTemporaryLogoSelection();
       return;
     }
+
+    if (selected.type !== "image/png") {
+      toast({
+        title: "Formato invalido",
+        description: "A logo deve estar no formato PNG.",
+        variant: "destructive",
+      });
+      clearTemporaryLogoSelection();
+      return;
+    }
+
+    if (selected.size > MAX_LOGO_SIZE_BYTES) {
+      toast({
+        title: "Arquivo muito grande",
+        description: "A logo deve ter no maximo 1MB.",
+        variant: "destructive",
+      });
+      clearTemporaryLogoSelection();
+      return;
+    }
+
+    setLogoFile(selected);
 
     const nextUrl = URL.createObjectURL(selected);
     setLogoPreviewUrl((prevUrl) => {
       if (prevUrl) URL.revokeObjectURL(prevUrl);
       return nextUrl;
     });
+
+    try {
+      const [base64Logo, dimensions] = await Promise.all([
+        readFileAsDataUrl(selected),
+        getImageDimensions(selected),
+      ]);
+
+      setTempSettings((prev) => ({
+        ...prev,
+        instituicao_logo_url: null,
+        instituicao_logo_base64: base64Logo,
+      }));
+
+      if (
+        dimensions.width !== RECOMMENDED_LOGO_DIMENSION ||
+        dimensions.height !== RECOMMENDED_LOGO_DIMENSION
+      ) {
+        toast({
+          title: "Dimensao recomendada",
+          description: "Recomendado 256x256 (quadrado) para melhor resultado.",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Erro ao processar logo",
+        description: err?.message ?? "Nao foi possivel processar a imagem.",
+        variant: "destructive",
+      });
+      clearTemporaryLogoSelection();
+    }
   }
 
   async function handleSettingsUpdate(e?: React.FormEvent) {
@@ -92,6 +188,7 @@ export default function InstitutionSettingsSection() {
       setSaving(true);
       await saveSettings(tempSettings);
       setIsEditingSettings(false);
+      clearTemporaryLogoSelection();
       toast({
         title: "Configuracoes salvas",
         description: "Configuracoes do sistema atualizadas com sucesso!",
@@ -125,9 +222,9 @@ export default function InstitutionSettingsSection() {
             <Label className="text-sm font-medium">Logo da Instituicao</Label>
             <div className="flex items-center gap-3">
               <div className="h-24 w-24 overflow-hidden rounded-md border bg-muted">
-                {logoPreviewUrl ? (
+                {displayedLogoSrc ? (
                   <img
-                    src={logoPreviewUrl}
+                    src={displayedLogoSrc}
                     alt="Preview da logo"
                     className="h-full w-full object-cover"
                   />
@@ -147,7 +244,7 @@ export default function InstitutionSettingsSection() {
                   ref={logoInputRef}
                   id="instituicao_logo"
                   type="file"
-                  accept="image/*"
+                  accept="image/png"
                   onChange={handleLogoSelect}
                   className="hidden"
                   disabled={!isEditingSettings || saving}
@@ -162,7 +259,14 @@ export default function InstitutionSettingsSection() {
                   Enviar logo
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  {logoFile ? logoFile.name : "Sem logo enviada"}
+                  {logoFile
+                    ? logoFile.name
+                    : displayedLogoSrc
+                    ? "Logo carregada"
+                    : "Sem logo enviada"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  PNG - recomendado 256x256 (quadrado) - ate 1MB
                 </p>
               </div>
             </div>
@@ -268,6 +372,7 @@ export default function InstitutionSettingsSection() {
                   onClick={() => {
                     setIsEditingSettings(false);
                     setTempSettings(settings);
+                    clearTemporaryLogoSelection();
                   }}
                   size="sm"
                   disabled={saving}
