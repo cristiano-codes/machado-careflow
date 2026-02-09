@@ -1,6 +1,7 @@
 // src/contexts/SettingsContext.tsx
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { apiService, type SettingsPayload } from "@/services/api";
+import { updateFaviconFromLogo } from "@/lib/favicon";
 
 export interface Settings {
   instituicao_nome: string;
@@ -9,6 +10,7 @@ export interface Settings {
   instituicao_endereco: string;
   instituicao_logo_url?: string | null;
   instituicao_logo_base64?: string | null;
+  instituicao_logo_updated_at?: string | null;
   email_notifications: boolean;
   sms_notifications: boolean;
   push_notifications: boolean;
@@ -44,6 +46,7 @@ const defaultSettings: Settings = {
   instituicao_endereco: "Rua das Flores, 123 - São Paulo, SP",
   instituicao_logo_url: null,
   instituicao_logo_base64: null,
+  instituicao_logo_updated_at: null,
   email_notifications: true,
   sms_notifications: false,
   push_notifications: true,
@@ -117,11 +120,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const lastFaviconSignatureRef = useRef<string>("");
 
   useEffect(() => {
     fetchSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const logo = settings.instituicao_logo_base64?.trim() ?? "";
+    const versionKey = settings.instituicao_logo_updated_at?.trim() || undefined;
+    const signature = `${logo}::${versionKey ?? ""}`;
+
+    if (lastFaviconSignatureRef.current === signature) {
+      return;
+    }
+
+    lastFaviconSignatureRef.current = signature;
+    void updateFaviconFromLogo(logo || null, versionKey);
+  }, [settings.instituicao_logo_base64, settings.instituicao_logo_updated_at]);
 
   async function fetchSettings() {
     try {
