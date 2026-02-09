@@ -39,12 +39,12 @@ export default function OperationalSettingsSection() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Pilar Operacional</CardTitle>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Pilar Operacional</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-2">
+      <CardContent className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="space-y-1">
             <Label htmlFor="horario_inicio">Horario de funcionamento (inicio)</Label>
             <Input
               id="horario_inicio"
@@ -59,7 +59,7 @@ export default function OperationalSettingsSection() {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="horario_fim">Horario de funcionamento (fim)</Label>
             <Input
               id="horario_fim"
@@ -74,52 +74,52 @@ export default function OperationalSettingsSection() {
             />
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-1 md:col-span-2">
             <Label>Dias ativos</Label>
-            <div className="grid grid-cols-7 gap-2">
-              <label className="flex items-center gap-2 rounded-md border p-2 text-xs">
+            <div className="grid grid-cols-7 gap-1.5">
+              <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs leading-none">
                 <Switch
                   checked={operationalSettings.diasAtivos.seg}
                   onCheckedChange={(checked) => handleDayToggle("seg", checked)}
                 />
                 Seg
               </label>
-              <label className="flex items-center gap-2 rounded-md border p-2 text-xs">
+              <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs leading-none">
                 <Switch
                   checked={operationalSettings.diasAtivos.ter}
                   onCheckedChange={(checked) => handleDayToggle("ter", checked)}
                 />
                 Ter
               </label>
-              <label className="flex items-center gap-2 rounded-md border p-2 text-xs">
+              <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs leading-none">
                 <Switch
                   checked={operationalSettings.diasAtivos.qua}
                   onCheckedChange={(checked) => handleDayToggle("qua", checked)}
                 />
                 Qua
               </label>
-              <label className="flex items-center gap-2 rounded-md border p-2 text-xs">
+              <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs leading-none">
                 <Switch
                   checked={operationalSettings.diasAtivos.qui}
                   onCheckedChange={(checked) => handleDayToggle("qui", checked)}
                 />
                 Qui
               </label>
-              <label className="flex items-center gap-2 rounded-md border p-2 text-xs">
+              <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs leading-none">
                 <Switch
                   checked={operationalSettings.diasAtivos.sex}
                   onCheckedChange={(checked) => handleDayToggle("sex", checked)}
                 />
                 Sex
               </label>
-              <label className="flex items-center gap-2 rounded-md border p-2 text-xs">
+              <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs leading-none">
                 <Switch
                   checked={operationalSettings.diasAtivos.sab}
                   onCheckedChange={(checked) => handleDayToggle("sab", checked)}
                 />
                 Sab
               </label>
-              <label className="flex items-center gap-2 rounded-md border p-2 text-xs">
+              <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs leading-none">
                 <Switch
                   checked={operationalSettings.diasAtivos.dom}
                   onCheckedChange={(checked) => handleDayToggle("dom", checked)}
@@ -129,7 +129,7 @@ export default function OperationalSettingsSection() {
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="duracao_padrao">Duracao padrao (min)</Label>
             <Input
               id="duracao_padrao"
@@ -146,7 +146,7 @@ export default function OperationalSettingsSection() {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="limite_diario">Limite diario</Label>
             <Input
               id="limite_diario"
@@ -162,7 +162,7 @@ export default function OperationalSettingsSection() {
             />
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-1 md:col-span-2">
             <Label htmlFor="politica_cancelamento">Politica de cancelamento</Label>
             <Textarea
               id="politica_cancelamento"
@@ -178,7 +178,7 @@ export default function OperationalSettingsSection() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t pt-2">
+        <div className="flex items-center justify-between gap-3 border-t pt-1.5">
           <p className="text-xs text-muted-foreground">Integracao no proximo passo</p>
           <Button type="button" size="sm" disabled>
             Salvar
