@@ -107,6 +107,14 @@ export type WeekScale = {
   sex: boolean;
 };
 
+export type ProfessionalRole = {
+  id: number;
+  nome: string;
+  ativo: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type ProfessionalPayload = {
   name: string;
   email: string;
@@ -115,7 +123,8 @@ export type ProfessionalPayload = {
   role?: string;
   crp?: string;
   specialty?: string;
-  funcao: string;
+  funcao?: string;
+  role_id?: number | null;
   horas_semanais?: number | null;
   data_nascimento?: string | null;
   tipo_contrato: string;
@@ -239,6 +248,78 @@ class ApiService {
       );
     }
     return r.json();
+  }
+
+  // ---------- SETTINGS: PROFESSIONAL ROLES ----------
+  async getProfessionalRoles(includeInactive = false): Promise<{
+    success: boolean;
+    roles: ProfessionalRole[];
+    message?: string;
+  }> {
+    const suffix = includeInactive ? "?all=1" : "";
+    const response = await fetch(`${API_BASE_URL}/settings/professional-roles${suffix}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao carregar funcoes profissionais");
+    }
+    return {
+      success: Boolean(data?.success),
+      roles: Array.isArray(data?.roles) ? data.roles : [],
+      message: data?.message,
+    };
+  }
+
+  async createProfessionalRole(nome: string): Promise<{
+    success: boolean;
+    role?: ProfessionalRole;
+    message?: string;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/settings/professional-roles`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ nome }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao criar funcao profissional");
+    }
+    return data;
+  }
+
+  async updateProfessionalRole(id: number, nome: string): Promise<{
+    success: boolean;
+    role?: ProfessionalRole;
+    message?: string;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/settings/professional-roles/${id}`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ nome }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao editar funcao profissional");
+    }
+    return data;
+  }
+
+  async setProfessionalRoleActive(id: number, ativo: boolean): Promise<{
+    success: boolean;
+    role?: ProfessionalRole;
+    message?: string;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/settings/professional-roles/${id}/ativo`, {
+      method: "PATCH",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ ativo }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao atualizar status da funcao profissional");
+    }
+    return data;
   }
 
   // ---------- PROFISSIONAIS ----------
