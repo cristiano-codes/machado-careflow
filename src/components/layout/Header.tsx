@@ -12,6 +12,7 @@ import {
 import { LogOut, User, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
+import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
 
 interface HeaderProps {
   user?: {
@@ -30,12 +31,10 @@ export function Header({ user, onLogout }: HeaderProps) {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-border bg-card backdrop-blur supports-[backdrop-filter]:bg-card/95">
       <div className="flex h-16 items-center justify-between px-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <SidebarTrigger className="h-8 w-8" />
-          <h1 className="text-lg font-semibold text-foreground">
-            {settings.instituicao_nome}
-            <span className="ml-2 text-xs text-muted-foreground">[build: 2026-02-10-0900]</span>
-          </h1>
+          <InstitutionLogo size={24} className="hidden sm:inline-flex" />
+          <h1 className="text-lg font-semibold text-foreground">{settings.instituicao_nome}</h1>
         </div>
 
         <div className="flex items-center gap-4">
