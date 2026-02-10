@@ -106,9 +106,13 @@ export default function Profissionais() {
       setError(null);
       try {
         const profRes = await apiService.getProfessionals(today);
-        if (!profRes?.success) throw new Error("Não foi possível carregar profissionais");
+        if (!Array.isArray(profRes) && !profRes?.success) {
+          throw new Error(profRes?.message || "Não foi possível carregar profissionais");
+        }
 
-        const rawList: ApiProfessional[] = profRes.professionals || [];
+        const rawList: ApiProfessional[] = Array.isArray(profRes)
+          ? profRes
+          : profRes.professionals || [];
 
         const listWithAgenda: Professional[] = await Promise.all(
           rawList.map(async (p) => {

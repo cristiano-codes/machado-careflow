@@ -98,11 +98,15 @@ router.get('/', async (req, res) => {
 
     res.json({
       success: true,
-      professionals: result.rows
+      professionals: Array.isArray(result.rows) ? result.rows : []
     });
   } catch (error) {
     console.error('Erro ao listar profissionais:', error);
-    res.status(500).json({ success: false, message: 'Erro ao listar profissionais' });
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Erro ao listar profissionais',
+      professionals: []
+    });
   }
 });
 
