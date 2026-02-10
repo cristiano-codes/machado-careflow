@@ -25,7 +25,7 @@ const DEFAULT_BUSINESS_HOURS = {
 };
 
 const DEFAULT_PROFESSIONALS_CONFIG = {
-  allowed_contract_types: ['CLT', 'PJ', 'Volunt·rio', 'Est·gio', 'Tempor·rio'],
+  allowed_contract_types: ['CLT', 'PJ', 'Volunt√°rio', 'Est√°gio', 'Tempor√°rio'],
   suggested_weekly_hours: [20, 30, 40],
 };
 
@@ -554,3 +554,4 @@ router.put('/', authorize('configuracoes', 'edit'), saveSettingsHandler);
 router.post('/', authorize('configuracoes', 'edit'), saveSettingsHandler);
 
 module.exports = router;
+

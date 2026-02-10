@@ -11,6 +11,15 @@ const DEFAULT_CONTRACT_TYPES = ['CLT', 'PJ', 'Voluntário', 'Estágio', 'Tempor�
 const SCALE_KEYS = ['seg', 'ter', 'qua', 'qui', 'sex'];
 const DEFAULT_WEEK_SCALE = { seg: true, ter: true, qua: true, qui: true, sex: true };
 
+function normalizeText(value) {
+  return (value || '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 function normalizeStatus(value) {
   const raw = (value || '').toString().trim().toLowerCase();
   if (!raw) return null;
@@ -64,9 +73,9 @@ async function getProfessionalsRuntimeConfig() {
 }
 
 function normalizeContractType(value, allowedContractTypes = DEFAULT_CONTRACT_TYPES) {
-  const raw = (value || '').toString().trim().toLowerCase();
+  const raw = normalizeText(value);
   if (!raw) return null;
-  return allowedContractTypes.find((item) => item.toLowerCase() === raw) || null;
+  return allowedContractTypes.find((item) => normalizeText(item) === raw) || null;
 }
 
 function isValidDateValue(value) {
