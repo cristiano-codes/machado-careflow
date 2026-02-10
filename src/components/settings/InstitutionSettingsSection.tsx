@@ -47,6 +47,10 @@ function getInstitutionInitials(name: string): string {
 const MAX_LOGO_SIZE_BYTES = 1024 * 1024;
 const RECOMMENDED_LOGO_DIMENSION = 256;
 
+interface InstitutionSettingsSectionProps {
+  canEdit?: boolean;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -75,7 +79,7 @@ function getImageDimensions(file: File): Promise<{ width: number; height: number
   });
 }
 
-export default function InstitutionSettingsSection() {
+export default function InstitutionSettingsSection({ canEdit = true }: InstitutionSettingsSectionProps) {
   const { settings, saveSettings } = useSettings();
   const { toast } = useToast();
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -116,6 +120,8 @@ export default function InstitutionSettingsSection() {
       : settings.instituicao_logo_base64 ?? settings.instituicao_logo_url ?? null);
 
   async function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!canEdit) return;
+
     const selected = e.target.files?.[0] ?? null;
 
     if (!selected) {
@@ -172,10 +178,10 @@ export default function InstitutionSettingsSection() {
           description: "Recomendado 256x256 (quadrado) para melhor resultado.",
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Erro ao processar logo",
-        description: err?.message ?? "Nao foi possivel processar a imagem.",
+        description: err instanceof Error ? err.message : "Nao foi possivel processar a imagem.",
         variant: "destructive",
       });
       clearTemporaryLogoSelection();
@@ -198,10 +204,10 @@ export default function InstitutionSettingsSection() {
         title: "Configuracoes salvas",
         description: "Configuracoes do sistema atualizadas com sucesso!",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Erro ao salvar",
-        description: err?.message ?? "Tente novamente.",
+        description: err instanceof Error ? err.message : "Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -252,14 +258,14 @@ export default function InstitutionSettingsSection() {
                   accept="image/png"
                   onChange={handleLogoSelect}
                   className="hidden"
-                  disabled={!isEditingSettings || saving}
+                  disabled={!canEdit || !isEditingSettings || saving}
                 />
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => logoInputRef.current?.click()}
-                  disabled={!isEditingSettings || saving}
+                  disabled={!canEdit || !isEditingSettings || saving}
                 >
                   Enviar logo
                 </Button>
@@ -295,7 +301,7 @@ export default function InstitutionSettingsSection() {
                     instituicao_nome: e.target.value,
                   }))
                 }
-                disabled={!isEditingSettings || saving}
+                disabled={!canEdit || !isEditingSettings || saving}
                 className="text-sm"
               />
             </div>
@@ -318,7 +324,7 @@ export default function InstitutionSettingsSection() {
                     instituicao_email: e.target.value,
                   }))
                 }
-                disabled={!isEditingSettings || saving}
+                disabled={!canEdit || !isEditingSettings || saving}
                 className="text-sm"
               />
             </div>
@@ -340,7 +346,7 @@ export default function InstitutionSettingsSection() {
                     instituicao_telefone: formatPhoneBR(e.target.value),
                   }))
                 }
-                disabled={!isEditingSettings || saving}
+                disabled={!canEdit || !isEditingSettings || saving}
                 className="text-sm"
               />
             </div>
@@ -362,14 +368,14 @@ export default function InstitutionSettingsSection() {
                     instituicao_endereco: e.target.value,
                   }))
                 }
-                disabled={!isEditingSettings || saving}
+                disabled={!canEdit || !isEditingSettings || saving}
                 className="text-sm"
               />
             </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-1">
-            {isEditingSettings ? (
+            {canEdit && isEditingSettings ? (
               <>
                 <Button
                   type="button"
@@ -388,7 +394,7 @@ export default function InstitutionSettingsSection() {
                   {saving ? "Salvando..." : "Salvar Configuracoes"}
                 </Button>
               </>
-            ) : (
+            ) : canEdit ? (
               <Button
                 type="button"
                 onClick={() => setIsEditingSettings(true)}
@@ -396,6 +402,8 @@ export default function InstitutionSettingsSection() {
               >
                 Editar Configuracoes
               </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Somente leitura</p>
             )}
           </div>
         </form>

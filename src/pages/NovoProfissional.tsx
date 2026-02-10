@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,9 @@ import { ProtectedRoute } from "@/components/common/ProtectedRoute";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/api";
 import { useNavigate } from "react-router-dom";
+import { useSettings } from "@/contexts/SettingsContext";
 
-const CONTRACT_OPTIONS = ["CLT", "PJ", "Voluntário", "Estágio", "Temporário"] as const;
+const DEFAULT_CONTRACT_OPTIONS = ["CLT", "PJ", "VoluntÃ¡rio", "EstÃ¡gio", "TemporÃ¡rio"] as const;
 const WEEK_DAYS: Array<{ key: "seg" | "ter" | "qua" | "qui" | "sex"; label: string }> = [
   { key: "seg", label: "Seg" },
   { key: "ter", label: "Ter" },
@@ -22,6 +23,38 @@ const WEEK_DAYS: Array<{ key: "seg" | "ter" | "qua" | "qui" | "sex"; label: stri
 export default function NovoProfissional() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { settings } = useSettings();
+
+  const contractOptions = useMemo(
+    () =>
+      settings.professionals_config.allowed_contract_types.length > 0
+        ? settings.professionals_config.allowed_contract_types
+        : [...DEFAULT_CONTRACT_OPTIONS],
+    [settings.professionals_config.allowed_contract_types]
+  );
+
+  const suggestedWeeklyHours = useMemo(
+    () => settings.professionals_config.suggested_weekly_hours,
+    [settings.professionals_config.suggested_weekly_hours]
+  );
+
+  const configuredScale = useMemo(
+    () => ({
+      seg: settings.business_hours.operating_days.seg,
+      ter: settings.business_hours.operating_days.ter,
+      qua: settings.business_hours.operating_days.qua,
+      qui: settings.business_hours.operating_days.qui,
+      sex: settings.business_hours.operating_days.sex,
+    }),
+    [
+      settings.business_hours.operating_days.seg,
+      settings.business_hours.operating_days.ter,
+      settings.business_hours.operating_days.qua,
+      settings.business_hours.operating_days.qui,
+      settings.business_hours.operating_days.sex,
+    ]
+  );
+
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -33,15 +66,9 @@ export default function NovoProfissional() {
     funcao: "",
     horas_semanais: "",
     data_nascimento: "",
-    tipo_contrato: "CLT" as (typeof CONTRACT_OPTIONS)[number],
-    escala_semanal: {
-      seg: true,
-      ter: true,
-      qua: true,
-      qui: true,
-      sex: true,
-    },
-    role: "Usuário",
+    tipo_contrato: contractOptions[0] || "CLT",
+    escala_semanal: configuredScale,
+    role: "UsuÃ¡rio",
     status: "ATIVO" as "ATIVO" | "INATIVO",
   });
 
@@ -52,13 +79,30 @@ export default function NovoProfissional() {
     }
   }, [form.email, form.username]);
 
+  useEffect(() => {
+    setForm((prev) => {
+      const nextContract = contractOptions.includes(prev.tipo_contrato)
+        ? prev.tipo_contrato
+        : contractOptions[0] || "CLT";
+
+      return {
+        ...prev,
+        tipo_contrato: nextContract,
+        escala_semanal: configuredScale,
+        horas_semanais:
+          prev.horas_semanais || suggestedWeeklyHours.length === 0
+            ? prev.horas_semanais
+            : String(suggestedWeeklyHours[0]),
+      };
+    });
+  }, [configuredScale, contractOptions, suggestedWeeklyHours]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const hoursValue =
-        form.horas_semanais.trim().length > 0 ? Number(form.horas_semanais) : null;
+      const hoursValue = form.horas_semanais.trim().length > 0 ? Number(form.horas_semanais) : null;
 
       if (hoursValue !== null && (!Number.isInteger(hoursValue) || hoursValue <= 0)) {
         throw new Error("Horas semanais deve ser um numero inteiro positivo");
@@ -177,7 +221,7 @@ export default function NovoProfissional() {
                       <SelectValue placeholder="Selecione o tipo de contrato" />
                     </SelectTrigger>
                     <SelectContent>
-                      {CONTRACT_OPTIONS.map((contract) => (
+                      {contractOptions.map((contract) => (
                         <SelectItem key={contract} value={contract}>
                           {contract}
                         </SelectItem>
@@ -199,6 +243,21 @@ export default function NovoProfissional() {
                     onChange={(e) => setValue("horas_semanais", e.target.value)}
                     placeholder="20, 30, 40..."
                   />
+                  {suggestedWeeklyHours.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {suggestedWeeklyHours.map((hour) => (
+                        <Button
+                          key={hour}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setValue("horas_semanais", String(hour))}
+                        >
+                          {hour}h
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="data_nascimento">Data de nascimento</Label>
@@ -276,3 +335,4 @@ export default function NovoProfissional() {
     </ProtectedRoute>
   );
 }
+

@@ -73,6 +73,30 @@ export type SettingsPayload = {
   data_retention_days: number;
   auto_updates: boolean;
   debug_mode: boolean;
+  business_hours: BusinessHours;
+  professionals_config: ProfessionalsConfig;
+};
+
+export type OperatingDays = {
+  seg: boolean;
+  ter: boolean;
+  qua: boolean;
+  qui: boolean;
+  sex: boolean;
+  sab: boolean;
+  dom: boolean;
+};
+
+export type BusinessHours = {
+  opening_time: string;
+  closing_time: string;
+  lunch_break_minutes: number;
+  operating_days: OperatingDays;
+};
+
+export type ProfessionalsConfig = {
+  allowed_contract_types: string[];
+  suggested_weekly_hours: number[];
 };
 
 export type WeekScale = {
@@ -94,7 +118,7 @@ export type ProfessionalPayload = {
   funcao: string;
   horas_semanais?: number | null;
   data_nascimento?: string | null;
-  tipo_contrato: "CLT" | "PJ" | "Voluntário" | "Estágio" | "Temporário";
+  tipo_contrato: string;
   escala_semanal?: WeekScale;
   status?: "ATIVO" | "INATIVO";
 };
@@ -204,7 +228,7 @@ class ApiService {
    */
   async saveSettings(payload: SettingsPayload): Promise<SettingsResponse> {
     const r = await fetch(`${API_BASE_URL}/settings`, {
-      method: "POST",
+      method: "PUT",
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload),
     });

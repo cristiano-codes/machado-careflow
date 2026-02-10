@@ -1,7 +1,13 @@
 // src/contexts/SettingsContext.tsx
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { apiService, type SettingsPayload } from "@/services/api";
+import {
+  apiService,
+  type SettingsPayload,
+  type BusinessHours,
+  type ProfessionalsConfig,
+} from "@/services/api";
 import { updateFaviconFromLogo } from "@/lib/favicon";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface Settings {
   instituicao_nome: string;
@@ -23,21 +29,38 @@ export interface Settings {
   data_retention_days: number;
   auto_updates: boolean;
   debug_mode: boolean;
+  business_hours: BusinessHours;
+  professionals_config: ProfessionalsConfig;
 }
 
 interface SettingsContextType {
   settings: Settings;
   updateSettings: (newSettings: Partial<Settings>) => void;
-  /**
-   * Salva as configurações no backend.
-   * Se payload for passado, ele será mesclado sobre o estado atual e enviado.
-   * Se não for passado, envia o estado atual.
-   */
   saveSettings: (payload?: Partial<Settings>) => Promise<void>;
   reloadSettings: () => Promise<void>;
   loading: boolean;
   error: string | null;
 }
+
+const defaultBusinessHours: BusinessHours = {
+  opening_time: "08:00",
+  closing_time: "17:20",
+  lunch_break_minutes: 60,
+  operating_days: {
+    seg: true,
+    ter: true,
+    qua: true,
+    qui: true,
+    sex: true,
+    sab: false,
+    dom: false,
+  },
+};
+
+const defaultProfessionalsConfig: ProfessionalsConfig = {
+  allowed_contract_types: ["CLT", "PJ", "Voluntário", "Estágio", "Temporário"],
+  suggested_weekly_hours: [20, 30, 40],
+};
 
 const defaultSettings: Settings = {
   instituicao_nome: "Instituto Lauir Machado",
@@ -59,9 +82,73 @@ const defaultSettings: Settings = {
   data_retention_days: 365,
   auto_updates: true,
   debug_mode: false,
+  business_hours: defaultBusinessHours,
+  professionals_config: defaultProfessionalsConfig,
 };
 
 const SETTINGS_CACHE_KEY = "settings_cache";
+
+function normalizeBusinessHours(value: unknown): BusinessHours {
+  const fallback = defaultSettings.business_hours;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+
+  const source = value as Partial<BusinessHours>;
+  const operatingDays =
+    source.operating_days && typeof source.operating_days === "object" && !Array.isArray(source.operating_days)
+      ? source.operating_days
+      : fallback.operating_days;
+
+  return {
+    opening_time: typeof source.opening_time === "string" ? source.opening_time : fallback.opening_time,
+    closing_time: typeof source.closing_time === "string" ? source.closing_time : fallback.closing_time,
+    lunch_break_minutes:
+      Number.isInteger(source.lunch_break_minutes) && (source.lunch_break_minutes ?? 0) >= 0
+        ? Number(source.lunch_break_minutes)
+        : fallback.lunch_break_minutes,
+    operating_days: {
+      seg: typeof operatingDays.seg === "boolean" ? operatingDays.seg : fallback.operating_days.seg,
+      ter: typeof operatingDays.ter === "boolean" ? operatingDays.ter : fallback.operating_days.ter,
+      qua: typeof operatingDays.qua === "boolean" ? operatingDays.qua : fallback.operating_days.qua,
+      qui: typeof operatingDays.qui === "boolean" ? operatingDays.qui : fallback.operating_days.qui,
+      sex: typeof operatingDays.sex === "boolean" ? operatingDays.sex : fallback.operating_days.sex,
+      sab: typeof operatingDays.sab === "boolean" ? operatingDays.sab : fallback.operating_days.sab,
+      dom: typeof operatingDays.dom === "boolean" ? operatingDays.dom : fallback.operating_days.dom,
+    },
+  };
+}
+
+function normalizeProfessionalsConfig(value: unknown): ProfessionalsConfig {
+  const fallback = defaultSettings.professionals_config;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+
+  const source = value as Partial<ProfessionalsConfig>;
+  const contractTypes = Array.isArray(source.allowed_contract_types)
+    ? source.allowed_contract_types
+        .map((item) => (item || "").toString().trim())
+        .filter(Boolean)
+    : [];
+
+  const weeklyHours = Array.isArray(source.suggested_weekly_hours)
+    ? source.suggested_weekly_hours
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && item > 0)
+    : [];
+
+  return {
+    allowed_contract_types: contractTypes.length > 0 ? Array.from(new Set(contractTypes)) : fallback.allowed_contract_types,
+    suggested_weekly_hours:
+      weeklyHours.length > 0 ? Array.from(new Set(weeklyHours)) : fallback.suggested_weekly_hours,
+  };
+}
+
+function normalizeSettings(value: Partial<Settings>): Settings {
+  return {
+    ...defaultSettings,
+    ...value,
+    business_hours: normalizeBusinessHours(value.business_hours),
+    professionals_config: normalizeProfessionalsConfig(value.professionals_config),
+  };
+}
 
 function toApiSettingsPayload(settings: Settings): SettingsPayload {
   return {
@@ -82,6 +169,8 @@ function toApiSettingsPayload(settings: Settings): SettingsPayload {
     data_retention_days: settings.data_retention_days,
     auto_updates: settings.auto_updates,
     debug_mode: settings.debug_mode,
+    business_hours: settings.business_hours,
+    professionals_config: settings.professionals_config,
   };
 }
 
@@ -102,7 +191,7 @@ function persistSettingsCache(value: Partial<Settings>) {
   try {
     localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(value));
   } catch {
-    // cache é opcional; erro não deve bloquear a app
+    // cache opcional
   }
 }
 
@@ -117,15 +206,31 @@ function extractSettingsFromResponse(
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  const { userProfile } = useAuth();
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const lastFaviconSignatureRef = useRef<string>("");
 
   useEffect(() => {
-    fetchSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const cached = readCachedSettings();
+    if (cached) {
+      setSettings(normalizeSettings(cached));
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    void fetchSettings();
   }, []);
+
+  useEffect(() => {
+    if (!userProfile) return;
+    void fetchSettings();
+  }, [userProfile]);
 
   useEffect(() => {
     const logo = settings.instituicao_logo_base64?.trim() ?? "";
@@ -142,44 +247,43 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   async function fetchSettings() {
     try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
-      const cached = readCachedSettings();
-      if (cached) {
-        setSettings((prev) => ({ ...prev, ...cached }));
-      }
-
       const response = await apiService.getSettings();
       const serverSettings = extractSettingsFromResponse(response);
+
       if (response.success && serverSettings) {
-        setSettings((prev) => ({ ...prev, ...serverSettings }));
+        const normalized = normalizeSettings(serverSettings);
+        setSettings(normalized);
         persistSettingsCache(serverSettings);
       }
-    } catch (err: any) {
-      console.error("Erro ao carregar configurações:", err);
-      setError(err?.message ?? "Erro ao carregar configurações");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar configurações");
     } finally {
       setLoading(false);
     }
   }
 
   function updateSettings(newSettings: Partial<Settings>) {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    setSettings((prev) => normalizeSettings({ ...prev, ...newSettings }));
   }
 
   async function saveSettings(payload?: Partial<Settings>) {
     try {
       setError(null);
 
-      // Se vier payload (ex.: tempSettings da tela), usamos ele para salvar,
-      // evitando a race condition com o setState.
-      const toSave: Settings = {
+      const toSave: Settings = normalizeSettings({
         ...settings,
         ...(payload ?? {}),
-      };
+      });
 
-      // Atualiza o estado local para refletir o que está sendo salvo (opcional, bom para UX)
       setSettings(toSave);
 
       const resp = await apiService.saveSettings(toApiSettingsPayload(toSave));
@@ -187,18 +291,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         throw new Error(resp?.message || "Erro ao salvar configurações");
       }
 
-      // Garante que o estado final = o que o banco salvou (evita “atraso”)
       const persistedSettings = extractSettingsFromResponse(resp);
       if (persistedSettings) {
-        setSettings((prev) => ({ ...prev, ...persistedSettings }));
+        const normalized = normalizeSettings(persistedSettings);
+        setSettings(normalized);
         persistSettingsCache(persistedSettings);
       } else {
         await fetchSettings();
       }
-    } catch (err: any) {
-      console.error("Erro ao salvar configurações:", err);
-      setError(err?.message ?? "Erro ao salvar configurações");
-      throw err;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar configurações");
+      throw err instanceof Error ? err : new Error("Erro ao salvar configurações");
     }
   }
 
@@ -220,3 +323,4 @@ export function useSettings() {
   if (!ctx) throw new Error("useSettings deve ser usado dentro de um SettingsProvider");
   return ctx;
 }
+

@@ -7,67 +7,76 @@ type RawPerm =
 
 type NormalizedPerm = { module: string; permission: string };
 
-function readStoredUser(): any | null {
-  // Tenta sessionStorage primeiro (reabre → limpa), depois localStorage (fallback)
-  const raw =
-    sessionStorage.getItem('user') ??
-    localStorage.getItem('user');
+type StoredUser = {
+  role?: string;
+  permissions?: RawPerm[];
+};
 
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function readStoredUser(): StoredUser | null {
+  const raw = sessionStorage.getItem('user') ?? localStorage.getItem('user');
   if (!raw) return null;
+
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as StoredUser;
   } catch {
     return null;
   }
 }
 
 function normalize(raw: RawPerm): NormalizedPerm[] {
-  // Aceita formatos:
-  // 1) "admin:access"
-  // 3) { module: 'admin', permission: 'view' }
-  // 4) { module: 'admin', action: 'view' }
-  // 5) { name: 'view', module: 'profissionais' }
   if (typeof raw === 'string') {
-    const value = raw.trim().toLowerCase();
-    if (!value.includes(':')) {
-      return [];
-    }
+    const value = normalizeText(raw);
+    if (!value.includes(':')) return [];
 
     const parts = value.split(':').map((s) => s.trim()).filter(Boolean);
-    if (parts.length !== 2) {
-      return [];
-    }
+    if (parts.length !== 2) return [];
 
     const [module, permission] = parts;
     return [{ module, permission }];
   }
 
-  const module =
-    (raw as any).module?.toString().trim().toLowerCase() ||
-    (raw as any).modulo?.toString().trim().toLowerCase();
+  const entry = raw as Record<string, unknown>;
+  const module = normalizeText(
+    (typeof entry.module === 'string' ? entry.module : '') ||
+      (typeof entry.modulo === 'string' ? entry.modulo : '')
+  );
 
-  const permission =
-    (raw as any).permission?.toString().trim().toLowerCase() ||
-    (raw as any).action?.toString().trim().toLowerCase() ||
-    (raw as any).name?.toString().trim().toLowerCase();
+  const permission = normalizeText(
+    (typeof entry.permission === 'string' ? entry.permission : '') ||
+      (typeof entry.action === 'string' ? entry.action : '') ||
+      (typeof entry.name === 'string' ? entry.name : '')
+  );
 
-  if (!module || !permission) {
-    return [];
-  }
-
+  if (!module || !permission) return [];
   return [{ module, permission }];
 }
 
-export function usePermissions() {
-  // Lê o usuário armazenado (definido após login no teu front)
-  const user = useMemo(() => readStoredUser(), []);
+function resolveModuleAliases(moduleName: string): string[] {
+  const mod = normalizeText(moduleName);
+  const aliases: Record<string, string[]> = {
+    configuracoes: ['configuracoes', 'settings'],
+    settings: ['settings', 'configuracoes'],
+  };
 
-  // role do usuário (super admin)
-  const role = user?.role?.toString().trim().toLowerCase();
+  return aliases[mod] ?? [mod];
+}
+
+export function usePermissions() {
+  const user = useMemo(() => readStoredUser(), []);
+  const role = normalizeText(user?.role?.toString() || '');
 
   const normalizedPermissions = useMemo<NormalizedPerm[]>(() => {
-    const raw = (user as any)?.permissions as RawPerm[] | undefined;
+    const raw = user?.permissions;
     if (!raw || !Array.isArray(raw)) return [];
+
     const list: NormalizedPerm[] = [];
     for (const item of raw) list.push(...normalize(item));
     return list;
@@ -75,29 +84,33 @@ export function usePermissions() {
 
   function hasPermission(module: string, permission: string) {
     const adminRoles = ['admin', 'adm', 'administrador', 'coordenador geral'];
-    const readonlyRoles = ['usuario', 'usuário', 'consulta'];
+    const readonlyRoles = ['usuario', 'consulta'];
 
-    // 1) super admin passa em tudo
     if (adminRoles.includes(role)) return true;
 
-    // 2) normalização de inputs
-    const mod = (module || '').toString().trim().toLowerCase();
-    const perm = (permission || '').toString().trim().toLowerCase();
+    const mod = normalizeText(module || '');
+    const perm = normalizeText(permission || '');
+    const modulesToMatch = resolveModuleAliases(mod);
 
-    // 2.1) fallback de UX por perfil no módulo de profissionais
-    if (readonlyRoles.includes(role) && mod === 'profissionais' && perm === 'view') {
+    if (
+      readonlyRoles.includes(role) &&
+      perm === 'view' &&
+      (modulesToMatch.includes('profissionais') || modulesToMatch.includes('configuracoes'))
+    ) {
       return true;
     }
 
-    // 3) match direto module/permission
-    const matchPair = normalizedPermissions.some(
-      p => (p.module === mod || p.module === '*') && (p.permission === perm || p.permission === '*')
+    const matchPair = normalizedPermissions.some((p) =>
+      modulesToMatch.some(
+        (targetModule) =>
+          (p.module === targetModule || p.module === '*') &&
+          (p.permission === perm || p.permission === '*')
+      )
     );
     if (matchPair) return true;
 
-    // 4) fallback: macro de admin para módulo admin
     const hasAdminMacro = normalizedPermissions.some(
-      p =>
+      (p) =>
         p.permission === 'admin_panel_access' ||
         p.permission === 'adminpanelaccess' ||
         p.permission === 'admin_access'
@@ -108,25 +121,29 @@ export function usePermissions() {
   }
 
   function getModulePermissions(module: string) {
-    const mod = (module || '').toString().trim().toLowerCase();
+    const mod = normalizeText(module || '');
+    const modulesToMatch = resolveModuleAliases(mod);
     const perms = new Set<string>();
     const adminRoles = ['admin', 'adm', 'administrador', 'coordenador geral'];
-    const readonlyRoles = ['usuario', 'usuário', 'consulta'];
+    const readonlyRoles = ['usuario', 'consulta'];
 
     if (adminRoles.includes(role)) {
       return new Set<string>(['view', 'create', 'edit', 'delete', 'access', '*']);
     }
 
-    if (readonlyRoles.includes(role) && mod === 'profissionais') {
+    if (
+      readonlyRoles.includes(role) &&
+      (modulesToMatch.includes('profissionais') || modulesToMatch.includes('configuracoes'))
+    ) {
       perms.add('view');
     }
 
     for (const p of normalizedPermissions) {
-      if (p.module === mod || p.module === '*') perms.add(p.permission);
+      if (modulesToMatch.includes(p.module) || p.module === '*') perms.add(p.permission);
     }
 
     const hasAdminMacro = normalizedPermissions.some(
-      p =>
+      (p) =>
         p.permission === 'admin_panel_access' ||
         p.permission === 'adminpanelaccess' ||
         p.permission === 'admin_access'
@@ -136,13 +153,11 @@ export function usePermissions() {
     return perms;
   }
 
-  // Sem depender de carregamento externo agora
   const loading = false;
 
   return { hasPermission, getModulePermissions, loading };
 }
 
-// Hook auxiliar exportado no teu arquivo original:
 export function useModulePermissions(module: string) {
   const { hasPermission, getModulePermissions } = usePermissions();
   return {
