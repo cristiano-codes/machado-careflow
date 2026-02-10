@@ -23,29 +23,37 @@ function readStoredUser(): any | null {
 
 function normalize(raw: RawPerm): NormalizedPerm[] {
   // Aceita formatos:
-  // 1) "ADMIN_PANEL_ACCESS"
-  // 2) "admin:access"
+  // 1) "admin:access"
   // 3) { module: 'admin', permission: 'view' }
   // 4) { module: 'admin', action: 'view' }
-  // 5) { name: 'ADMIN_PANEL_ACCESS' }
+  // 5) { name: 'view', module: 'profissionais' }
   if (typeof raw === 'string') {
-    if (raw.includes(':')) {
-      const [module, permission] = raw.split(':').map(s => s.trim().toLowerCase());
-      return [{ module, permission }];
+    const value = raw.trim().toLowerCase();
+    if (!value.includes(':')) {
+      return [];
     }
-    return [{ module: '*', permission: raw.trim().toLowerCase() }];
+
+    const parts = value.split(':').map((s) => s.trim()).filter(Boolean);
+    if (parts.length !== 2) {
+      return [];
+    }
+
+    const [module, permission] = parts;
+    return [{ module, permission }];
   }
 
   const module =
     (raw as any).module?.toString().trim().toLowerCase() ||
-    (raw as any).modulo?.toString().trim().toLowerCase() ||
-    '*';
+    (raw as any).modulo?.toString().trim().toLowerCase();
 
   const permission =
     (raw as any).permission?.toString().trim().toLowerCase() ||
     (raw as any).action?.toString().trim().toLowerCase() ||
-    (raw as any).name?.toString().trim().toLowerCase() ||
-    'access';
+    (raw as any).name?.toString().trim().toLowerCase();
+
+  if (!module || !permission) {
+    return [];
+  }
 
   return [{ module, permission }];
 }
@@ -66,12 +74,20 @@ export function usePermissions() {
   }, [user]);
 
   function hasPermission(module: string, permission: string) {
+    const adminRoles = ['admin', 'adm', 'administrador', 'coordenador geral'];
+    const readonlyRoles = ['usuario', 'usuário', 'consulta'];
+
     // 1) super admin passa em tudo
-    if (role === 'admin') return true;
+    if (adminRoles.includes(role)) return true;
 
     // 2) normalização de inputs
     const mod = (module || '').toString().trim().toLowerCase();
     const perm = (permission || '').toString().trim().toLowerCase();
+
+    // 2.1) fallback de UX por perfil no módulo de profissionais
+    if (readonlyRoles.includes(role) && mod === 'profissionais' && perm === 'view') {
+      return true;
+    }
 
     // 3) match direto module/permission
     const matchPair = normalizedPermissions.some(
@@ -94,9 +110,15 @@ export function usePermissions() {
   function getModulePermissions(module: string) {
     const mod = (module || '').toString().trim().toLowerCase();
     const perms = new Set<string>();
+    const adminRoles = ['admin', 'adm', 'administrador', 'coordenador geral'];
+    const readonlyRoles = ['usuario', 'usuário', 'consulta'];
 
-    if (role === 'admin') {
+    if (adminRoles.includes(role)) {
       return new Set<string>(['view', 'create', 'edit', 'delete', 'access', '*']);
+    }
+
+    if (readonlyRoles.includes(role) && mod === 'profissionais') {
+      perms.add('view');
     }
 
     for (const p of normalizedPermissions) {

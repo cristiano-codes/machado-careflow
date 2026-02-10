@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/pg');
 const bcrypt = require('bcryptjs');
+const authMiddleware = require('../middleware/auth');
+const { authorize } = require('../middleware/authorize');
+
+router.use(authMiddleware);
 
 const CONTRACT_TYPES = ['CLT', 'PJ', 'Voluntário', 'Estágio', 'Temporário'];
 const SCALE_KEYS = ['seg', 'ter', 'qua', 'qui', 'sex'];
@@ -148,7 +152,7 @@ function validateProfessionalPayload(payload, options = {}) {
 }
 
 // Criar novo profissional (cria usuário + vínculo)
-router.post('/', async (req, res) => {
+router.post('/', authorize('profissionais', 'create'), async (req, res) => {
   const client = await pool.connect();
   try {
     const validation = validateProfessionalPayload(req.body, { requireUserIdentity: true });
@@ -221,7 +225,7 @@ router.post('/', async (req, res) => {
 });
 
 // Lista profissionais + dados do usuário vinculado e carga do dia
-router.get('/', async (req, res) => {
+router.get('/', authorize('profissionais', 'view'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().split('T')[0];
 
   try {
@@ -261,7 +265,7 @@ router.get('/', async (req, res) => {
 });
 
 // Atualizar profissional (dados principais)
-router.put('/:id', async (req, res) => {
+router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
 
@@ -402,7 +406,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Atualizar somente status (soft disable)
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', authorize('profissionais', 'status'), async (req, res) => {
   const { id } = req.params;
   const status = normalizeStatus(req.body?.status);
 
@@ -432,7 +436,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // Agenda do profissional em um dia
-router.get('/:id/agenda', async (req, res) => {
+router.get('/:id/agenda', authorize('profissionais', 'view'), async (req, res) => {
   const { id } = req.params;
   const date = req.query.date || new Date().toISOString().split('T')[0];
 
@@ -470,7 +474,7 @@ router.get('/:id/agenda', async (req, res) => {
 });
 
 // Estatísticas gerais dos profissionais
-router.get('/stats/resumo', async (req, res) => {
+router.get('/stats/resumo', authorize('profissionais', 'view'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().split('T')[0];
 
   try {

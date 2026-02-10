@@ -171,13 +171,21 @@ router.post('/login', [
 
     // >>> NOVO: buscar permissões do usuário
     const permsRes = await pool.query(
-      `SELECT p.name
+      `SELECT m.name AS module_name, p.name AS permission_name
          FROM user_permissions up
+         JOIN modules m ON m.id = up.module_id
          JOIN permissions p ON p.id = up.permission_id
         WHERE up.user_id = $1`,
       [user.id]
     );
-    const permissions = permsRes.rows.map(r => r.name);
+    const permissions = permsRes.rows
+      .map((row) => {
+        const moduleName = (row.module_name || '').toString().trim().toLowerCase();
+        const permissionName = (row.permission_name || '').toString().trim().toLowerCase();
+        if (!moduleName || !permissionName) return '';
+        return `${moduleName}:${permissionName}`;
+      })
+      .filter(Boolean);
 
     // Gerar token JWT (mantido 24h neste passo)
     const token = jwt.sign(
@@ -227,13 +235,21 @@ router.get('/verify', async (req, res) => {
 
     // >>> NOVO: buscar permissões também no verify
     const permsRes = await pool.query(
-      `SELECT p.name
+      `SELECT m.name AS module_name, p.name AS permission_name
          FROM user_permissions up
+         JOIN modules m ON m.id = up.module_id
          JOIN permissions p ON p.id = up.permission_id
         WHERE up.user_id = $1`,
       [user.id]
     );
-    const permissions = permsRes.rows.map(r => r.name);
+    const permissions = permsRes.rows
+      .map((row) => {
+        const moduleName = (row.module_name || '').toString().trim().toLowerCase();
+        const permissionName = (row.permission_name || '').toString().trim().toLowerCase();
+        if (!moduleName || !permissionName) return '';
+        return `${moduleName}:${permissionName}`;
+      })
+      .filter(Boolean);
 
     const { password: _, ...userWithoutPassword } = user;
     res.json({ success: true, user: { ...userWithoutPassword, permissions } });
