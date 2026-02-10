@@ -296,15 +296,26 @@ router.get('/', authorize('profissionais', 'view'), async (req, res) => {
         GROUP BY professional_id
       )
       SELECT
-        p.*,
-        u.name AS user_name,
-        u.email AS user_email,
-        u.role AS user_role,
+        p.id,
+        p.crp,
+        p.specialty,
+        p.phone,
+        p.email,
+        p.status,
+        p.funcao,
+        p.horas_semanais,
+        p.data_nascimento,
+        p.tipo_contrato,
+        p.escala_semanal,
+        COALESCE(u.name, p.email, '') AS user_name,
+        COALESCE(u.email, p.email) AS user_email,
+        COALESCE(u.role, 'Usuário') AS user_role,
+        COALESCE(u.status, 'ativo') AS user_status,
         COALESCE(a.total, 0) AS agenda_hoje
       FROM professionals p
-      LEFT JOIN public.users u ON u.id = p.user_id
+      LEFT JOIN public.users u ON LOWER(u.email) = LOWER(p.email)
       LEFT JOIN agenda_hoje a ON a.professional_id = p.id
-      ORDER BY u.name NULLS LAST, p.created_at DESC;
+      ORDER BY COALESCE(u.name, p.email, '') NULLS LAST, p.created_at DESC;
     `;
 
     const result = await pool.query(query, [date]);
@@ -333,12 +344,13 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       `SELECT
          p.*,
          u.id AS linked_user_id,
-         u.name AS user_name,
-         u.email AS user_email,
-         u.username AS user_username,
-         u.role AS user_role
+         COALESCE(u.name, p.email, '') AS user_name,
+         COALESCE(u.email, p.email) AS user_email,
+         COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
+         COALESCE(u.role, 'Usuário') AS user_role,
+         COALESCE(u.status, 'ativo') AS user_status
        FROM professionals p
-       LEFT JOIN users u ON u.id = p.user_id
+       LEFT JOIN users u ON LOWER(u.email) = LOWER(p.email)
        WHERE p.id = $1`,
       [id]
     );
