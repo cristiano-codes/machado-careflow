@@ -26,7 +26,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
 
 const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: BarChart3 },
@@ -68,13 +67,6 @@ export function AppSidebar() {
       collapsible="icon"
     >
       <SidebarContent className="p-0">
-        {/* Header */}
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <InstitutionLogo size={32} className="shrink-0" />
-          </div>
-        </div>
-
         {/* Main Modules */}
         <SidebarGroup className="px-0">
           <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
