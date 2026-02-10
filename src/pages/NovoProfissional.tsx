@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ProtectedRoute } from "@/components/common/ProtectedRoute";
 import { useToast } from "@/hooks/use-toast";
-import { apiService } from "@/services/api";
+import { apiService, type ProfessionalRole } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
 
@@ -56,6 +56,9 @@ export default function NovoProfissional() {
   );
 
   const [loading, setLoading] = useState(false);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [roleOptions, setRoleOptions] = useState<ProfessionalRole[]>([]);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -63,7 +66,7 @@ export default function NovoProfissional() {
     username: "",
     specialty: "",
     crp: "",
-    funcao: "",
+    role_id: "",
     horas_semanais: "",
     data_nascimento: "",
     tipo_contrato: contractOptions[0] || "CLT",
@@ -78,6 +81,39 @@ export default function NovoProfissional() {
       setForm((prev) => ({ ...prev, username: prefix }));
     }
   }, [form.email, form.username]);
+
+  useEffect(() => {
+    const loadProfessionalRoles = async () => {
+      try {
+        setRolesLoading(true);
+        setRolesError(null);
+
+        const response = await apiService.getProfessionalRoles(false);
+        if (!response.success) {
+          throw new Error(response.message || "Nao foi possivel carregar as funcoes");
+        }
+
+        const roles = response.roles || [];
+        setRoleOptions(roles);
+        setForm((prev) => ({
+          ...prev,
+          role_id:
+            prev.role_id && roles.some((item) => String(item.id) === prev.role_id)
+              ? prev.role_id
+              : roles[0]
+              ? String(roles[0].id)
+              : "",
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Erro ao carregar funcoes";
+        setRolesError(message);
+      } finally {
+        setRolesLoading(false);
+      }
+    };
+
+    void loadProfessionalRoles();
+  }, []);
 
   useEffect(() => {
     setForm((prev) => {
@@ -103,6 +139,10 @@ export default function NovoProfissional() {
 
     try {
       const hoursValue = form.horas_semanais.trim().length > 0 ? Number(form.horas_semanais) : null;
+      const selectedRole = roleOptions.find((item) => String(item.id) === form.role_id);
+      if (!selectedRole) {
+        throw new Error("Selecione uma funcao para o profissional");
+      }
 
       if (hoursValue !== null && (!Number.isInteger(hoursValue) || hoursValue <= 0)) {
         throw new Error("Horas semanais deve ser um numero inteiro positivo");
@@ -116,7 +156,8 @@ export default function NovoProfissional() {
         role: form.role,
         specialty: form.specialty || undefined,
         crp: form.crp || undefined,
-        funcao: form.funcao,
+        role_id: selectedRole.id,
+        funcao: selectedRole.nome,
         horas_semanais: hoursValue,
         data_nascimento: form.data_nascimento || null,
         tipo_contrato: form.tipo_contrato,
@@ -205,14 +246,59 @@ export default function NovoProfissional() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="funcao">Funcao</Label>
-                  <Input
-                    id="funcao"
-                    value={form.funcao}
-                    onChange={(e) => setValue("funcao", e.target.value)}
-                    placeholder="Psicologo, Fono, Assistente Social..."
-                    required
-                  />
+                  <Label>Funcao</Label>
+                  <Select
+                    value={form.role_id}
+                    onValueChange={(value) => setValue("role_id", value)}
+                    disabled={rolesLoading || roleOptions.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={rolesLoading ? "Carregando funcoes..." : "Selecione a funcao"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roleOptions.map((roleOption) => (
+                        <SelectItem key={roleOption.id} value={String(roleOption.id)}>
+                          {roleOption.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {rolesError && (
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                      <p className="text-xs text-destructive">{rolesError}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            setRolesLoading(true);
+                            setRolesError(null);
+                            const response = await apiService.getProfessionalRoles(false);
+                            if (!response.success) {
+                              throw new Error(response.message || "Nao foi possivel carregar as funcoes");
+                            }
+                            const roles = response.roles || [];
+                            setRoleOptions(roles);
+                            setForm((prev) => ({
+                              ...prev,
+                              role_id: roles[0] ? String(roles[0].id) : "",
+                            }));
+                          } catch (err) {
+                            const message =
+                              err instanceof Error ? err.message : "Erro ao carregar funcoes";
+                            setRolesError(message);
+                          } finally {
+                            setRolesLoading(false);
+                          }
+                        }}
+                      >
+                        Tentar novamente
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Tipo de contrato</Label>
@@ -324,7 +410,7 @@ export default function NovoProfissional() {
                 <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading || rolesLoading || !form.role_id}>
                   {loading ? "Salvando..." : "Criar profissional"}
                 </Button>
               </div>

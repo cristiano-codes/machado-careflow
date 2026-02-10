@@ -35,6 +35,8 @@ type WeekScale = {
 
 type ApiProfessional = {
   id: string;
+  role_id?: number | null;
+  role_nome?: string | null;
   user_name: string | null;
   user_email: string | null;
   user_role: string | null;
@@ -138,7 +140,7 @@ function getName(prof: ApiProfessional) {
 }
 
 function getDisplayFunction(prof: ApiProfessional) {
-  return prof.funcao || prof.specialty || "Funcao nao informada";
+  return prof.role_nome || prof.funcao || prof.specialty || "Funcao nao informada";
 }
 
 function getScaleSummary(scale: WeekScale) {
@@ -452,7 +454,7 @@ export default function Profissionais() {
                         <p className="text-base font-semibold">{getName(prof)}</p>
                         <p className="text-xs text-muted-foreground">
                           {prof.tipo_contrato || "Contrato nao informado"}
-                          {prof.horas_semanais ? ` • ${prof.horas_semanais}h/sem` : ""}
+                          {prof.horas_semanais ? ` - ${prof.horas_semanais}h/sem` : ""}
                         </p>
                         <p className="text-xs text-muted-foreground">Escala: {getScaleSummary(prof.escala_normalizada)}</p>
                       </div>
@@ -567,7 +569,7 @@ export default function Profissionais() {
                           <p className="font-medium">{getDisplayFunction(prof)}</p>
                           <p className="text-xs text-muted-foreground">
                             {prof.tipo_contrato || "Contrato nao informado"}
-                            {prof.horas_semanais ? ` • ${prof.horas_semanais}h/sem` : ""}
+                            {prof.horas_semanais ? ` - ${prof.horas_semanais}h/sem` : ""}
                           </p>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock3 className="h-3 w-3" />
