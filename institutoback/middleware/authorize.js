@@ -6,8 +6,8 @@ const ROLE_ALIASES = {
 
 const ROLE_POLICIES = {
   ADM: { '*': ['*'] },
-  USUARIO: { profissionais: ['view'] },
-  CONSULTA: { profissionais: ['view'] },
+  USUARIO: { profissionais: ['view'], configuracoes: ['view'] },
+  CONSULTA: { profissionais: ['view'], configuracoes: ['view'] },
 };
 
 function normalizeRole(role) {

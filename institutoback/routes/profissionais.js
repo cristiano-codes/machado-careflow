@@ -7,7 +7,7 @@ const { authorize } = require('../middleware/authorize');
 
 router.use(authMiddleware);
 
-const CONTRACT_TYPES = ['CLT', 'PJ', 'Voluntário', 'Estágio', 'Temporário'];
+const DEFAULT_CONTRACT_TYPES = ['CLT', 'PJ', 'Voluntário', 'Estágio', 'Temporário'];
 const SCALE_KEYS = ['seg', 'ter', 'qua', 'qui', 'sex'];
 const DEFAULT_WEEK_SCALE = { seg: true, ter: true, qua: true, qui: true, sex: true };
 
@@ -20,10 +20,53 @@ function normalizeStatus(value) {
   return null;
 }
 
-function normalizeContractType(value) {
+async function getProfessionalsRuntimeConfig() {
+  try {
+    const { rows } = await pool.query(
+      'SELECT business_hours, professionals_config FROM system_settings LIMIT 1'
+    );
+
+    const row = rows[0] || {};
+    const config = row.professionals_config && typeof row.professionals_config === 'object'
+      ? row.professionals_config
+      : {};
+    const businessHours = row.business_hours && typeof row.business_hours === 'object'
+      ? row.business_hours
+      : {};
+
+    const allowedContractTypes = Array.isArray(config.allowed_contract_types)
+      ? config.allowed_contract_types
+          .map((item) => (item || '').toString().trim())
+          .filter(Boolean)
+      : [];
+
+    const operatingDays = businessHours.operating_days && typeof businessHours.operating_days === 'object'
+      ? businessHours.operating_days
+      : {};
+
+    const defaultWeekScale = { ...DEFAULT_WEEK_SCALE };
+    for (const key of SCALE_KEYS) {
+      if (typeof operatingDays[key] === 'boolean') {
+        defaultWeekScale[key] = operatingDays[key];
+      }
+    }
+
+    return {
+      allowedContractTypes: allowedContractTypes.length > 0 ? allowedContractTypes : DEFAULT_CONTRACT_TYPES,
+      defaultWeekScale,
+    };
+  } catch (error) {
+    return {
+      allowedContractTypes: DEFAULT_CONTRACT_TYPES,
+      defaultWeekScale: { ...DEFAULT_WEEK_SCALE },
+    };
+  }
+}
+
+function normalizeContractType(value, allowedContractTypes = DEFAULT_CONTRACT_TYPES) {
   const raw = (value || '').toString().trim().toLowerCase();
   if (!raw) return null;
-  return CONTRACT_TYPES.find((item) => item.toLowerCase() === raw) || null;
+  return allowedContractTypes.find((item) => item.toLowerCase() === raw) || null;
 }
 
 function isValidDateValue(value) {
@@ -34,9 +77,9 @@ function isValidDateValue(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
 }
 
-function normalizeWeeklyScale(value) {
+function normalizeWeeklyScale(value, defaultWeekScale = DEFAULT_WEEK_SCALE) {
   if (value === undefined || value === null || value === '') {
-    return { ...DEFAULT_WEEK_SCALE };
+    return { ...defaultWeekScale };
   }
 
   let raw = value;
@@ -52,7 +95,7 @@ function normalizeWeeklyScale(value) {
     return null;
   }
 
-  const normalized = { ...DEFAULT_WEEK_SCALE };
+  const normalized = { ...defaultWeekScale };
   for (const key of SCALE_KEYS) {
     if (raw[key] !== undefined) {
       if (typeof raw[key] !== 'boolean') {
@@ -78,6 +121,8 @@ function parsePositiveInteger(value) {
 
 function validateProfessionalPayload(payload, options = {}) {
   const requireUserIdentity = options.requireUserIdentity ?? false;
+  const allowedContractTypes = options.allowedContractTypes ?? DEFAULT_CONTRACT_TYPES;
+  const defaultWeekScale = options.defaultWeekScale ?? DEFAULT_WEEK_SCALE;
 
   const name = (payload?.name || '').toString().trim();
   const email = (payload?.email || '').toString().trim().toLowerCase();
@@ -87,9 +132,9 @@ function validateProfessionalPayload(payload, options = {}) {
   const crp = (payload?.crp || '').toString().trim() || null;
   const specialty = (payload?.specialty || '').toString().trim() || null;
   const funcao = (payload?.funcao || '').toString().trim();
-  const tipoContrato = normalizeContractType(payload?.tipo_contrato);
+  const tipoContrato = normalizeContractType(payload?.tipo_contrato, allowedContractTypes);
   const status = normalizeStatus(payload?.status || 'ATIVO');
-  const weeklyScale = normalizeWeeklyScale(payload?.escala_semanal);
+  const weeklyScale = normalizeWeeklyScale(payload?.escala_semanal, defaultWeekScale);
   const weeklyHours = parsePositiveInteger(payload?.horas_semanais);
   const birthDate = payload?.data_nascimento ? payload.data_nascimento.toString().trim() : null;
 
@@ -102,9 +147,9 @@ function validateProfessionalPayload(payload, options = {}) {
   }
 
   if (!tipoContrato) {
-    return {
+      return {
       ok: false,
-      message: `tipo_contrato obrigatório. Valores aceitos: ${CONTRACT_TYPES.join(', ')}`,
+      message: `tipo_contrato obrigatório. Valores aceitos: ${allowedContractTypes.join(', ')}`,
     };
   }
 
@@ -155,7 +200,12 @@ function validateProfessionalPayload(payload, options = {}) {
 router.post('/', authorize('profissionais', 'create'), async (req, res) => {
   const client = await pool.connect();
   try {
-    const validation = validateProfessionalPayload(req.body, { requireUserIdentity: true });
+    const runtimeConfig = await getProfessionalsRuntimeConfig();
+    const validation = validateProfessionalPayload(req.body, {
+      requireUserIdentity: true,
+      allowedContractTypes: runtimeConfig.allowedContractTypes,
+      defaultWeekScale: runtimeConfig.defaultWeekScale,
+    });
     if (!validation.ok) {
       return res.status(400).json({ success: false, message: validation.message });
     }
@@ -306,8 +356,11 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       status: req.body?.status ?? existing.status,
     };
 
+    const runtimeConfig = await getProfessionalsRuntimeConfig();
     const validation = validateProfessionalPayload(mergedPayload, {
       requireUserIdentity: Boolean(existing.linked_user_id),
+      allowedContractTypes: runtimeConfig.allowedContractTypes,
+      defaultWeekScale: runtimeConfig.defaultWeekScale,
     });
 
     if (!validation.ok) {

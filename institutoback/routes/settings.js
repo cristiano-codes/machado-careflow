@@ -1,10 +1,34 @@
 const express = require('express');
-const router = express.Router();
-const jwt = require('jsonwebtoken');
 const { randomUUID } = require('crypto');
 const pool = require('../config/pg');
+const authMiddleware = require('../middleware/auth');
+const { authorize } = require('../middleware/authorize');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const router = express.Router();
+
+const LOGO_DATA_URL_PREFIX = 'data:image/png;base64,';
+const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
+
+const DEFAULT_BUSINESS_HOURS = {
+  opening_time: '08:00',
+  closing_time: '17:20',
+  lunch_break_minutes: 60,
+  operating_days: {
+    seg: true,
+    ter: true,
+    qua: true,
+    qui: true,
+    sex: true,
+    sab: false,
+    dom: false,
+  },
+};
+
+const DEFAULT_PROFESSIONALS_CONFIG = {
+  allowed_contract_types: ['CLT', 'PJ', 'Voluntário', 'Estágio', 'Temporário'],
+  suggested_weekly_hours: [20, 30, 40],
+};
+
 const DEFAULT_SETTINGS = {
   instituicao_nome: 'Instituto Lauir Machado',
   instituicao_email: 'contato@institutolauir.com.br',
@@ -23,10 +47,9 @@ const DEFAULT_SETTINGS = {
   data_retention_days: 365,
   auto_updates: true,
   debug_mode: false,
+  business_hours: DEFAULT_BUSINESS_HOURS,
+  professionals_config: DEFAULT_PROFESSIONALS_CONFIG,
 };
-
-const LOGO_DATA_URL_PREFIX = 'data:image/png;base64,';
-const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
 
 const SETTINGS_EDITABLE_FIELDS = [
   'instituicao_nome',
@@ -34,99 +57,167 @@ const SETTINGS_EDITABLE_FIELDS = [
   'instituicao_telefone',
   'instituicao_endereco',
   'instituicao_logo_base64',
+  'email_notifications',
+  'sms_notifications',
+  'push_notifications',
+  'weekly_reports',
+  'two_factor_auth',
+  'password_expiry_days',
+  'max_login_attempts',
+  'session_timeout',
+  'backup_frequency',
+  'data_retention_days',
+  'auto_updates',
+  'debug_mode',
+  'business_hours',
+  'professionals_config',
 ];
 
-// --- helper: extrai userId do token Bearer ---
-function getUserIdFromReq(req) {
-  try {
-    const auth = req.headers.authorization || '';
-    const [, token] = auth.split(' ');
-    if (!token) return null;
-    const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded?.id || null;
-  } catch {
-    return null;
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function parseMaybeJson(value) {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
   }
+
+  return value;
 }
 
-async function selectSingletonSettings() {
-  const { rows } = await pool.query('SELECT * FROM system_settings LIMIT 1');
-  return rows[0] || null;
-}
+function normalizeOperatingDays(value) {
+  const fallback = clone(DEFAULT_BUSINESS_HOURS.operating_days);
+  const parsed = parseMaybeJson(value);
 
-async function createSingletonSettings(seed = {}) {
-  const values = [
-    seed.instituicao_nome ?? DEFAULT_SETTINGS.instituicao_nome,
-    seed.instituicao_email ?? DEFAULT_SETTINGS.instituicao_email,
-    seed.instituicao_telefone ?? DEFAULT_SETTINGS.instituicao_telefone,
-    seed.instituicao_endereco ?? DEFAULT_SETTINGS.instituicao_endereco,
-    seed.instituicao_logo_base64 ?? DEFAULT_SETTINGS.instituicao_logo_base64,
-  ];
-
-  try {
-    const { rows } = await pool.query(
-      `
-        INSERT INTO system_settings (
-          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco, instituicao_logo_base64
-        ) VALUES (
-          gen_random_uuid(), $1, $2, $3, $4, $5
-        )
-        RETURNING *
-      `,
-      values
-    );
-
-    return rows[0];
-  } catch (error) {
-    // 42883 = undefined_function (gen_random_uuid indisponivel)
-    if (error?.code !== '42883') throw error;
-
-    const fallbackValues = [randomUUID(), ...values];
-    const { rows } = await pool.query(
-      `
-        INSERT INTO system_settings (
-          id, instituicao_nome, instituicao_email, instituicao_telefone, instituicao_endereco, instituicao_logo_base64
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6
-        )
-        RETURNING *
-      `,
-      fallbackValues
-    );
-
-    return rows[0];
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return fallback;
   }
+
+  const output = { ...fallback };
+  for (const key of Object.keys(fallback)) {
+    if (parsed[key] !== undefined) {
+      output[key] = Boolean(parsed[key]);
+    }
+  }
+
+  return output;
 }
 
-async function ensureSingletonSettings(seed = {}) {
-  const existing = await selectSingletonSettings();
-  if (existing) return existing;
+function isValidTime(value) {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value.trim());
+}
 
-  try {
-    return await createSingletonSettings(seed);
-  } catch (error) {
-    // 23505 = unique_violation (corrida entre requests)
-    if (error?.code === '23505') {
-      const row = await selectSingletonSettings();
-      if (row) return row;
+function validateBusinessHours(value) {
+  const parsed = parseMaybeJson(value);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, message: 'business_hours deve ser um objeto JSON valido.' };
+  }
+
+  const openingTime = (parsed.opening_time || '').toString().trim();
+  const closingTime = (parsed.closing_time || '').toString().trim();
+  const lunchBreakMinutes = Number(parsed.lunch_break_minutes);
+
+  if (!isValidTime(openingTime) || !isValidTime(closingTime)) {
+    return { ok: false, message: 'Horarios invalidos. Use o formato HH:MM.' };
+  }
+
+  if (!Number.isInteger(lunchBreakMinutes) || lunchBreakMinutes < 0 || lunchBreakMinutes > 240) {
+    return { ok: false, message: 'lunch_break_minutes deve ser inteiro entre 0 e 240.' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      opening_time: openingTime,
+      closing_time: closingTime,
+      lunch_break_minutes: lunchBreakMinutes,
+      operating_days: normalizeOperatingDays(parsed.operating_days),
+    },
+  };
+}
+
+function normalizeContractTypes(values) {
+  if (!Array.isArray(values)) return [];
+
+  const seen = new Set();
+  const cleaned = [];
+
+  for (const item of values) {
+    const text = (item || '').toString().trim();
+    if (!text) continue;
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    cleaned.push(text);
+  }
+
+  return cleaned;
+}
+
+function normalizeSuggestedWeeklyHours(values) {
+  if (!Array.isArray(values)) return [];
+
+  const seen = new Set();
+  const cleaned = [];
+
+  for (const item of values) {
+    const numberValue = Number(item);
+    if (!Number.isInteger(numberValue) || numberValue <= 0 || numberValue > 168) {
+      continue;
     }
 
-    throw error;
+    if (seen.has(numberValue)) continue;
+    seen.add(numberValue);
+    cleaned.push(numberValue);
   }
+
+  return cleaned;
 }
 
-function normalizePayload(body) {
+function validateProfessionalsConfig(value) {
+  const parsed = parseMaybeJson(value);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, message: 'professionals_config deve ser um objeto JSON valido.' };
+  }
+
+  const allowedContractTypes = normalizeContractTypes(parsed.allowed_contract_types);
+  if (allowedContractTypes.length === 0) {
+    return { ok: false, message: 'Informe ao menos um tipo de contrato permitido.' };
+  }
+
+  const suggestedWeeklyHours = normalizeSuggestedWeeklyHours(parsed.suggested_weekly_hours);
+  if (suggestedWeeklyHours.length === 0) {
+    return { ok: false, message: 'Informe ao menos uma carga horaria sugerida.' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      allowed_contract_types: allowedContractTypes,
+      suggested_weekly_hours: suggestedWeeklyHours,
+    },
+  };
+}
+
+function normalizeSettingsPayload(body) {
   if (!body || typeof body !== 'object') return {};
 
   const normalized = {};
   for (const field of SETTINGS_EDITABLE_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(body, field)) {
-      if (field === 'instituicao_logo_base64' && body[field] === '') {
-        normalized[field] = null;
-      } else {
-        normalized[field] = body[field];
-      }
+    if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+
+    if (field === 'instituicao_logo_base64' && body[field] === '') {
+      normalized[field] = null;
+      continue;
     }
+
+    normalized[field] = body[field];
   }
 
   return normalized;
@@ -169,16 +260,195 @@ function validateInstitutionLogoDataUrl(value) {
   return null;
 }
 
+function normalizeSettingsRow(row) {
+  const source = row || {};
+  const businessHoursValidation = validateBusinessHours(
+    source.business_hours || DEFAULT_SETTINGS.business_hours
+  );
+  const professionalsConfigValidation = validateProfessionalsConfig(
+    source.professionals_config || DEFAULT_SETTINGS.professionals_config
+  );
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...source,
+    business_hours: businessHoursValidation.ok
+      ? businessHoursValidation.value
+      : clone(DEFAULT_BUSINESS_HOURS),
+    professionals_config: professionalsConfigValidation.ok
+      ? professionalsConfigValidation.value
+      : clone(DEFAULT_PROFESSIONALS_CONFIG),
+  };
+}
+
+async function selectSingletonSettings() {
+  const { rows } = await pool.query('SELECT * FROM system_settings LIMIT 1');
+  return rows[0] || null;
+}
+
+async function createSingletonSettings(seed = {}) {
+  const normalizedSeed = normalizeSettingsRow(seed);
+  const values = [
+    normalizedSeed.instituicao_nome,
+    normalizedSeed.instituicao_email,
+    normalizedSeed.instituicao_telefone,
+    normalizedSeed.instituicao_endereco,
+    normalizedSeed.instituicao_logo_base64,
+    normalizedSeed.email_notifications,
+    normalizedSeed.sms_notifications,
+    normalizedSeed.push_notifications,
+    normalizedSeed.weekly_reports,
+    normalizedSeed.two_factor_auth,
+    normalizedSeed.password_expiry_days,
+    normalizedSeed.max_login_attempts,
+    normalizedSeed.session_timeout,
+    normalizedSeed.backup_frequency,
+    normalizedSeed.data_retention_days,
+    normalizedSeed.auto_updates,
+    normalizedSeed.debug_mode,
+    JSON.stringify(normalizedSeed.business_hours),
+    JSON.stringify(normalizedSeed.professionals_config),
+  ];
+
+  try {
+    const { rows } = await pool.query(
+      `
+        INSERT INTO system_settings (
+          id,
+          instituicao_nome,
+          instituicao_email,
+          instituicao_telefone,
+          instituicao_endereco,
+          instituicao_logo_base64,
+          email_notifications,
+          sms_notifications,
+          push_notifications,
+          weekly_reports,
+          two_factor_auth,
+          password_expiry_days,
+          max_login_attempts,
+          session_timeout,
+          backup_frequency,
+          data_retention_days,
+          auto_updates,
+          debug_mode,
+          business_hours,
+          professionals_config
+        ) VALUES (
+          gen_random_uuid(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13,
+          $14,
+          $15,
+          $16,
+          $17,
+          $18::jsonb,
+          $19::jsonb
+        )
+        RETURNING *
+      `,
+      values
+    );
+
+    return rows[0];
+  } catch (error) {
+    if (error?.code !== '42883') throw error;
+
+    const fallbackValues = [randomUUID(), ...values];
+    const { rows } = await pool.query(
+      `
+        INSERT INTO system_settings (
+          id,
+          instituicao_nome,
+          instituicao_email,
+          instituicao_telefone,
+          instituicao_endereco,
+          instituicao_logo_base64,
+          email_notifications,
+          sms_notifications,
+          push_notifications,
+          weekly_reports,
+          two_factor_auth,
+          password_expiry_days,
+          max_login_attempts,
+          session_timeout,
+          backup_frequency,
+          data_retention_days,
+          auto_updates,
+          debug_mode,
+          business_hours,
+          professionals_config
+        ) VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13,
+          $14,
+          $15,
+          $16,
+          $17,
+          $18,
+          $19::jsonb,
+          $20::jsonb
+        )
+        RETURNING *
+      `,
+      fallbackValues
+    );
+
+    return rows[0];
+  }
+}
+
+async function ensureSingletonSettings(seed = {}) {
+  const existing = await selectSingletonSettings();
+  if (existing) return existing;
+
+  try {
+    return await createSingletonSettings(seed);
+  } catch (error) {
+    if (error?.code === '23505') {
+      const row = await selectSingletonSettings();
+      if (row) return row;
+    }
+
+    throw error;
+  }
+}
+
 function successResponse(res, data) {
+  const normalizedData = normalizeSettingsRow(data);
+
   return res.json({
     success: true,
-    data,
-    settings: data,
+    data: normalizedData,
+    settings: normalizedData,
   });
 }
 
-// GET - Buscar configuracoes
-router.get('/', async (req, res) => {
+router.use(authMiddleware);
+
+router.get('/', authorize('configuracoes', 'view'), async (req, res) => {
   try {
     const row = await ensureSingletonSettings();
     return successResponse(res, row);
@@ -195,12 +465,13 @@ router.get('/', async (req, res) => {
 
 async function saveSettingsHandler(req, res) {
   try {
-    const userId = getUserIdFromReq(req);
+    const userId = req.user?.id || null;
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Token ausente ou invalido' });
     }
 
-    const payload = normalizePayload(req.body);
+    const payload = normalizeSettingsPayload(req.body);
+
     if (Object.prototype.hasOwnProperty.call(payload, 'instituicao_logo_base64')) {
       const logoValidationError = validateInstitutionLogoDataUrl(payload.instituicao_logo_base64);
       if (logoValidationError) {
@@ -208,26 +479,60 @@ async function saveSettingsHandler(req, res) {
       }
     }
 
-    const singleton = await ensureSingletonSettings(payload);
+    if (Object.prototype.hasOwnProperty.call(payload, 'business_hours')) {
+      const validation = validateBusinessHours(payload.business_hours);
+      if (!validation.ok) {
+        return res.status(400).json({ success: false, message: validation.message });
+      }
+      payload.business_hours = validation.value;
+    }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'professionals_config')) {
+      const validation = validateProfessionalsConfig(payload.professionals_config);
+      if (!validation.ok) {
+        return res.status(400).json({ success: false, message: validation.message });
+      }
+      payload.professionals_config = validation.value;
+    }
+
+    const singleton = await ensureSingletonSettings(payload);
     const fieldsToUpdate = Object.keys(payload);
+
     if (fieldsToUpdate.length === 0) {
       return successResponse(res, singleton);
     }
 
-    const setClauses = fieldsToUpdate.map((field, index) => `${field} = $${index + 1}`);
+    const setClauses = [];
+    const values = [];
+
+    fieldsToUpdate.forEach((field, index) => {
+      const position = index + 1;
+      if (field === 'business_hours' || field === 'professionals_config') {
+        setClauses.push(`${field} = $${position}::jsonb`);
+        values.push(JSON.stringify(payload[field]));
+        return;
+      }
+
+      setClauses.push(`${field} = $${position}`);
+      values.push(payload[field]);
+    });
+
     if (fieldsToUpdate.includes('instituicao_logo_base64')) {
       setClauses.push('instituicao_logo_updated_at = NOW()');
     }
 
-    const values = fieldsToUpdate.map((field) => payload[field]);
+    const updatedByPosition = values.length + 1;
+    setClauses.push(`updated_by = $${updatedByPosition}`);
+    values.push(userId);
+
+    const wherePosition = values.length + 1;
     values.push(singleton.id);
 
     const { rows } = await pool.query(
       `
         UPDATE system_settings
         SET ${setClauses.join(', ')}, updated_at = NOW()
-        WHERE id = $${fieldsToUpdate.length + 1}
+        WHERE id = $${wherePosition}
         RETURNING *
       `,
       values
@@ -245,8 +550,7 @@ async function saveSettingsHandler(req, res) {
   }
 }
 
-// POST/PUT - Salvar configuracoes (mantem auth atual)
-router.post('/', saveSettingsHandler);
-router.put('/', saveSettingsHandler);
+router.put('/', authorize('configuracoes', 'edit'), saveSettingsHandler);
+router.post('/', authorize('configuracoes', 'edit'), saveSettingsHandler);
 
 module.exports = router;
