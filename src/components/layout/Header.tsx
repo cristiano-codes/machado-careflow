@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, User, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
+import { useSettings } from "@/contexts/SettingsContext";
 
 interface HeaderProps {
   user?: {
@@ -25,13 +25,14 @@ interface HeaderProps {
 
 export function Header({ user, onLogout }: HeaderProps) {
   const navigate = useNavigate();
+  const { settings } = useSettings();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-border bg-card backdrop-blur supports-[backdrop-filter]:bg-card/95">
       <div className="flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="h-8 w-8" />
-          <InstitutionLogo size={32} className="hidden sm:inline-flex" />
+          <h1 className="text-lg font-semibold text-foreground">{settings.instituicao_nome}</h1>
         </div>
 
         <div className="flex items-center gap-4">

@@ -26,7 +26,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useSettings } from "@/contexts/SettingsContext";
 import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
 
 const mainItems = [
@@ -53,7 +52,6 @@ export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
   const isCollapsed = state === "collapsed";
-  const { settings } = useSettings();
 
   const isActive = (path: string) => currentPath === path;
   const isMainExpanded = mainItems.some((item) => isActive(item.url));
@@ -74,12 +72,6 @@ export function AppSidebar() {
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
             <InstitutionLogo size={32} className="shrink-0" />
-            {!isCollapsed && (
-              <div>
-                <h2 className="font-semibold text-sm text-foreground">Sistema de Gestão</h2>
-                <p className="text-xs text-muted-foreground">{settings.instituicao_nome}</p>
-              </div>
-            )}
           </div>
         </div>
 
