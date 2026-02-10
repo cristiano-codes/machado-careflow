@@ -145,7 +145,7 @@ export default function Dashboard() {
               <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Alunos Atendidos
+                    Assistidos
                   </CardTitle>
                   <Users className="h-4 w-4 text-primary" />
                 </CardHeader>

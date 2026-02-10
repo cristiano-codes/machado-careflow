@@ -49,7 +49,7 @@ export default function PreCadastro() {
       <div className="max-w-7xl mx-auto space-y-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Pré-Cadastro</h1>
-          <p className="text-muted-foreground text-sm">Cadastre informações básicas do aluno</p>
+          <p className="text-muted-foreground text-sm">Cadastre informações básicas do assistido</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -60,7 +60,7 @@ export default function PreCadastro() {
                 <User className="w-5 h-5" />
                 Dados Pessoais
               </CardTitle>
-              <CardDescription>Informações básicas do aluno</CardDescription>
+              <CardDescription>Informações básicas do assistido</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

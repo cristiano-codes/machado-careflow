@@ -57,7 +57,7 @@ export default function Avaliacoes() {
       data_inicio: "2024-02-08",
       profissional: "Dra. Carmen Rosa",
       status: "cancelada",
-      observacoes: "Cancelada a pedido do aluno"
+      observacoes: "Cancelada a pedido do assistido"
     },
     {
       id: 5,
@@ -175,7 +175,7 @@ export default function Avaliacoes() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Aluno</TableHead>
+                      <TableHead>Assistido</TableHead>
                       <TableHead>Tipo de Avaliação</TableHead>
                       <TableHead>Início</TableHead>
                       <TableHead>Conclusão</TableHead>
@@ -288,7 +288,7 @@ export default function Avaliacoes() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Aluno</TableHead>
+                      <TableHead>Assistido</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Período</TableHead>
                       <TableHead>Profissional</TableHead>

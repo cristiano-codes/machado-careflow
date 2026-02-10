@@ -190,7 +190,7 @@ export default function Agenda() {
               <div className="text-3xl font-bold text-green-600">
                 {agendamentos.filter(a => a.status === 'confirmado').length}
               </div>
-              <p className="text-sm text-muted-foreground">Alunos confirmados</p>
+              <p className="text-sm text-muted-foreground">Assistidos confirmados</p>
             </CardContent>
           </Card>
 
