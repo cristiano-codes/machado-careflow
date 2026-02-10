@@ -29,6 +29,18 @@ const DEFAULT_PROFESSIONALS_CONFIG = {
   suggested_weekly_hours: [20, 30, 40],
 };
 
+const DEFAULT_PROFESSIONAL_ROLES = [
+  'Psicologo',
+  'Fonoaudiologo',
+  'Assistente Social',
+  'Terapeuta Ocupacional',
+  'Fisioterapeuta',
+  'Psicopedagogo',
+  'Pedagogo',
+  'Nutricionista',
+  'Enfermeiro',
+];
+
 const DEFAULT_SETTINGS = {
   instituicao_nome: 'Instituto Lauir Machado',
   instituicao_email: 'contato@institutolauir.com.br',
@@ -221,6 +233,37 @@ function normalizeSettingsPayload(body) {
   }
 
   return normalized;
+}
+
+function sanitizeRoleName(value) {
+  return (value || '').toString().trim().replace(/\s+/g, ' ');
+}
+
+function parseRoleId(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function parseRoleActive(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 't', 'yes', 'sim'].includes(normalized)) return true;
+    if (['0', 'false', 'f', 'no', 'nao', 'não'].includes(normalized)) return false;
+  }
+  return null;
+}
+
+function mapRoleRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    nome: row.nome,
+    ativo: row.ativo,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
 
 function estimateBase64Bytes(base64) {
@@ -446,7 +489,201 @@ function successResponse(res, data) {
   });
 }
 
+async function ensureDefaultProfessionalRoles() {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int AS total FROM public.professional_roles'
+  );
+  const total = rows[0]?.total ?? 0;
+  if (total > 0) return;
+
+  for (const nome of DEFAULT_PROFESSIONAL_ROLES) {
+    await pool.query(
+      `
+        INSERT INTO public.professional_roles (nome, ativo)
+        VALUES ($1, true)
+        ON CONFLICT DO NOTHING
+      `,
+      [nome]
+    );
+  }
+}
+
 router.use(authMiddleware);
+
+router.get('/professional-roles', authorize('configuracoes', 'view'), async (req, res) => {
+  try {
+    await ensureDefaultProfessionalRoles();
+    const includeAll = req.query?.all === '1';
+
+    const { rows } = await pool.query(
+      `
+        SELECT id, nome, ativo, created_at, updated_at
+        FROM public.professional_roles
+        ${includeAll ? '' : 'WHERE ativo = true'}
+        ORDER BY nome ASC
+      `
+    );
+
+    return res.json({
+      success: true,
+      roles: rows.map(mapRoleRow),
+    });
+  } catch (error) {
+    console.error('[settings][roles][GET] erro ao buscar funcoes:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao buscar funcoes profissionais' });
+  }
+});
+
+router.post('/professional-roles', authorize('configuracoes', 'edit'), async (req, res) => {
+  try {
+    const nome = sanitizeRoleName(req.body?.nome);
+    if (!nome) {
+      return res.status(400).json({ success: false, message: 'nome e obrigatorio' });
+    }
+    if (nome.length > 120) {
+      return res.status(400).json({ success: false, message: 'nome deve ter no maximo 120 caracteres' });
+    }
+
+    const duplicate = await pool.query(
+      `
+        SELECT id
+        FROM public.professional_roles
+        WHERE LOWER(nome) = LOWER($1)
+        LIMIT 1
+      `,
+      [nome]
+    );
+
+    if (duplicate.rows.length > 0) {
+      return res.status(409).json({ success: false, message: 'Ja existe funcao com este nome' });
+    }
+
+    const inserted = await pool.query(
+      `
+        INSERT INTO public.professional_roles (nome, ativo)
+        VALUES ($1, true)
+        RETURNING id, nome, ativo, created_at, updated_at
+      `,
+      [nome]
+    );
+
+    return res.status(201).json({
+      success: true,
+      role: mapRoleRow(inserted.rows[0]),
+    });
+  } catch (error) {
+    console.error('[settings][roles][POST] erro ao criar funcao:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao criar funcao profissional' });
+  }
+});
+
+router.put('/professional-roles/:id', authorize('configuracoes', 'edit'), async (req, res) => {
+  try {
+    const id = parseRoleId(req.params?.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'id invalido' });
+    }
+
+    const nome = sanitizeRoleName(req.body?.nome);
+    if (!nome) {
+      return res.status(400).json({ success: false, message: 'nome e obrigatorio' });
+    }
+    if (nome.length > 120) {
+      return res.status(400).json({ success: false, message: 'nome deve ter no maximo 120 caracteres' });
+    }
+
+    const duplicate = await pool.query(
+      `
+        SELECT id
+        FROM public.professional_roles
+        WHERE LOWER(nome) = LOWER($1)
+          AND id <> $2
+        LIMIT 1
+      `,
+      [nome, id]
+    );
+
+    if (duplicate.rows.length > 0) {
+      return res.status(409).json({ success: false, message: 'Ja existe funcao com este nome' });
+    }
+
+    const updated = await pool.query(
+      `
+        UPDATE public.professional_roles
+        SET nome = $1,
+            updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, nome, ativo, created_at, updated_at
+      `,
+      [nome, id]
+    );
+
+    if (updated.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Funcao nao encontrada' });
+    }
+
+    return res.json({
+      success: true,
+      role: mapRoleRow(updated.rows[0]),
+    });
+  } catch (error) {
+    console.error('[settings][roles][PUT] erro ao editar funcao:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao editar funcao profissional' });
+  }
+});
+
+router.patch('/professional-roles/:id/ativo', authorize('configuracoes', 'edit'), async (req, res) => {
+  try {
+    const id = parseRoleId(req.params?.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'id invalido' });
+    }
+
+    const ativo = parseRoleActive(req.body?.ativo);
+    if (ativo === null) {
+      return res.status(400).json({ success: false, message: 'ativo deve ser booleano' });
+    }
+
+    const updated = await pool.query(
+      `
+        UPDATE public.professional_roles
+        SET ativo = $1,
+            updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, nome, ativo, created_at, updated_at
+      `,
+      [ativo, id]
+    );
+
+    if (updated.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Funcao nao encontrada' });
+    }
+
+    return res.json({
+      success: true,
+      role: mapRoleRow(updated.rows[0]),
+    });
+  } catch (error) {
+    console.error('[settings][roles][PATCH] erro ao atualizar status da funcao:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao atualizar status da funcao' });
+  }
+});
 
 router.get('/', authorize('configuracoes', 'view'), async (req, res) => {
   try {

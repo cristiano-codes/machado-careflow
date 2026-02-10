@@ -128,6 +128,21 @@ function parsePositiveInteger(value) {
   return parsed;
 }
 
+async function fetchProfessionalRoleById(client, roleId) {
+  if (!roleId) return null;
+  const db = client || pool;
+  const { rows } = await db.query(
+    `
+      SELECT id, nome, ativo
+      FROM public.professional_roles
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [roleId]
+  );
+  return rows[0] || null;
+}
+
 function validateProfessionalPayload(payload, options = {}) {
   const requireUserIdentity = options.requireUserIdentity ?? false;
   const allowedContractTypes = options.allowedContractTypes ?? DEFAULT_CONTRACT_TYPES;
@@ -141,6 +156,7 @@ function validateProfessionalPayload(payload, options = {}) {
   const crp = (payload?.crp || '').toString().trim() || null;
   const specialty = (payload?.specialty || '').toString().trim() || null;
   const funcao = (payload?.funcao || '').toString().trim();
+  const roleId = parsePositiveInteger(payload?.role_id);
   const tipoContrato = normalizeContractType(payload?.tipo_contrato, allowedContractTypes);
   const status = normalizeStatus(payload?.status || 'ATIVO');
   const weeklyScale = normalizeWeeklyScale(payload?.escala_semanal, defaultWeekScale);
@@ -151,8 +167,17 @@ function validateProfessionalPayload(payload, options = {}) {
     return { ok: false, message: 'Nome é obrigatório' };
   }
 
-  if (!funcao) {
-    return { ok: false, message: 'Função é obrigatória' };
+  if (
+    payload?.role_id !== undefined &&
+    payload?.role_id !== null &&
+    payload?.role_id !== '' &&
+    roleId === null
+  ) {
+    return { ok: false, message: 'role_id deve ser um inteiro positivo' };
+  }
+
+  if (!funcao && roleId === null) {
+    return { ok: false, message: 'Funcao obrigatoria: informe role_id ou funcao' };
   }
 
   if (!tipoContrato) {
@@ -196,6 +221,7 @@ function validateProfessionalPayload(payload, options = {}) {
       crp,
       specialty,
       funcao,
+      role_id: roleId,
       tipo_contrato: tipoContrato,
       status,
       escala_semanal: weeklyScale,
@@ -222,6 +248,21 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
     const payload = validation.data;
     await client.query('BEGIN');
 
+    let selectedRole = null;
+    if (payload.role_id !== null) {
+      selectedRole = await fetchProfessionalRoleById(client, payload.role_id);
+      if (!selectedRole) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Funcao selecionada nao encontrada' });
+      }
+      if (!selectedRole.ativo) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Funcao selecionada esta inativa' });
+      }
+    }
+
+    const resolvedFuncao = payload.funcao || selectedRole?.nome || null;
+
     const dup = await client.query(
       'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2) LIMIT 1',
       [payload.username, payload.email]
@@ -244,9 +285,9 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
     const profResult = await client.query(
       `INSERT INTO professionals (
          user_id, user_id_int, crp, specialty, phone, email, status,
-         funcao, horas_semanais, data_nascimento, tipo_contrato, escala_semanal
+         role_id, funcao, horas_semanais, data_nascimento, tipo_contrato, escala_semanal
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
        RETURNING *`,
       [
         null,
@@ -256,7 +297,8 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
         payload.phone,
         payload.email,
         payload.status,
-        payload.funcao,
+        payload.role_id,
+        resolvedFuncao,
         payload.horas_semanais,
         payload.data_nascimento,
         payload.tipo_contrato,
@@ -270,6 +312,8 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
       success: true,
       professional: {
         ...profResult.rows[0],
+        role_id: profResult.rows[0]?.role_id ?? payload.role_id ?? null,
+        role_nome: selectedRole?.nome ?? resolvedFuncao,
         user_name: user.name,
         user_email: user.email,
         user_role: user.role,
@@ -303,11 +347,13 @@ router.get('/', authorize('profissionais', 'view'), async (req, res) => {
         p.phone,
         p.email,
         p.status,
+        p.role_id,
         p.funcao,
         p.horas_semanais,
         p.data_nascimento,
         p.tipo_contrato,
         p.escala_semanal,
+        COALESCE(pr.nome, p.funcao) AS role_nome,
         u.id AS linked_user_id,
         COALESCE(
           u.name,
@@ -372,6 +418,7 @@ router.get('/', authorize('profissionais', 'view'), async (req, res) => {
         ) AS user_username,
         COALESCE(a.total, 0) AS agenda_hoje
       FROM professionals p
+      LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
       LEFT JOIN public.users u ON u.id = p.user_id_int
       LEFT JOIN agenda_hoje a ON a.professional_id = p.id
       ORDER BY COALESCE(
@@ -414,6 +461,7 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
     const existingResult = await client.query(
       `SELECT
          p.*,
+         COALESCE(pr.nome, p.funcao) AS role_nome,
          u.id AS linked_user_id,
          COALESCE(
            u.name,
@@ -477,6 +525,7 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
            'ativo'
          ) AS user_status
        FROM professionals p
+       LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
        LEFT JOIN public.users u ON u.id = p.user_id_int
        WHERE p.id = $1`,
       [id]
@@ -496,7 +545,8 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       phone: req.body?.phone ?? existing.phone,
       crp: req.body?.crp ?? existing.crp,
       specialty: req.body?.specialty ?? existing.specialty,
-      funcao: req.body?.funcao ?? existing.funcao ?? existing.specialty,
+      role_id: req.body?.role_id ?? existing.role_id ?? null,
+      funcao: req.body?.funcao ?? existing.role_nome ?? existing.funcao ?? existing.specialty,
       horas_semanais: req.body?.horas_semanais ?? existing.horas_semanais,
       data_nascimento: req.body?.data_nascimento ?? existing.data_nascimento,
       tipo_contrato: req.body?.tipo_contrato ?? existing.tipo_contrato,
@@ -518,6 +568,27 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
     const payload = validation.data;
 
     await client.query('BEGIN');
+
+    let selectedRole = null;
+    if (payload.role_id !== null) {
+      selectedRole = await fetchProfessionalRoleById(client, payload.role_id);
+      if (!selectedRole) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Funcao selecionada nao encontrada' });
+      }
+      if (!selectedRole.ativo && payload.role_id !== existing.role_id) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Funcao selecionada esta inativa' });
+      }
+    }
+
+    const resolvedFuncao =
+      payload.funcao ||
+      selectedRole?.nome ||
+      existing.role_nome ||
+      existing.funcao ||
+      existing.specialty ||
+      null;
 
     if (existing.linked_user_id) {
       const duplicateIdentity = await client.query(
@@ -554,13 +625,14 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
            phone = $3,
            email = $4,
            status = $5,
-           funcao = $6,
-           horas_semanais = $7,
-           data_nascimento = $8,
-           tipo_contrato = $9,
-           escala_semanal = $10::jsonb,
+           role_id = $6,
+           funcao = $7,
+           horas_semanais = $8,
+           data_nascimento = $9,
+           tipo_contrato = $10,
+           escala_semanal = $11::jsonb,
            updated_at = NOW()
-       WHERE id = $11
+       WHERE id = $12
        RETURNING *`,
       [
         payload.crp,
@@ -568,7 +640,8 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
         payload.phone,
         payload.email,
         payload.status,
-        payload.funcao,
+        payload.role_id,
+        resolvedFuncao,
         payload.horas_semanais,
         payload.data_nascimento,
         payload.tipo_contrato,
@@ -592,6 +665,8 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       success: true,
       professional: {
         ...updatedProfessional.rows[0],
+        role_id: updatedProfessional.rows[0]?.role_id ?? payload.role_id ?? null,
+        role_nome: selectedRole?.nome ?? resolvedFuncao,
         user_name: updatedUser?.name ?? existing.user_name,
         user_email: updatedUser?.email ?? existing.user_email,
         user_role: updatedUser?.role ?? existing.user_role,
@@ -705,3 +780,4 @@ router.get('/stats/resumo', authorize('profissionais', 'view'), async (req, res)
 });
 
 module.exports = router;
+
