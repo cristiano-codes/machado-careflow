@@ -32,7 +32,10 @@ export function Header({ user, onLogout }: HeaderProps) {
       <div className="flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <SidebarTrigger className="h-8 w-8" />
-          <h1 className="text-lg font-semibold text-foreground">{settings.instituicao_nome}</h1>
+          <h1 className="text-lg font-semibold text-foreground">
+            {settings.instituicao_nome}
+            <span className="ml-2 text-xs text-muted-foreground">[build: 2026-02-10-0900]</span>
+          </h1>
         </div>
 
         <div className="flex items-center gap-4">
