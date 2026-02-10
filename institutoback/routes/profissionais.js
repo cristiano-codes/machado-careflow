@@ -243,12 +243,13 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
 
     const profResult = await client.query(
       `INSERT INTO professionals (
-         user_id_int, crp, specialty, phone, email, status,
+         user_id, user_id_int, crp, specialty, phone, email, status,
          funcao, horas_semanais, data_nascimento, tipo_contrato, escala_semanal
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
        RETURNING *`,
       [
+        null,
         user.id,
         payload.crp,
         payload.specialty,
