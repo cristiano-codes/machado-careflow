@@ -1,6 +1,6 @@
-﻿# Machado CareFlow - Backend (`institutoback`)
+﻿# AcolherFlow — Sistema de Gestão do Atendimento Social - Backend (`institutoback`)
 
-API REST do sistema Machado CareFlow.
+API REST do sistema AcolherFlow — Sistema de Gestão do Atendimento Social.
 
 Atualizado em 2026-02-06.
 

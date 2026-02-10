@@ -1,7 +1,7 @@
 @echo off
-title Iniciar Machado CareFlow
+title Iniciar AcolherFlow
 echo ==========================================
-echo      Iniciando o sistema Machado CareFlow
+echo      Iniciando o sistema AcolherFlow
 echo ==========================================
 echo.
 

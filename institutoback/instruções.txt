@@ -1,4 +1,4 @@
-“Este projeto é o Machado CareFlow, disponível no GitHub em https://github.com/cristiano-codes/machado-careflow
+“Este projeto é o AcolherFlow, disponível no GitHub em https://github.com/cristiano-codes/machado-careflow
 .
 
 Sempre que eu fizer perguntas ou pedir ajustes de código, analise o projeto como um todo diretamente a partir desse repositório, considerando a arquitetura e dependências existentes.

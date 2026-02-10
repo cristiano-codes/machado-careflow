@@ -2,7 +2,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { useState, useEffect } from "react";
-import { useSettings } from "@/contexts/SettingsContext";
 import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
 import { API_BASE_URL } from "@/services/api";
 import { 
@@ -85,7 +84,6 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState<StatsData>(defaultStats);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
-  const { settings } = useSettings();
   const { canView: canViewUsers } = useModulePermissions('usuarios');
 
   useEffect(() => {
@@ -311,7 +309,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Painel Principal</h1>
           <p className="text-muted-foreground text-sm">
-            Visão geral das atividades do {settings.instituicao_nome}
+            Visão geral das atividades
           </p>
         </div>
         <div className="flex gap-2">

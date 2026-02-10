@@ -76,8 +76,8 @@ export function AppSidebar() {
             <InstitutionLogo size={32} className="shrink-0" />
             {!isCollapsed && (
               <div>
-                <h2 className="font-semibold text-sm text-foreground">{settings.instituicao_nome}</h2>
-                <p className="text-xs text-muted-foreground">Sistema de Gestão</p>
+                <h2 className="font-semibold text-sm text-foreground">Sistema de Gestão</h2>
+                <p className="text-xs text-muted-foreground">{settings.instituicao_nome}</p>
               </div>
             )}
           </div>

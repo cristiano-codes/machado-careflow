@@ -1,6 +1,6 @@
-﻿# Machado CareFlow
+﻿# AcolherFlow — Sistema de Gestão do Atendimento Social
 
-Sistema de gestao clinica do Instituto Lauir Machado.
+Sistema institucional do IDSLM para gestão do atendimento social.
 
 Atualizado em 2026-02-06.
 

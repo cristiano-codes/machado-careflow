@@ -58,7 +58,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
               {settings.instituicao_nome}
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
-              Sistema de Gestão Institucional
+              AcolherFlow — Sistema de Gestão do Atendimento Social
             </CardDescription>
           </div>
         </CardHeader>
