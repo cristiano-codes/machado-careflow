@@ -75,6 +75,30 @@ export type SettingsPayload = {
   debug_mode: boolean;
 };
 
+export type WeekScale = {
+  seg: boolean;
+  ter: boolean;
+  qua: boolean;
+  qui: boolean;
+  sex: boolean;
+};
+
+export type ProfessionalPayload = {
+  name: string;
+  email: string;
+  username: string;
+  phone?: string;
+  role?: string;
+  crp?: string;
+  specialty?: string;
+  funcao: string;
+  horas_semanais?: number | null;
+  data_nascimento?: string | null;
+  tipo_contrato: "CLT" | "PJ" | "Voluntário" | "Estágio" | "Temporário";
+  escala_semanal?: WeekScale;
+  status?: "ATIVO" | "INATIVO";
+};
+
 type SettingsResponse = {
   success: boolean;
   settings?: SettingsPayload;
@@ -202,20 +226,29 @@ class ApiService {
     return response.json();
   }
 
-  async createProfessional(payload: {
-    name: string;
-    email: string;
-    phone?: string;
-    username: string;
-    role?: string;
-    specialty?: string;
-    crp?: string;
-    status?: string;
-  }) {
+  async createProfessional(payload: ProfessionalPayload) {
     const response = await fetch(`${API_BASE_URL}/profissionais`, {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload),
+    });
+    return response.json();
+  }
+
+  async updateProfessional(id: string, payload: Partial<ProfessionalPayload>) {
+    const response = await fetch(`${API_BASE_URL}/profissionais/${id}`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return response.json();
+  }
+
+  async updateProfessionalStatus(id: string, status: "ATIVO" | "INATIVO") {
+    const response = await fetch(`${API_BASE_URL}/profissionais/${id}/status`, {
+      method: "PATCH",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ status }),
     });
     return response.json();
   }

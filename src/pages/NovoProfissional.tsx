@@ -4,10 +4,20 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ProtectedRoute } from "@/components/common/ProtectedRoute";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/api";
 import { useNavigate } from "react-router-dom";
+
+const CONTRACT_OPTIONS = ["CLT", "PJ", "Volunt�rio", "Est�gio", "Tempor�rio"] as const;
+const WEEK_DAYS: Array<{ key: "seg" | "ter" | "qua" | "qui" | "sex"; label: string }> = [
+  { key: "seg", label: "Seg" },
+  { key: "ter", label: "Ter" },
+  { key: "qua", label: "Qua" },
+  { key: "qui", label: "Qui" },
+  { key: "sex", label: "Sex" },
+];
 
 export default function NovoProfissional() {
   const { toast } = useToast();
@@ -20,8 +30,19 @@ export default function NovoProfissional() {
     username: "",
     specialty: "",
     crp: "",
-    role: "Fisioterapeuta",
-    status: "active",
+    funcao: "",
+    horas_semanais: "",
+    data_nascimento: "",
+    tipo_contrato: "CLT" as (typeof CONTRACT_OPTIONS)[number],
+    escala_semanal: {
+      seg: true,
+      ter: true,
+      qua: true,
+      qui: true,
+      sex: true,
+    },
+    role: "Usu�rio",
+    status: "ATIVO" as "ATIVO" | "INATIVO",
   });
 
   useEffect(() => {
@@ -34,14 +55,38 @@ export default function NovoProfissional() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     try {
-      const res = await apiService.createProfessional(form);
+      const hoursValue =
+        form.horas_semanais.trim().length > 0 ? Number(form.horas_semanais) : null;
+
+      if (hoursValue !== null && (!Number.isInteger(hoursValue) || hoursValue <= 0)) {
+        throw new Error("Horas semanais deve ser um numero inteiro positivo");
+      }
+
+      const res = await apiService.createProfessional({
+        name: form.name,
+        email: form.email,
+        phone: form.phone || undefined,
+        username: form.username,
+        role: form.role,
+        specialty: form.specialty || undefined,
+        crp: form.crp || undefined,
+        funcao: form.funcao,
+        horas_semanais: hoursValue,
+        data_nascimento: form.data_nascimento || null,
+        tipo_contrato: form.tipo_contrato,
+        escala_semanal: form.escala_semanal,
+        status: form.status,
+      });
+
       if (!res?.success) {
         throw new Error(res?.message || "Erro ao criar profissional");
       }
+
       toast({
         title: "Profissional criado",
-        description: "Credenciais iniciais definidas. Peça para o profissional definir a senha no primeiro acesso.",
+        description: "Cadastro criado com os campos do MVP e vinculado ao usuario.",
       });
       navigate("/profissionais");
     } catch (err) {
@@ -52,15 +97,22 @@ export default function NovoProfissional() {
     }
   };
 
-  const setValue = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const setValue = (key: Exclude<keyof typeof form, "escala_semanal">, value: string) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  const setScaleDay = (day: "seg" | "ter" | "qua" | "qui" | "sex", checked: boolean) =>
+    setForm((prev) => ({
+      ...prev,
+      escala_semanal: { ...prev.escala_semanal, [day]: checked },
+    }));
 
   return (
     <ProtectedRoute module="profissionais" permission="create">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Novo profissional</h1>
-            <p className="text-sm text-muted-foreground">Crie o usuário e vincule o cadastro clínico</p>
+            <p className="text-sm text-muted-foreground">Crie o usuario e vincule o cadastro clinico</p>
           </div>
           <Button variant="outline" onClick={() => navigate(-1)}>
             Voltar
@@ -70,7 +122,7 @@ export default function NovoProfissional() {
         <Card>
           <CardHeader>
             <CardTitle>Dados principais</CardTitle>
-            <CardDescription>Esses dados criam o usuário e o vínculo com profissionais</CardDescription>
+            <CardDescription>Esses dados criam o usuario e o vinculo com profissionais</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
@@ -109,33 +161,77 @@ export default function NovoProfissional() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="specialty">Especialidade</Label>
+                  <Label htmlFor="funcao">Funcao</Label>
                   <Input
-                    id="specialty"
-                    value={form.specialty}
-                    onChange={(e) => setValue("specialty", e.target.value)}
+                    id="funcao"
+                    value={form.funcao}
+                    onChange={(e) => setValue("funcao", e.target.value)}
+                    placeholder="Psicologo, Fono, Assistente Social..."
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="crp">CRP/CREFITO</Label>
-                  <Input id="crp" value={form.crp} onChange={(e) => setValue("crp", e.target.value)} />
+                  <Label>Tipo de contrato</Label>
+                  <Select value={form.tipo_contrato} onValueChange={(v) => setValue("tipo_contrato", v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o tipo de contrato" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONTRACT_OPTIONS.map((contract) => (
+                        <SelectItem key={contract} value={contract}>
+                          {contract}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Função</Label>
-                  <Select value={form.role} onValueChange={(v) => setValue("role", v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a função" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Fisioterapeuta">Fisioterapeuta</SelectItem>
-                      <SelectItem value="Coordenador">Coordenador</SelectItem>
-                      <SelectItem value="Assistente">Assistente</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="horas_semanais">Horas semanais</Label>
+                  <Input
+                    id="horas_semanais"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={form.horas_semanais}
+                    onChange={(e) => setValue("horas_semanais", e.target.value)}
+                    placeholder="20, 30, 40..."
+                  />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="data_nascimento">Data de nascimento</Label>
+                  <Input
+                    id="data_nascimento"
+                    type="date"
+                    value={form.data_nascimento}
+                    onChange={(e) => setValue("data_nascimento", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Escala semanal</Label>
+                <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                  {WEEK_DAYS.map((day) => (
+                    <label
+                      key={day.key}
+                      className="flex items-center gap-2 text-sm font-medium"
+                      htmlFor={`escala_${day.key}`}
+                    >
+                      <Checkbox
+                        id={`escala_${day.key}`}
+                        checked={form.escala_semanal[day.key]}
+                        onCheckedChange={(checked) => setScaleDay(day.key, checked === true)}
+                      />
+                      {day.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Status</Label>
                   <Select value={form.status} onValueChange={(v) => setValue("status", v)}>
@@ -143,13 +239,25 @@ export default function NovoProfissional() {
                       <SelectValue placeholder="Selecione o status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="active">Ativo</SelectItem>
-                      <SelectItem value="plantao">Plantão</SelectItem>
-                      <SelectItem value="onboarding">Onboarding</SelectItem>
-                      <SelectItem value="afastado">Afastado</SelectItem>
-                      <SelectItem value="inactive">Inativo</SelectItem>
+                      <SelectItem value="ATIVO">Ativo</SelectItem>
+                      <SelectItem value="INATIVO">Inativo</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="specialty">Especialidade (legado)</Label>
+                  <Input
+                    id="specialty"
+                    value={form.specialty}
+                    onChange={(e) => setValue("specialty", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="crp">CRP/CREFITO (legado)</Label>
+                  <Input id="crp" value={form.crp} onChange={(e) => setValue("crp", e.target.value)} />
                 </div>
               </div>
 
