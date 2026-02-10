@@ -10,6 +10,8 @@ router.use(authMiddleware);
 const DEFAULT_CONTRACT_TYPES = ['CLT', 'PJ', 'Voluntário', 'Estágio', 'Temporário'];
 const SCALE_KEYS = ['seg', 'ter', 'qua', 'qui', 'sex'];
 const DEFAULT_WEEK_SCALE = { seg: true, ter: true, qua: true, qui: true, sex: true };
+const DEFAULT_DAY_START_TIME = '08:00';
+const DEFAULT_DAY_END_TIME = '17:20';
 
 function normalizeText(value) {
   return (value || '')
@@ -27,6 +29,20 @@ function normalizeStatus(value) {
   if (['ativo', 'active', 'plantao', 'onboarding'].includes(raw)) return 'ATIVO';
   if (['inativo', 'inactive', 'afastado'].includes(raw)) return 'INATIVO';
   return null;
+}
+
+function parseTimeToMinutes(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^\d{2}:\d{2}$/.test(trimmed)) return null;
+
+  const [hoursRaw, minutesRaw] = trimmed.split(':');
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return hours * 60 + minutes;
 }
 
 async function getProfessionalsRuntimeConfig() {
@@ -60,14 +76,24 @@ async function getProfessionalsRuntimeConfig() {
       }
     }
 
+    const openingTime = typeof businessHours.opening_time === 'string' ? businessHours.opening_time.trim() : '';
+    const closingTime = typeof businessHours.closing_time === 'string' ? businessHours.closing_time.trim() : '';
+
+    const defaultStartTime = parseTimeToMinutes(openingTime) === null ? DEFAULT_DAY_START_TIME : openingTime;
+    const defaultEndTime = parseTimeToMinutes(closingTime) === null ? DEFAULT_DAY_END_TIME : closingTime;
+
     return {
       allowedContractTypes: allowedContractTypes.length > 0 ? allowedContractTypes : DEFAULT_CONTRACT_TYPES,
       defaultWeekScale,
+      defaultStartTime,
+      defaultEndTime,
     };
   } catch (error) {
     return {
       allowedContractTypes: DEFAULT_CONTRACT_TYPES,
       defaultWeekScale: { ...DEFAULT_WEEK_SCALE },
+      defaultStartTime: DEFAULT_DAY_START_TIME,
+      defaultEndTime: DEFAULT_DAY_END_TIME,
     };
   }
 }
@@ -86,9 +112,28 @@ function isValidDateValue(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
 }
 
-function normalizeWeeklyScale(value, defaultWeekScale = DEFAULT_WEEK_SCALE) {
+function normalizeWeeklyScale(
+  value,
+  defaultWeekScale = DEFAULT_WEEK_SCALE,
+  defaultStartTime = DEFAULT_DAY_START_TIME,
+  defaultEndTime = DEFAULT_DAY_END_TIME
+) {
+  const startDefaultMinutes = parseTimeToMinutes(defaultStartTime);
+  const endDefaultMinutes = parseTimeToMinutes(defaultEndTime);
+
+  const safeDefaultStart = startDefaultMinutes === null ? DEFAULT_DAY_START_TIME : defaultStartTime;
+  const safeDefaultEnd = endDefaultMinutes === null ? DEFAULT_DAY_END_TIME : defaultEndTime;
+
   if (value === undefined || value === null || value === '') {
-    return { ...defaultWeekScale };
+    const fallback = {};
+    for (const key of SCALE_KEYS) {
+      fallback[key] = {
+        ativo: Boolean(defaultWeekScale[key]),
+        inicio: safeDefaultStart,
+        fim: safeDefaultEnd,
+      };
+    }
+    return fallback;
   }
 
   let raw = value;
@@ -104,14 +149,75 @@ function normalizeWeeklyScale(value, defaultWeekScale = DEFAULT_WEEK_SCALE) {
     return null;
   }
 
-  const normalized = { ...defaultWeekScale };
+  const normalized = {};
   for (const key of SCALE_KEYS) {
-    if (raw[key] !== undefined) {
-      if (typeof raw[key] !== 'boolean') {
-        return null;
-      }
-      normalized[key] = raw[key];
+    const defaultDay = {
+      ativo: Boolean(defaultWeekScale[key]),
+      inicio: safeDefaultStart,
+      fim: safeDefaultEnd,
+    };
+
+    const current = raw[key];
+    if (current === undefined) {
+      normalized[key] = defaultDay;
+      continue;
     }
+
+    if (typeof current === 'boolean') {
+      normalized[key] = {
+        ...defaultDay,
+        ativo: current,
+      };
+      continue;
+    }
+
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return null;
+    }
+
+    const activeValue =
+      current.ativo !== undefined
+        ? current.ativo
+        : current.active !== undefined
+          ? current.active
+          : current.enabled !== undefined
+            ? current.enabled
+            : undefined;
+
+    if (activeValue !== undefined && typeof activeValue !== 'boolean') {
+      return null;
+    }
+
+    const inicioValue =
+      typeof current.inicio === 'string'
+        ? current.inicio.trim()
+        : typeof current.start === 'string'
+          ? current.start.trim()
+          : defaultDay.inicio;
+
+    const fimValue =
+      typeof current.fim === 'string'
+        ? current.fim.trim()
+        : typeof current.end === 'string'
+          ? current.end.trim()
+          : defaultDay.fim;
+
+    const inicioMinutes = parseTimeToMinutes(inicioValue);
+    const fimMinutes = parseTimeToMinutes(fimValue);
+    if (inicioMinutes === null || fimMinutes === null) {
+      return null;
+    }
+
+    const ativo = typeof activeValue === 'boolean' ? activeValue : defaultDay.ativo;
+    if (ativo && inicioMinutes >= fimMinutes) {
+      return null;
+    }
+
+    normalized[key] = {
+      ativo,
+      inicio: inicioValue,
+      fim: fimValue,
+    };
   }
 
   return normalized;
@@ -147,6 +253,8 @@ function validateProfessionalPayload(payload, options = {}) {
   const requireUserIdentity = options.requireUserIdentity ?? false;
   const allowedContractTypes = options.allowedContractTypes ?? DEFAULT_CONTRACT_TYPES;
   const defaultWeekScale = options.defaultWeekScale ?? DEFAULT_WEEK_SCALE;
+  const defaultStartTime = options.defaultStartTime ?? DEFAULT_DAY_START_TIME;
+  const defaultEndTime = options.defaultEndTime ?? DEFAULT_DAY_END_TIME;
 
   const name = (payload?.name || '').toString().trim();
   const email = (payload?.email || '').toString().trim().toLowerCase();
@@ -159,7 +267,12 @@ function validateProfessionalPayload(payload, options = {}) {
   const roleId = parsePositiveInteger(payload?.role_id);
   const tipoContrato = normalizeContractType(payload?.tipo_contrato, allowedContractTypes);
   const status = normalizeStatus(payload?.status || 'ATIVO');
-  const weeklyScale = normalizeWeeklyScale(payload?.escala_semanal, defaultWeekScale);
+  const weeklyScale = normalizeWeeklyScale(
+    payload?.escala_semanal,
+    defaultWeekScale,
+    defaultStartTime,
+    defaultEndTime
+  );
   const weeklyHours = parsePositiveInteger(payload?.horas_semanais);
   const birthDate = payload?.data_nascimento ? payload.data_nascimento.toString().trim() : null;
 
@@ -198,7 +311,8 @@ function validateProfessionalPayload(payload, options = {}) {
   if (!weeklyScale) {
     return {
       ok: false,
-      message: 'escala_semanal inválida. Use objeto com seg, ter, qua, qui e sex booleanos',
+      message:
+        'escala_semanal invalida. Use seg/ter/qua/qui/sex como boolean ou objeto {ativo,inicio,fim}',
     };
   }
 
@@ -240,6 +354,8 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
       requireUserIdentity: true,
       allowedContractTypes: runtimeConfig.allowedContractTypes,
       defaultWeekScale: runtimeConfig.defaultWeekScale,
+      defaultStartTime: runtimeConfig.defaultStartTime,
+      defaultEndTime: runtimeConfig.defaultEndTime,
     });
     if (!validation.ok) {
       return res.status(400).json({ success: false, message: validation.message });
@@ -559,6 +675,8 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       requireUserIdentity: Boolean(existing.linked_user_id),
       allowedContractTypes: runtimeConfig.allowedContractTypes,
       defaultWeekScale: runtimeConfig.defaultWeekScale,
+      defaultStartTime: runtimeConfig.defaultStartTime,
+      defaultEndTime: runtimeConfig.defaultEndTime,
     });
 
     if (!validation.ok) {

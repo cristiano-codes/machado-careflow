@@ -1,304 +1,524 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
-import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
-import { apiService } from "@/services/api";
-import { getServiceLabel } from "@/utils/serviceLabels";
-import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  AlertTriangle,
-  Building2,
-  CalendarClock,
-  Clock3,
-  Filter,
-  HeartPulse,
-  ShieldCheck,
-  Stethoscope,
-  UserPlus,
-  Users,
-} from "lucide-react";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
+import { apiService, type ProfessionalRole } from "@/services/api";
+import { useSettings } from "@/contexts/SettingsContext";
+import { useToast } from "@/hooks/use-toast";
+import { CalendarClock, Pencil, Plus, Trash2 } from "lucide-react";
 
-type WeekScale = {
-  seg: boolean;
-  ter: boolean;
-  qua: boolean;
-  qui: boolean;
-  sex: boolean;
+const WEEK_DAYS = ["seg", "ter", "qua", "qui", "sex"] as const;
+type WeekDay = (typeof WEEK_DAYS)[number];
+
+type ScaleDay = {
+  ativo: boolean;
+  inicio: string;
+  fim: string;
 };
+
+type WeekScale = Record<WeekDay, ScaleDay>;
 
 type ApiProfessional = {
   id: string;
   role_id?: number | null;
   role_nome?: string | null;
   user_name: string | null;
-  user_email: string | null;
-  user_role: string | null;
-  crp: string | null;
-  specialty: string | null;
-  phone: string | null;
   email: string | null;
   status: string;
-  agenda_hoje: number;
+  specialty?: string | null;
   funcao?: string | null;
-  horas_semanais?: number | null;
-  data_nascimento?: string | null;
   tipo_contrato?: string | null;
-  escala_semanal?: WeekScale | string | null;
+  horas_semanais?: number | null;
+  escala_semanal?: unknown;
 };
 
-type ApiAppointment = {
-  id: string;
-  professional_id: string;
-  appointment_time: string;
-  status: string;
-  patient_name: string;
-  service_name: string | null;
-  notes: string | null;
-};
-
-type Professional = ApiProfessional & {
-  agenda: ApiAppointment[];
-  ocupacao: number;
-  pacientesHoje: number;
+type ProfessionalRow = ApiProfessional & {
   status_normalized: "ATIVO" | "INATIVO";
   escala_normalizada: WeekScale;
 };
 
-const CAPACIDADE_DIA = 10;
-const WEEK_DAYS: Array<keyof WeekScale> = ["seg", "ter", "qua", "qui", "sex"];
-const WEEK_LABELS: Record<keyof WeekScale, string> = {
+const DAY_LABELS: Record<WeekDay, string> = {
   seg: "Seg",
   ter: "Ter",
   qua: "Qua",
   qui: "Qui",
   sex: "Sex",
 };
-const DEFAULT_WEEK_SCALE: WeekScale = { seg: true, ter: true, qua: true, qui: true, sex: true };
 
-const statusLabels: Record<"ATIVO" | "INATIVO", string> = {
-  ATIVO: "Ativo",
-  INATIVO: "Inativo",
-};
+const DEFAULT_START_TIME = "08:00";
+const DEFAULT_END_TIME = "17:20";
 
-const statusVariant: Record<"ATIVO" | "INATIVO", "default" | "secondary" | "outline" | "destructive"> = {
-  ATIVO: "default",
-  INATIVO: "outline",
-};
+function isValidTime(value: string | null | undefined) {
+  if (!value) return false;
+  return /^\d{2}:\d{2}$/.test(value);
+}
 
-function getInitials(name: string | null | undefined) {
-  if (!name) return "PR";
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+function parseTimeToMinutes(value: string | null | undefined) {
+  if (!isValidTime(value)) return null;
+  const [hoursRaw, minutesRaw] = (value || "").split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
 }
 
 function normalizeStatus(status: string | null | undefined): "ATIVO" | "INATIVO" {
   const raw = (status || "").toLowerCase().trim();
-  if (["ativo", "active", "plantao", "onboarding"].includes(raw)) return "ATIVO";
   if (["inativo", "inactive", "afastado"].includes(raw)) return "INATIVO";
   return "ATIVO";
 }
 
-function normalizeScale(scale: WeekScale | string | null | undefined): WeekScale {
-  if (!scale) return { ...DEFAULT_WEEK_SCALE };
+function cloneScale(scale: WeekScale): WeekScale {
+  return {
+    seg: { ...scale.seg },
+    ter: { ...scale.ter },
+    qua: { ...scale.qua },
+    qui: { ...scale.qui },
+    sex: { ...scale.sex },
+  };
+}
 
-  let raw: unknown = scale;
+function buildDefaultScale(settings: ReturnType<typeof useSettings>["settings"]): WeekScale {
+  const opening = isValidTime(settings.business_hours.opening_time)
+    ? settings.business_hours.opening_time
+    : DEFAULT_START_TIME;
+  const closing = isValidTime(settings.business_hours.closing_time)
+    ? settings.business_hours.closing_time
+    : DEFAULT_END_TIME;
+
+  return {
+    seg: { ativo: Boolean(settings.business_hours.operating_days.seg), inicio: opening, fim: closing },
+    ter: { ativo: Boolean(settings.business_hours.operating_days.ter), inicio: opening, fim: closing },
+    qua: { ativo: Boolean(settings.business_hours.operating_days.qua), inicio: opening, fim: closing },
+    qui: { ativo: Boolean(settings.business_hours.operating_days.qui), inicio: opening, fim: closing },
+    sex: { ativo: Boolean(settings.business_hours.operating_days.sex), inicio: opening, fim: closing },
+  };
+}
+
+function normalizeScale(value: unknown, defaults: WeekScale): WeekScale {
+  let raw = value;
   if (typeof raw === "string") {
     try {
       raw = JSON.parse(raw);
     } catch {
-      return { ...DEFAULT_WEEK_SCALE };
+      return cloneScale(defaults);
     }
   }
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { ...DEFAULT_WEEK_SCALE };
+    return cloneScale(defaults);
   }
 
-  const source = raw as Partial<WeekScale>;
-  return {
-    seg: typeof source.seg === "boolean" ? source.seg : DEFAULT_WEEK_SCALE.seg,
-    ter: typeof source.ter === "boolean" ? source.ter : DEFAULT_WEEK_SCALE.ter,
-    qua: typeof source.qua === "boolean" ? source.qua : DEFAULT_WEEK_SCALE.qua,
-    qui: typeof source.qui === "boolean" ? source.qui : DEFAULT_WEEK_SCALE.qui,
-    sex: typeof source.sex === "boolean" ? source.sex : DEFAULT_WEEK_SCALE.sex,
-  };
+  const source = raw as Record<string, unknown>;
+  const result = cloneScale(defaults);
+
+  for (const day of WEEK_DAYS) {
+    const current = source[day];
+
+    if (typeof current === "boolean") {
+      result[day].ativo = current;
+      continue;
+    }
+
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      continue;
+    }
+
+    const currentObj = current as Record<string, unknown>;
+    const ativo =
+      typeof currentObj.ativo === "boolean"
+        ? currentObj.ativo
+        : typeof currentObj.active === "boolean"
+          ? currentObj.active
+          : result[day].ativo;
+
+    const inicioCandidate =
+      typeof currentObj.inicio === "string"
+        ? currentObj.inicio
+        : typeof currentObj.start === "string"
+          ? currentObj.start
+          : result[day].inicio;
+
+    const fimCandidate =
+      typeof currentObj.fim === "string"
+        ? currentObj.fim
+        : typeof currentObj.end === "string"
+          ? currentObj.end
+          : result[day].fim;
+
+    result[day] = {
+      ativo,
+      inicio: isValidTime(inicioCandidate) ? inicioCandidate : result[day].inicio,
+      fim: isValidTime(fimCandidate) ? fimCandidate : result[day].fim,
+    };
+  }
+
+  return result;
 }
 
-function getName(prof: ApiProfessional) {
-  return prof.user_name || prof.email || "Profissional sem nome";
+function getName(professional: ApiProfessional) {
+  return professional.user_name || professional.email || "Profissional sem nome";
 }
 
-function getDisplayFunction(prof: ApiProfessional) {
-  return prof.role_nome || prof.funcao || prof.specialty || "Funcao nao informada";
+function getFunctionLabel(professional: ApiProfessional) {
+  return professional.role_nome || professional.funcao || professional.specialty || "Nao informado";
 }
 
 function getScaleSummary(scale: WeekScale) {
-  const enabled = WEEK_DAYS.filter((day) => scale[day]);
-  if (enabled.length === 0) return "Sem dias definidos";
+  const enabled = WEEK_DAYS.filter((day) => scale[day].ativo);
+  if (enabled.length === 0) return "Sem escala";
   if (enabled.length === WEEK_DAYS.length) return "Seg-Sex";
-  return enabled.map((day) => WEEK_LABELS[day]).join(", ");
+  return enabled.map((day) => DAY_LABELS[day]).join(", ");
 }
 
-function getAgeFromBirthDate(value: string | null | undefined) {
-  if (!value) return null;
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return null;
-
-  const now = new Date();
-  let years = now.getFullYear() - date.getFullYear();
-  const monthDiff = now.getMonth() - date.getMonth();
-  const dayDiff = now.getDate() - date.getDate();
-  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) years -= 1;
-  return years >= 0 ? years : null;
+function getStatusVariant(status: "ATIVO" | "INATIVO"): "default" | "secondary" | "outline" | "destructive" {
+  return status === "ATIVO" ? "default" : "outline";
 }
 
-function formatBirthDate(value: string | null | undefined) {
-  if (!value) return null;
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("pt-BR");
+function resolveRoleId(professional: ApiProfessional, roles: ProfessionalRole[]) {
+  if (typeof professional.role_id === "number" && professional.role_id > 0) {
+    return String(professional.role_id);
+  }
+
+  const currentLabel = getFunctionLabel(professional).toLowerCase();
+  const byName = roles.find((role) => role.nome.toLowerCase() === currentLabel);
+  return byName ? String(byName.id) : "";
+}
+
+function getWeeklyMinutes(scale: WeekScale) {
+  let total = 0;
+  for (const day of WEEK_DAYS) {
+    const row = scale[day];
+    if (!row.ativo) continue;
+
+    const start = parseTimeToMinutes(row.inicio);
+    const end = parseTimeToMinutes(row.fim);
+    if (start === null || end === null || end <= start) continue;
+    total += end - start;
+  }
+
+  return total;
 }
 
 export default function Profissionais() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("todos");
-  const [funcaoFilter, setFuncaoFilter] = useState<string>("todas");
-  const [onlyAvailable, setOnlyAvailable] = useState(false);
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { settings } = useSettings();
+  const { canCreate, canEdit, permissions } = useModulePermissions("profissionais");
+
+  const [professionals, setProfessionals] = useState<ProfessionalRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statsResumo, setStatsResumo] = useState<{ total: number; agendaHoje: number; porStatus: unknown[] }>({
-    total: 0,
-    agendaHoje: 0,
-    porStatus: [],
+
+  const [roles, setRoles] = useState<ProfessionalRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"todos" | "ATIVO" | "INATIVO">("todos");
+
+  const [editTarget, setEditTarget] = useState<ProfessionalRow | null>(null);
+  const [editForm, setEditForm] = useState({
+    roleId: "",
+    contractType: "",
+    weeklyHours: "",
+    status: "ATIVO" as "ATIVO" | "INATIVO",
   });
+  const [savingEdit, setSavingEdit] = useState(false);
 
-  const { canCreate } = useModulePermissions("profissionais");
+  const [scaleTarget, setScaleTarget] = useState<ProfessionalRow | null>(null);
+  const [scaleForm, setScaleForm] = useState<WeekScale>({
+    seg: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    ter: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    qua: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    qui: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    sex: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+  });
+  const [savingScale, setSavingScale] = useState(false);
+  const [inactivatingId, setInactivatingId] = useState<string | null>(null);
+
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const navigate = useNavigate();
 
-  useEffect(() => {
-    const load = async () => {
+  const defaultScale = useMemo(() => buildDefaultScale(settings), [settings]);
+
+  const contractOptions = useMemo(() => {
+    const configured = settings.professionals_config.allowed_contract_types || [];
+    if (configured.length > 0) return configured;
+    return ["CLT", "PJ", "Voluntario", "Estagio", "Temporario"];
+  }, [settings.professionals_config.allowed_contract_types]);
+
+  const canManageStatus = canEdit || permissions.has("status") || permissions.has("*");
+
+  const loadProfessionals = useCallback(async () => {
+    try {
       setLoading(true);
       setError(null);
 
-      try {
-        const profRes = await apiService.getProfessionals(today);
-        if (!Array.isArray(profRes) && !profRes?.success) {
-          throw new Error(profRes?.message || "Nao foi possivel carregar profissionais");
-        }
-
-        const rawList: ApiProfessional[] = Array.isArray(profRes) ? profRes : profRes.professionals || [];
-
-        const listWithAgenda: Professional[] = await Promise.all(
-          rawList.map(async (p) => {
-            let agenda: ApiAppointment[] = [];
-            try {
-              const agendaRes = await apiService.getProfessionalAgenda(p.id, today);
-              agenda = agendaRes?.success ? agendaRes.agenda || [] : [];
-            } catch {
-              agenda = [];
-            }
-
-            const ocupacao = Math.min(100, Math.round(((agenda.length || 0) / CAPACIDADE_DIA) * 100));
-            return {
-              ...p,
-              agenda,
-              ocupacao,
-              pacientesHoje: agenda.length,
-              status_normalized: normalizeStatus(p.status),
-              escala_normalizada: normalizeScale(p.escala_semanal),
-            };
-          })
-        );
-
-        setProfessionals(listWithAgenda);
-
-        const statsRes = await apiService.getProfessionalsStats(today);
-        if (statsRes?.success) {
-          setStatsResumo(statsRes.stats);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao carregar dados";
-        setError(msg);
-      } finally {
-        setLoading(false);
+      const response = await apiService.getProfessionals(today);
+      if (!Array.isArray(response) && !response?.success) {
+        throw new Error(response?.message || "Nao foi possivel carregar profissionais");
       }
-    };
 
-    load();
-  }, [today]);
+      const rawList: ApiProfessional[] = Array.isArray(response)
+        ? response
+        : Array.isArray(response.professionals)
+          ? response.professionals
+          : [];
 
-  const funcoes = useMemo(
-    () => Array.from(new Set(professionals.map((p) => getDisplayFunction(p)).filter(Boolean))),
-    [professionals]
-  );
+      const normalized: ProfessionalRow[] = rawList.map((item) => ({
+        ...item,
+        status_normalized: normalizeStatus(item.status),
+        escala_normalizada: normalizeScale(item.escala_semanal, defaultScale),
+      }));
+
+      setProfessionals(normalized);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao carregar profissionais";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [defaultScale, today]);
+
+  const loadRoles = useCallback(async () => {
+    try {
+      setRolesLoading(true);
+      const response = await apiService.getProfessionalRoles(true);
+      if (!response.success) {
+        throw new Error(response.message || "Nao foi possivel carregar funcoes");
+      }
+      setRoles(response.roles || []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao carregar funcoes";
+      toast({ title: "Funcoes", description: message, variant: "destructive" });
+    } finally {
+      setRolesLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    void loadProfessionals();
+  }, [loadProfessionals]);
+
+  useEffect(() => {
+    void loadRoles();
+  }, [loadRoles]);
+
+  useEffect(() => {
+    if (!editTarget) return;
+    if (editForm.roleId) return;
+
+    const roleId = resolveRoleId(editTarget, roles);
+    if (!roleId) return;
+
+    setEditForm((prev) => ({ ...prev, roleId }));
+  }, [editTarget, editForm.roleId, roles]);
 
   const filteredProfessionals = useMemo(() => {
-    return professionals.filter((prof) => {
-      const nome = getName(prof).toLowerCase();
-      const funcao = getDisplayFunction(prof).toLowerCase();
-      const contrato = (prof.tipo_contrato || "").toLowerCase();
+    return professionals.filter((professional) => {
+      const searchTerm = search.toLowerCase().trim();
+      const searchable = [
+        getName(professional),
+        getFunctionLabel(professional),
+        professional.tipo_contrato || "",
+      ]
+        .join(" ")
+        .toLowerCase();
 
-      const term = search.toLowerCase();
-      const matchesSearch = nome.includes(term) || funcao.includes(term) || contrato.includes(term);
+      const matchesSearch = searchTerm.length === 0 || searchable.includes(searchTerm);
+      const matchesStatus = statusFilter === "todos" || professional.status_normalized === statusFilter;
 
-      const matchesStatus = statusFilter === "todos" ? true : prof.status_normalized === statusFilter;
-      const matchesFuncao = funcaoFilter === "todas" ? true : getDisplayFunction(prof) === funcaoFilter;
-      const withinLoad = !onlyAvailable || (prof.status_normalized === "ATIVO" && prof.ocupacao < 90);
-
-      return matchesSearch && matchesStatus && matchesFuncao && withinLoad;
+      return matchesSearch && matchesStatus;
     });
-  }, [funcaoFilter, onlyAvailable, professionals, search, statusFilter]);
+  }, [professionals, search, statusFilter]);
 
-  const stats = useMemo(() => {
-    const ativos = professionals.filter((p) => p.status_normalized === "ATIVO");
-    const disponiveis = ativos.filter((p) => p.ocupacao < 90);
-    const inativos = professionals.filter((p) => p.status_normalized === "INATIVO").length;
-
-    return {
-      total: statsResumo.total || professionals.length,
-      disponiveis: disponiveis.length,
-      inativos,
-      agendaHoje: statsResumo.agendaHoje,
-    };
-  }, [professionals, statsResumo]);
-
-  const pendencias = useMemo(
-    () => professionals.filter((p) => p.status_normalized === "INATIVO"),
-    [professionals]
-  );
-
-  const equipeAtiva = useMemo(
-    () => professionals.filter((p) => p.status_normalized === "ATIVO"),
-    [professionals]
-  );
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px]">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
-      </div>
-    );
+  function openEditDialog(professional: ProfessionalRow) {
+    const roleId = resolveRoleId(professional, roles);
+    setEditTarget(professional);
+    setEditForm({
+      roleId,
+      contractType: professional.tipo_contrato || contractOptions[0] || "",
+      weeklyHours:
+        professional.horas_semanais !== null && professional.horas_semanais !== undefined
+          ? String(professional.horas_semanais)
+          : "",
+      status: professional.status_normalized,
+    });
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px]">
-        <p className="text-sm text-destructive">{error}</p>
-      </div>
+  async function handleSaveEdit() {
+    if (!editTarget) return;
+
+    const selectedRole = roles.find((role) => String(role.id) === editForm.roleId);
+    if (!selectedRole) {
+      toast({ title: "Editar profissional", description: "Selecione uma funcao valida.", variant: "destructive" });
+      return;
+    }
+
+    const weeklyHours = editForm.weeklyHours.trim().length > 0 ? Number(editForm.weeklyHours) : null;
+    if (weeklyHours !== null && (!Number.isInteger(weeklyHours) || weeklyHours <= 0)) {
+      toast({
+        title: "Editar profissional",
+        description: "Carga semanal deve ser um numero inteiro positivo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const response = await apiService.updateProfessional(editTarget.id, {
+        role_id: selectedRole.id,
+        funcao: selectedRole.nome,
+        tipo_contrato: editForm.contractType,
+        horas_semanais: weeklyHours,
+        status: editForm.status,
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || "Nao foi possivel salvar profissional");
+      }
+
+      setEditTarget(null);
+      await loadProfessionals();
+      toast({ title: "Profissional atualizado", description: "Dados salvos com sucesso." });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao salvar profissional";
+      toast({ title: "Editar profissional", description: message, variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  function openScaleDialog(professional: ProfessionalRow) {
+    setScaleTarget(professional);
+    setScaleForm(cloneScale(professional.escala_normalizada));
+  }
+
+  function updateScaleDay(day: WeekDay, patch: Partial<ScaleDay>) {
+    setScaleForm((prev) => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        ...patch,
+      },
+    }));
+  }
+
+  async function handleSaveScale() {
+    if (!scaleTarget) return;
+
+    let totalMinutes = 0;
+
+    for (const day of WEEK_DAYS) {
+      const row = scaleForm[day];
+      if (!row.ativo) continue;
+
+      const start = parseTimeToMinutes(row.inicio);
+      const end = parseTimeToMinutes(row.fim);
+
+      if (start === null || end === null) {
+        toast({
+          title: "Escala semanal",
+          description: `Horario invalido em ${DAY_LABELS[day]}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (end <= start) {
+        toast({
+          title: "Escala semanal",
+          description: `Horario de fim deve ser maior que inicio em ${DAY_LABELS[day]}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      totalMinutes += end - start;
+    }
+
+    if (
+      typeof scaleTarget.horas_semanais === "number" &&
+      scaleTarget.horas_semanais > 0 &&
+      totalMinutes > scaleTarget.horas_semanais * 60
+    ) {
+      toast({
+        title: "Escala semanal",
+        description: "Escala ultrapassa a carga semanal configurada para este profissional.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const resolvedRoleId = resolveRoleId(scaleTarget, roles);
+      const selectedRole = roles.find((role) => String(role.id) === resolvedRoleId);
+      const fallbackContract = scaleTarget.tipo_contrato || contractOptions[0];
+      if (!fallbackContract) {
+        throw new Error("Nao foi possivel identificar tipo de contrato para salvar a escala.");
+      }
+
+      setSavingScale(true);
+      const response = await apiService.updateProfessional(scaleTarget.id, {
+        role_id: selectedRole?.id,
+        funcao: selectedRole?.nome || getFunctionLabel(scaleTarget),
+        tipo_contrato: fallbackContract,
+        horas_semanais: scaleTarget.horas_semanais ?? null,
+        status: scaleTarget.status_normalized,
+        escala_semanal: scaleForm,
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || "Nao foi possivel salvar escala");
+      }
+
+      setScaleTarget(null);
+      await loadProfessionals();
+      toast({ title: "Escala atualizada", description: "Escala semanal salva com sucesso." });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao salvar escala";
+      toast({ title: "Escala semanal", description: message, variant: "destructive" });
+    } finally {
+      setSavingScale(false);
+    }
+  }
+
+  async function handleInactivate(professional: ProfessionalRow) {
+    const confirmed = window.confirm(
+      `Deseja inativar ${getName(professional)}? Esta acao funciona como exclusao logica.`
     );
+    if (!confirmed) return;
+
+    try {
+      setInactivatingId(professional.id);
+      const response = await apiService.updateProfessionalStatus(professional.id, "INATIVO");
+      if (!response?.success) {
+        throw new Error(response?.message || "Nao foi possivel inativar profissional");
+      }
+
+      await loadProfessionals();
+      toast({ title: "Profissional inativado", description: "Registro mantido com status inativo." });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao inativar profissional";
+      toast({ title: "Excluir profissional", description: message, variant: "destructive" });
+    } finally {
+      setInactivatingId(null);
+    }
   }
 
   return (
@@ -306,359 +526,279 @@ export default function Profissionais() {
       <div className="mx-auto max-w-7xl space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Central de times</p>
             <h1 className="text-2xl font-bold tracking-tight">Profissionais</h1>
-            <p className="text-sm text-muted-foreground">Disponibilidade, funcao, contrato e escala da equipe</p>
+            <p className="text-sm text-muted-foreground">Cadastro da equipe e escala semanal</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="flex items-center gap-2">
-              <CalendarClock className="h-4 w-4" />
-              Escala do dia
+
+          {canCreate && (
+            <Button className="flex items-center gap-2" onClick={() => navigate("/profissionais/novo")}>
+              <Plus className="h-4 w-4" />
+              Novo profissional
             </Button>
-            {canCreate && (
-              <Button className="flex items-center gap-2" onClick={() => navigate("/profissionais/novo")}>
-                <UserPlus className="h-4 w-4" />
-                Novo profissional
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-0 bg-gradient-to-br from-primary/10 via-background to-background">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Profissionais</CardTitle>
-              <CardDescription className="flex items-center gap-2 text-sm">
-                <Building2 className="h-4 w-4 text-primary" />
-                Operacao de hoje
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-semibold">{stats.total}</div>
-              <p className="text-xs text-muted-foreground">Inclui todos os status</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0" style={{ boxShadow: "var(--shadow-soft)" }}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Disponiveis agora</CardTitle>
-              <CardDescription className="flex items-center gap-2 text-sm">
-                <HeartPulse className="h-4 w-4 text-success" />
-                Ativos com folga &lt; 90%
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-semibold text-success">{stats.disponiveis}</div>
-              <p className="text-xs text-muted-foreground">Prontos para receber novos casos</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0" style={{ boxShadow: "var(--shadow-soft)" }}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Agenda de hoje</CardTitle>
-              <CardDescription className="flex items-center gap-2 text-sm">
-                <ShieldCheck className="h-4 w-4 text-accent" />
-                Total de atendimentos
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-semibold text-accent">{stats.agendaHoje}</div>
-              <p className="text-xs text-muted-foreground">Somando todos os profissionais</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-dashed">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Inativos</CardTitle>
-              <CardDescription className="flex items-center gap-2 text-sm">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Fora de operacao
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-semibold text-warning">{stats.inativos}</div>
-              <p className="text-xs text-muted-foreground">Direcionar carteira dos assistidos</p>
-            </CardContent>
-          </Card>
+          )}
         </div>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              Filtrar escala
-            </CardTitle>
-            <CardDescription>Refine por disponibilidade, status e funcao</CardDescription>
+            <CardTitle>Equipe</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <div className="lg:col-span-2">
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-[1fr_220px]">
               <Input
                 placeholder="Buscar por nome, funcao ou contrato"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(event) => setSearch(event.target.value)}
               />
+
+              <Select value={statusFilter} onValueChange={(value: "todos" | "ATIVO" | "INATIVO") => setStatusFilter(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="ATIVO">Ativo</SelectItem>
+                  <SelectItem value="INATIVO">Inativo</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="ATIVO">Ativos</SelectItem>
-                <SelectItem value="INATIVO">Inativos</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={funcaoFilter} onValueChange={(v) => setFuncaoFilter(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Funcao" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas</SelectItem>
-                {funcoes.map((funcao) => (
-                  <SelectItem key={funcao} value={funcao}>
-                    {funcao}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium">Somente disponiveis</p>
-                <p className="text-xs text-muted-foreground">Ativos com carga menor que 90%</p>
+
+            {loading && (
+              <div className="flex min-h-[120px] items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
               </div>
-              <Switch checked={onlyAvailable} onCheckedChange={setOnlyAvailable} />
-            </div>
-          </CardContent>
-        </Card>
+            )}
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2 border-0 bg-gradient-to-br from-muted/60 via-background to-background">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Stethoscope className="h-5 w-5" />
-                Disponibilidade do dia
-              </CardTitle>
-              <CardDescription>Agenda, contrato e carga de cada profissional</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
-              {filteredProfessionals.slice(0, 4).map((prof) => {
-                const disponibilidade = 100 - prof.ocupacao;
-                return (
-                  <div
-                    key={prof.id}
-                    className="rounded-lg border bg-card/60 p-4 shadow-sm transition-shadow hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">{getDisplayFunction(prof)}</p>
-                        <p className="text-base font-semibold">{getName(prof)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {prof.tipo_contrato || "Contrato nao informado"}
-                          {prof.horas_semanais ? ` - ${prof.horas_semanais}h/sem` : ""}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Escala: {getScaleSummary(prof.escala_normalizada)}</p>
-                      </div>
-                      <Badge variant={statusVariant[prof.status_normalized]}>
-                        {statusLabels[prof.status_normalized]}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Proximo</span>
-                        <span className="font-medium">
-                          {prof.agenda[0]?.appointment_time?.slice(0, 5) || "Sem horarios"}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Carga do dia</span>
-                          <span className="font-medium">{prof.ocupacao}%</span>
-                        </div>
-                        <Progress value={prof.ocupacao} className="h-2" />
-                        <p className="mt-1 text-xs text-muted-foreground">{disponibilidade}% da agenda livre</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+            {!loading && error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Card className="border-dashed">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Pendencias / inativos
-              </CardTitle>
-              <CardDescription>Profissionais fora de operacao</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {pendencias.length === 0 && (
-                <p className="text-sm text-muted-foreground">Nenhuma pendencia registrada</p>
-              )}
-              {pendencias.map((prof) => (
-                <div key={prof.id} className="rounded-md border px-3 py-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">{getName(prof)}</p>
-                      <p className="text-xs text-muted-foreground">{getDisplayFunction(prof)}</p>
-                    </div>
-                    <Badge variant={statusVariant[prof.status_normalized]}>
-                      {statusLabels[prof.status_normalized]}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Equipe e alocacao
-            </CardTitle>
-            <CardDescription>Monitoramento da agenda, funcao, contrato e status operacional</CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Profissional</TableHead>
-                  <TableHead>Funcao/Contrato</TableHead>
-                  <TableHead>Agenda do dia</TableHead>
-                  <TableHead>Ocupacao</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Acoes</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProfessionals.map((prof) => {
-                  const idade = getAgeFromBirthDate(prof.data_nascimento);
-                  const nascimento = formatBirthDate(prof.data_nascimento);
-
-                  return (
-                    <TableRow key={prof.id} className="align-top">
-                      <TableCell className="space-y-1">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-9 w-9">
-                            <AvatarFallback>{getInitials(prof.user_name)}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-semibold leading-tight">{getName(prof)}</p>
-                            <p className="text-xs text-muted-foreground">{prof.crp || "CRP nao informado"}</p>
-                            {nascimento && (
-                              <p className="text-xs text-muted-foreground">
-                                Nasc.: {nascimento}
-                                {idade !== null ? ` (${idade} anos)` : ""}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1 pt-2">
-                          {prof.phone && (
-                            <Badge variant="outline" className="text-[11px]">
-                              {prof.phone}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="font-medium">{getDisplayFunction(prof)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {prof.tipo_contrato || "Contrato nao informado"}
-                            {prof.horas_semanais ? ` - ${prof.horas_semanais}h/sem` : ""}
-                          </p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock3 className="h-3 w-3" />
-                            Escala: {getScaleSummary(prof.escala_normalizada)}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {prof.agenda.slice(0, 2).map((slot) => (
-                            <div key={slot.id} className="flex items-start gap-2 text-sm">
-                              <Badge variant="secondary">{slot.appointment_time?.slice(0, 5)}</Badge>
-                              <div>
-                                <p className="font-medium leading-tight">{slot.patient_name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {slot.service_name ? getServiceLabel(slot.service_name) : "Servico"}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                          {prof.agenda.length === 0 && <p className="text-sm text-muted-foreground">Sem agenda hoje</p>}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span>{prof.ocupacao}%</span>
-                            <span className="text-muted-foreground">{prof.pacientesHoje} atend.</span>
-                          </div>
-                          <Progress value={prof.ocupacao} className="h-2" />
-                          <p className="text-xs text-muted-foreground">
-                            Prox.: {prof.agenda[0]?.appointment_time?.slice(0, 5) || "Sem horario"}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant[prof.status_normalized]}>
-                          {statusLabels[prof.status_normalized]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="space-y-2 text-right">
-                        <Button size="sm" variant="outline" className="w-full">
-                          Distribuir caso
-                        </Button>
-                        <Button size="sm" variant="ghost" className="w-full text-primary">
-                          Ver perfil
-                        </Button>
-                      </TableCell>
+            {!loading && !error && (
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Funcao</TableHead>
+                      <TableHead>Tipo de contrato</TableHead>
+                      <TableHead>Carga semanal</TableHead>
+                      <TableHead>Escala</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Acoes</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProfessionals.map((professional) => (
+                      <TableRow key={professional.id}>
+                        <TableCell className="font-medium">{getName(professional)}</TableCell>
+                        <TableCell>{getFunctionLabel(professional)}</TableCell>
+                        <TableCell>{professional.tipo_contrato || "Nao informado"}</TableCell>
+                        <TableCell>
+                          {professional.horas_semanais !== null && professional.horas_semanais !== undefined
+                            ? `${professional.horas_semanais}h`
+                            : "-"}
+                        </TableCell>
+                        <TableCell>{getScaleSummary(professional.escala_normalizada)}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusVariant(professional.status_normalized)}>
+                            {professional.status_normalized === "ATIVO" ? "Ativo" : "Inativo"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditDialog(professional)}
+                              disabled={!canEdit}
+                            >
+                              <Pencil className="mr-1 h-3.5 w-3.5" />
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openScaleDialog(professional)}
+                              disabled={!canEdit}
+                            >
+                              <CalendarClock className="mr-1 h-3.5 w-3.5" />
+                              Escala
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => void handleInactivate(professional)}
+                              disabled={!canManageStatus || inactivatingId === professional.id || professional.status_normalized === "INATIVO"}
+                            >
+                              <Trash2 className="mr-1 h-3.5 w-3.5" />
+                              Excluir
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4" />
-              Escala semanal
-            </CardTitle>
-            <CardDescription>Profissionais ativos e dias configurados para atendimento</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {equipeAtiva.map((prof) => (
-              <div key={prof.id} className="rounded-lg border bg-muted/50 p-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-semibold">{getName(prof)}</p>
-                    <p className="text-xs text-muted-foreground">{getDisplayFunction(prof)}</p>
-                    <p className="text-xs text-muted-foreground">Escala: {getScaleSummary(prof.escala_normalizada)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {prof.horas_semanais ? `${prof.horas_semanais}h semanais` : "Horas nao informadas"}
-                    </p>
-                  </div>
-                  <Badge variant={statusVariant[prof.status_normalized]}>{statusLabels[prof.status_normalized]}</Badge>
-                </div>
-                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <CalendarClock className="h-3 w-3" />
-                    {prof.agenda[0]?.appointment_time?.slice(0, 5) || "Sem horarios"}
-                  </div>
-                </div>
+                    {filteredProfessionals.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                          Nenhum profissional encontrado.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar profissional</DialogTitle>
+            <DialogDescription>{editTarget ? getName(editTarget) : ""}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Funcao</Label>
+              <Select
+                value={editForm.roleId}
+                onValueChange={(value) => setEditForm((prev) => ({ ...prev, roleId: value }))}
+                disabled={rolesLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a funcao" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={String(role.id)}>
+                      {role.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo de contrato</Label>
+              <Select
+                value={editForm.contractType}
+                onValueChange={(value) => setEditForm((prev) => ({ ...prev, contractType: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o contrato" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contractOptions.map((contract) => (
+                    <SelectItem key={contract} value={contract}>
+                      {contract}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="weekly-hours">Carga semanal (h)</Label>
+                <Input
+                  id="weekly-hours"
+                  type="number"
+                  min={1}
+                  value={editForm.weeklyHours}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, weeklyHours: event.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value: "ATIVO" | "INATIVO") => setEditForm((prev) => ({ ...prev, status: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ATIVO">Ativo</SelectItem>
+                    <SelectItem value="INATIVO">Inativo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)} disabled={savingEdit}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void handleSaveEdit()} disabled={savingEdit || !editForm.roleId || !editForm.contractType}>
+              {savingEdit ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(scaleTarget)} onOpenChange={(open) => !open && setScaleTarget(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Escala semanal</DialogTitle>
+            <DialogDescription>{scaleTarget ? getName(scaleTarget) : ""}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {WEEK_DAYS.map((day) => (
+              <div key={day} className="grid grid-cols-[80px_80px_1fr_1fr] items-center gap-3 rounded-md border p-3">
+                <span className="text-sm font-medium">{DAY_LABELS[day]}</span>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={scaleForm[day].ativo}
+                    onChange={(event) => updateScaleDay(day, { ativo: event.target.checked })}
+                  />
+                  Ativo
+                </label>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Inicio</Label>
+                  <Input
+                    type="time"
+                    value={scaleForm[day].inicio}
+                    disabled={!scaleForm[day].ativo}
+                    onChange={(event) => updateScaleDay(day, { inicio: event.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Fim</Label>
+                  <Input
+                    type="time"
+                    value={scaleForm[day].fim}
+                    disabled={!scaleForm[day].ativo}
+                    onChange={(event) => updateScaleDay(day, { fim: event.target.value })}
+                  />
+                </div>
+              </div>
+            ))}
+
+            <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+              Carga configurada: {(getWeeklyMinutes(scaleForm) / 60).toFixed(1)}h semanais
+              {typeof scaleTarget?.horas_semanais === "number" && scaleTarget.horas_semanais > 0
+                ? ` (limite do profissional: ${scaleTarget.horas_semanais}h)`
+                : ""}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScaleTarget(null)} disabled={savingScale}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void handleSaveScale()} disabled={savingScale}>
+              {savingScale ? "Salvando..." : "Salvar escala"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   );
 }
