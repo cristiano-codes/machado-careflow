@@ -243,7 +243,7 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
 
     const profResult = await client.query(
       `INSERT INTO professionals (
-         user_id, crp, specialty, phone, email, status,
+         user_id_int, crp, specialty, phone, email, status,
          funcao, horas_semanais, data_nascimento, tipo_contrato, escala_semanal
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
@@ -307,15 +307,85 @@ router.get('/', authorize('profissionais', 'view'), async (req, res) => {
         p.data_nascimento,
         p.tipo_contrato,
         p.escala_semanal,
-        COALESCE(u.name, p.email, '') AS user_name,
-        COALESCE(u.email, p.email) AS user_email,
-        COALESCE(u.role, 'Usuário') AS user_role,
-        COALESCE(u.status, 'ativo') AS user_status,
+        u.id AS linked_user_id,
+        COALESCE(
+          u.name,
+          (
+            SELECT u2.name
+            FROM public.users u2
+            WHERE p.user_id_int IS NULL
+              AND p.email IS NOT NULL
+              AND LOWER(u2.email) = LOWER(p.email)
+            LIMIT 1
+          ),
+          p.email,
+          ''
+        ) AS user_name,
+        COALESCE(
+          u.email,
+          (
+            SELECT u2.email
+            FROM public.users u2
+            WHERE p.user_id_int IS NULL
+              AND p.email IS NOT NULL
+              AND LOWER(u2.email) = LOWER(p.email)
+            LIMIT 1
+          ),
+          p.email
+        ) AS user_email,
+        COALESCE(
+          u.role,
+          (
+            SELECT u2.role
+            FROM public.users u2
+            WHERE p.user_id_int IS NULL
+              AND p.email IS NOT NULL
+              AND LOWER(u2.email) = LOWER(p.email)
+            LIMIT 1
+          ),
+          'Usuário'
+        ) AS user_role,
+        COALESCE(
+          u.status,
+          (
+            SELECT u2.status
+            FROM public.users u2
+            WHERE p.user_id_int IS NULL
+              AND p.email IS NOT NULL
+              AND LOWER(u2.email) = LOWER(p.email)
+            LIMIT 1
+          ),
+          'ativo'
+        ) AS user_status,
+        COALESCE(
+          u.username,
+          (
+            SELECT u2.username
+            FROM public.users u2
+            WHERE p.user_id_int IS NULL
+              AND p.email IS NOT NULL
+              AND LOWER(u2.email) = LOWER(p.email)
+            LIMIT 1
+          ),
+          split_part(COALESCE(p.email, ''), '@', 1)
+        ) AS user_username,
         COALESCE(a.total, 0) AS agenda_hoje
       FROM professionals p
-      LEFT JOIN public.users u ON LOWER(u.email) = LOWER(p.email)
+      LEFT JOIN public.users u ON u.id = p.user_id_int
       LEFT JOIN agenda_hoje a ON a.professional_id = p.id
-      ORDER BY COALESCE(u.name, p.email, '') NULLS LAST, p.created_at DESC;
+      ORDER BY COALESCE(
+        u.name,
+        (
+          SELECT u2.name
+          FROM public.users u2
+          WHERE p.user_id_int IS NULL
+            AND p.email IS NOT NULL
+            AND LOWER(u2.email) = LOWER(p.email)
+          LIMIT 1
+        ),
+        p.email,
+        ''
+      ) NULLS LAST, p.created_at DESC;
     `;
 
     const result = await pool.query(query, [date]);
@@ -344,13 +414,69 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       `SELECT
          p.*,
          u.id AS linked_user_id,
-         COALESCE(u.name, p.email, '') AS user_name,
-         COALESCE(u.email, p.email) AS user_email,
-         COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
-         COALESCE(u.role, 'Usuário') AS user_role,
-         COALESCE(u.status, 'ativo') AS user_status
+         COALESCE(
+           u.name,
+           (
+             SELECT u2.name
+             FROM public.users u2
+             WHERE p.user_id_int IS NULL
+               AND p.email IS NOT NULL
+               AND LOWER(u2.email) = LOWER(p.email)
+             LIMIT 1
+           ),
+           p.email,
+           ''
+         ) AS user_name,
+         COALESCE(
+           u.email,
+           (
+             SELECT u2.email
+             FROM public.users u2
+             WHERE p.user_id_int IS NULL
+               AND p.email IS NOT NULL
+               AND LOWER(u2.email) = LOWER(p.email)
+             LIMIT 1
+           ),
+           p.email
+         ) AS user_email,
+         COALESCE(
+           u.username,
+           (
+             SELECT u2.username
+             FROM public.users u2
+             WHERE p.user_id_int IS NULL
+               AND p.email IS NOT NULL
+               AND LOWER(u2.email) = LOWER(p.email)
+             LIMIT 1
+           ),
+           split_part(COALESCE(p.email, ''), '@', 1)
+         ) AS user_username,
+         COALESCE(
+           u.role,
+           (
+             SELECT u2.role
+             FROM public.users u2
+             WHERE p.user_id_int IS NULL
+               AND p.email IS NOT NULL
+               AND LOWER(u2.email) = LOWER(p.email)
+             LIMIT 1
+           ),
+           'Usuário'
+         ) AS user_role,
+         COALESCE(
+           u.status,
+           (
+             SELECT u2.status
+             FROM public.users u2
+             WHERE p.user_id_int IS NULL
+               AND p.email IS NOT NULL
+               AND LOWER(u2.email) = LOWER(p.email)
+             LIMIT 1
+           ),
+           'ativo'
+         ) AS user_status
        FROM professionals p
-       LEFT JOIN users u ON LOWER(u.email) = LOWER(p.email)
+       LEFT JOIN public.users u ON u.id = p.user_id_int
        WHERE p.id = $1`,
       [id]
     );
