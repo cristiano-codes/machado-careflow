@@ -806,33 +806,38 @@ router.delete('/:id', authorize('profissionais', 'status'), async (req, res) => 
   try {
     await client.query('BEGIN');
 
-    const existingResult = await client.query(
+    const professionalLockResult = await client.query(
       `SELECT
-         p.id,
+         id,
+         email,
          COALESCE(
-           u.id,
-           (
-             SELECT u2.id
-             FROM public.users u2
-             WHERE p.user_id_int IS NULL
-               AND p.email IS NOT NULL
-               AND LOWER(u2.email) = LOWER(p.email)
-             LIMIT 1
-           )
-         ) AS linked_user_id
-       FROM professionals p
-       LEFT JOIN public.users u ON u.id = p.user_id_int
-       WHERE p.id = $1
+           to_jsonb(professionals)->>'user_id_int',
+           to_jsonb(professionals)->>'user_id'
+         ) AS linked_user_candidate
+       FROM professionals
+       WHERE id = $1
        FOR UPDATE`,
       [id]
     );
 
-    if (existingResult.rows.length === 0) {
+    if (professionalLockResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Profissional nao encontrado' });
     }
 
-    const linkedUserId = existingResult.rows[0]?.linked_user_id || null;
+    const lockedProfessional = professionalLockResult.rows[0];
+
+    let linkedUserId = lockedProfessional?.linked_user_candidate || null;
+    if (!linkedUserId && lockedProfessional?.email) {
+      const linkedByEmailResult = await client.query(
+        `SELECT id
+         FROM public.users
+         WHERE LOWER(email) = LOWER($1)
+         LIMIT 1`,
+        [lockedProfessional.email]
+      );
+      linkedUserId = linkedByEmailResult.rows[0]?.id || null;
+    }
 
     const depsResult = await client.query(
       `SELECT
