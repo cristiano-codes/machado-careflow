@@ -597,23 +597,23 @@ export default function Profissionais() {
     }
   }
 
-  async function handleInactivate(professional: ProfessionalRow) {
+  async function handleDeleteProfessional(professional: ProfessionalRow) {
     const confirmed = window.confirm(
-      `Deseja inativar ${getName(professional)}? Esta acao funciona como exclusao logica.`
+      `Deseja excluir ${getName(professional)}? Esta acao remove o profissional da lista.`
     );
     if (!confirmed) return;
 
     try {
       setInactivatingId(professional.id);
-      const response = await apiService.updateProfessionalStatus(professional.id, "INATIVO");
+      const response = await apiService.deleteProfessional(professional.id);
       if (!response?.success) {
-        throw new Error(response?.message || "Nao foi possivel inativar profissional");
+        throw new Error(response?.message || "Nao foi possivel excluir profissional");
       }
 
       await loadProfessionals();
-      toast({ title: "Profissional inativado", description: "Registro mantido com status inativo." });
+      toast({ title: "Profissional excluido", description: "Registro removido com sucesso." });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Erro ao inativar profissional";
+      const message = err instanceof Error ? err.message : "Erro ao excluir profissional";
       toast({ title: "Excluir profissional", description: message, variant: "destructive" });
     } finally {
       setInactivatingId(null);
@@ -723,8 +723,8 @@ export default function Profissionais() {
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => void handleInactivate(professional)}
-                              disabled={!canManageStatus || inactivatingId === professional.id || professional.status_normalized === "INATIVO"}
+                              onClick={() => void handleDeleteProfessional(professional)}
+                              disabled={!canManageStatus || inactivatingId === professional.id}
                             >
                               <Trash2 className="mr-1 h-3.5 w-3.5" />
                               Excluir

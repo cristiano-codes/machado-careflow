@@ -371,6 +371,14 @@ class ApiService {
     return response.json();
   }
 
+  async deleteProfessional(id: string) {
+    const response = await fetch(`${API_BASE_URL}/profissionais/${id}`, {
+      method: "DELETE",
+      headers: this.getAuthHeaders(),
+    });
+    return response.json();
+  }
+
   async getProfessionalAgenda(id: string, date?: string) {
     const query = date ? `?date=${encodeURIComponent(date)}` : "";
     const response = await fetch(`${API_BASE_URL}/profissionais/${id}/agenda${query}`, {

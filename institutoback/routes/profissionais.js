@@ -729,8 +729,7 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
              email = $2,
              username = $3,
              phone = $4,
-             role = $5,
-             updated_at = NOW()
+             role = $5
          WHERE id = $6`,
         [payload.name, payload.email, payload.username, payload.phone, payload.role, existing.linked_user_id]
       );
@@ -794,6 +793,91 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Erro ao atualizar profissional:', error);
     return res.status(500).json({ success: false, message: error?.message || 'Erro ao atualizar profissional' });
+  } finally {
+    client.release();
+  }
+});
+
+// Excluir profissional (hard delete quando sem vinculos historicos)
+router.delete('/:id', authorize('profissionais', 'status'), async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const existingResult = await client.query(
+      `SELECT
+         p.id,
+         COALESCE(
+           u.id,
+           (
+             SELECT u2.id
+             FROM public.users u2
+             WHERE p.user_id_int IS NULL
+               AND p.email IS NOT NULL
+               AND LOWER(u2.email) = LOWER(p.email)
+             LIMIT 1
+           )
+         ) AS linked_user_id
+       FROM professionals p
+       LEFT JOIN public.users u ON u.id = p.user_id_int
+       WHERE p.id = $1
+       FOR UPDATE`,
+      [id]
+    );
+
+    if (existingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Profissional nao encontrado' });
+    }
+
+    const linkedUserId = existingResult.rows[0]?.linked_user_id || null;
+
+    const depsResult = await client.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM appointments WHERE professional_id = $1) AS appointments,
+         (SELECT COUNT(*)::int FROM evaluations WHERE professional_id = $1) AS evaluations,
+         (SELECT COUNT(*)::int FROM interviews WHERE professional_id = $1) AS interviews`,
+      [id]
+    );
+
+    const deps = depsResult.rows[0] || {};
+    const appointments = Number(deps.appointments || 0);
+    const evaluations = Number(deps.evaluations || 0);
+    const interviews = Number(deps.interviews || 0);
+    const totalDependencies = appointments + evaluations + interviews;
+
+    if (totalDependencies > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message:
+          `Nao foi possivel excluir: existem vinculos historicos (agendamentos: ${appointments}, ` +
+          `avaliacoes: ${evaluations}, entrevistas: ${interviews}).`,
+      });
+    }
+
+    await client.query('DELETE FROM professionals WHERE id = $1', [id]);
+
+    if (linkedUserId) {
+      await client.query('UPDATE users SET status = $1 WHERE id = $2', ['inativo', linkedUserId]);
+    }
+
+    await client.query('COMMIT');
+    return res.json({ success: true, message: 'Profissional excluido com sucesso' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao excluir profissional:', error);
+
+    if (error?.code === '23503') {
+      return res.status(409).json({
+        success: false,
+        message: 'Nao foi possivel excluir este profissional porque existem registros vinculados.',
+      });
+    }
+
+    return res.status(500).json({ success: false, message: error?.message || 'Erro ao excluir profissional' });
   } finally {
     client.release();
   }
