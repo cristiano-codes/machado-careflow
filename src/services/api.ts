@@ -25,7 +25,11 @@ function resolveApiBase(): string {
 
   // Fora de rede local, você pode ligar um demo-mode, se quiser
   // Aqui mantemos apenas o fallback de base URL.
-  return `http://${hostname}:3000/api`;
+  if (isLocal) {
+    return `http://${hostname}:3000/api`;
+  }
+
+  return "/api";
 }
 
 const API_BASE_URL = resolveApiBase();
