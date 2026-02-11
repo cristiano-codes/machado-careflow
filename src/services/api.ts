@@ -247,9 +247,18 @@ class ApiService {
     });
     if (!r.ok) {
       const txt = await r.text();
-      throw new Error(
-        `Falha ao salvar configurações (HTTP ${r.status}): ${txt}`
-      );
+      let message = `Falha ao salvar configurações (HTTP ${r.status})`;
+      try {
+        const parsed = JSON.parse(txt);
+        if (parsed && typeof parsed.message === "string" && parsed.message.trim()) {
+          message = parsed.message;
+        }
+      } catch {
+        if (txt.trim()) {
+          message = `${message}: ${txt}`;
+        }
+      }
+      throw new Error(message);
     }
     return r.json();
   }

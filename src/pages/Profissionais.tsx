@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,12 +38,18 @@ type ApiProfessional = {
   role_id?: number | null;
   role_nome?: string | null;
   user_name: string | null;
+  user_email?: string | null;
+  user_username?: string | null;
+  linked_user_id?: string | number | null;
   email: string | null;
+  phone?: string | null;
   status: string;
+  crp?: string | null;
   specialty?: string | null;
   funcao?: string | null;
   tipo_contrato?: string | null;
   horas_semanais?: number | null;
+  data_nascimento?: string | null;
   escala_semanal?: unknown;
 };
 
@@ -91,6 +98,24 @@ function cloneScale(scale: WeekScale): WeekScale {
     qui: { ...scale.qui },
     sex: { ...scale.sex },
   };
+}
+
+function createEmptyWeekScale(): WeekScale {
+  return {
+    seg: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    ter: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    qua: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    qui: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+    sex: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
+  };
+}
+
+function toDateInputValue(value: unknown): string {
+  if (!value) return "";
+  const text = value.toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : "";
 }
 
 function buildDefaultScale(settings: ReturnType<typeof useSettings>["settings"]): WeekScale {
@@ -233,21 +258,23 @@ export default function Profissionais() {
 
   const [editTarget, setEditTarget] = useState<ProfessionalRow | null>(null);
   const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    username: "",
     roleId: "",
     contractType: "",
     weeklyHours: "",
+    dataNascimento: "",
     status: "ATIVO" as "ATIVO" | "INATIVO",
+    specialty: "",
+    crp: "",
+    weeklyScale: createEmptyWeekScale(),
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [scaleTarget, setScaleTarget] = useState<ProfessionalRow | null>(null);
-  const [scaleForm, setScaleForm] = useState<WeekScale>({
-    seg: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
-    ter: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
-    qua: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
-    qui: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
-    sex: { ativo: true, inicio: DEFAULT_START_TIME, fim: DEFAULT_END_TIME },
-  });
+  const [scaleForm, setScaleForm] = useState<WeekScale>(createEmptyWeekScale());
   const [savingScale, setSavingScale] = useState(false);
   const [inactivatingId, setInactivatingId] = useState<string | null>(null);
 
@@ -260,6 +287,10 @@ export default function Profissionais() {
     if (configured.length > 0) return configured;
     return ["CLT", "PJ", "Voluntario", "Estagio", "Temporario"];
   }, [settings.professionals_config.allowed_contract_types]);
+
+  const suggestedWeeklyHours = useMemo(() => {
+    return settings.professionals_config.suggested_weekly_hours || [];
+  }, [settings.professionals_config.suggested_weekly_hours]);
 
   const canManageStatus = canEdit || permissions.has("status") || permissions.has("*");
 
@@ -346,18 +377,52 @@ export default function Profissionais() {
     });
   }, [professionals, search, statusFilter]);
 
+  const requiresLinkedIdentity = Boolean(editTarget?.linked_user_id);
+  const canSubmitEdit =
+    editForm.roleId.trim().length > 0 &&
+    editForm.contractType.trim().length > 0 &&
+    editForm.name.trim().length > 0 &&
+    (!requiresLinkedIdentity ||
+      (editForm.email.trim().length > 0 && editForm.username.trim().length > 0));
+
   function openEditDialog(professional: ProfessionalRow) {
     const roleId = resolveRoleId(professional, roles);
+    const email = professional.user_email || professional.email || "";
+    const username =
+      professional.user_username ||
+      (email.includes("@") ? email.split("@")[0] : "");
+
     setEditTarget(professional);
     setEditForm({
+      name: professional.user_name || "",
+      email,
+      phone: professional.phone || "",
+      username,
       roleId,
       contractType: professional.tipo_contrato || contractOptions[0] || "",
       weeklyHours:
         professional.horas_semanais !== null && professional.horas_semanais !== undefined
           ? String(professional.horas_semanais)
           : "",
+      dataNascimento: toDateInputValue(professional.data_nascimento),
       status: professional.status_normalized,
+      specialty: professional.specialty || "",
+      crp: professional.crp || "",
+      weeklyScale: cloneScale(professional.escala_normalizada),
     });
+  }
+
+  function updateEditScaleDay(day: WeekDay, checked: boolean) {
+    setEditForm((prev) => ({
+      ...prev,
+      weeklyScale: {
+        ...prev.weeklyScale,
+        [day]: {
+          ...prev.weeklyScale[day],
+          ativo: checked,
+        },
+      },
+    }));
   }
 
   async function handleSaveEdit() {
@@ -366,6 +431,32 @@ export default function Profissionais() {
     const selectedRole = roles.find((role) => String(role.id) === editForm.roleId);
     if (!selectedRole) {
       toast({ title: "Editar profissional", description: "Selecione uma funcao valida.", variant: "destructive" });
+      return;
+    }
+
+    const name = editForm.name.trim();
+    const email = editForm.email.trim().toLowerCase();
+    const username = editForm.username.trim();
+    const phone = editForm.phone.trim();
+    const specialty = editForm.specialty.trim();
+    const crp = editForm.crp.trim();
+    const requiresIdentity = Boolean(editTarget.linked_user_id);
+
+    if (!name) {
+      toast({
+        title: "Editar profissional",
+        description: "Nome completo e obrigatorio.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (requiresIdentity && (!email || !username)) {
+      toast({
+        title: "Editar profissional",
+        description: "E-mail e username sao obrigatorios para usuario vinculado.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -382,10 +473,18 @@ export default function Profissionais() {
     try {
       setSavingEdit(true);
       const response = await apiService.updateProfessional(editTarget.id, {
+        name,
+        email: email || undefined,
+        username: username || undefined,
+        phone: phone || undefined,
         role_id: selectedRole.id,
         funcao: selectedRole.nome,
+        specialty: specialty || undefined,
+        crp: crp || undefined,
         tipo_contrato: editForm.contractType,
         horas_semanais: weeklyHours,
+        data_nascimento: editForm.dataNascimento || null,
+        escala_semanal: editForm.weeklyScale,
         status: editForm.status,
       });
 
@@ -651,69 +750,166 @@ export default function Profissionais() {
       </div>
 
       <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Editar profissional</DialogTitle>
             <DialogDescription>{editTarget ? getName(editTarget) : ""}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Funcao</Label>
-              <Select
-                value={editForm.roleId}
-                onValueChange={(value) => setEditForm((prev) => ({ ...prev, roleId: value }))}
-                disabled={rolesLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a funcao" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((role) => (
-                    <SelectItem key={role.id} value={String(role.id)}>
-                      {role.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Tipo de contrato</Label>
-              <Select
-                value={editForm.contractType}
-                onValueChange={(value) => setEditForm((prev) => ({ ...prev, contractType: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o contrato" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contractOptions.map((contract) => (
-                    <SelectItem key={contract} value={contract}>
-                      {contract}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="weekly-hours">Carga semanal (h)</Label>
+                <Label htmlFor="edit-name">Nome completo</Label>
+                <Input
+                  id="edit-name"
+                  value={editForm.name}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))}
+                  disabled={savingEdit}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">E-mail</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, email: event.target.value }))}
+                  disabled={savingEdit}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-phone">Telefone</Label>
+                <Input
+                  id="edit-phone"
+                  value={editForm.phone}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  disabled={savingEdit}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-username">Username</Label>
+                <Input
+                  id="edit-username"
+                  value={editForm.username}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, username: event.target.value }))}
+                  disabled={savingEdit}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Funcao</Label>
+                <Select
+                  value={editForm.roleId}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, roleId: value }))}
+                  disabled={rolesLoading || savingEdit}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a funcao" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={String(role.id)}>
+                        {role.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tipo de contrato</Label>
+                <Select
+                  value={editForm.contractType}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, contractType: value }))}
+                  disabled={savingEdit}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o contrato" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contractOptions.map((contract) => (
+                      <SelectItem key={contract} value={contract}>
+                        {contract}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="weekly-hours">Horas semanais</Label>
                 <Input
                   id="weekly-hours"
                   type="number"
                   min={1}
                   value={editForm.weeklyHours}
                   onChange={(event) => setEditForm((prev) => ({ ...prev, weeklyHours: event.target.value }))}
+                  disabled={savingEdit}
+                />
+                {suggestedWeeklyHours.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {suggestedWeeklyHours.map((hour) => (
+                      <Button
+                        key={hour}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditForm((prev) => ({ ...prev, weeklyHours: String(hour) }))}
+                        disabled={savingEdit}
+                      >
+                        {hour}h
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-birth">Data de nascimento</Label>
+                <Input
+                  id="edit-birth"
+                  type="date"
+                  value={editForm.dataNascimento}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, dataNascimento: event.target.value }))}
+                  disabled={savingEdit}
                 />
               </div>
+            </div>
 
+            <div className="space-y-2">
+              <Label>Escala semanal</Label>
+              <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                {WEEK_DAYS.map((day) => (
+                  <label
+                    key={day}
+                    className="flex items-center gap-2 text-sm font-medium"
+                    htmlFor={`edit-escala-${day}`}
+                  >
+                    <Checkbox
+                      id={`edit-escala-${day}`}
+                      checked={editForm.weeklyScale[day].ativo}
+                      onCheckedChange={(checked) => updateEditScaleDay(day, checked === true)}
+                      disabled={savingEdit}
+                    />
+                    {DAY_LABELS[day]}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select
                   value={editForm.status}
                   onValueChange={(value: "ATIVO" | "INATIVO") => setEditForm((prev) => ({ ...prev, status: value }))}
+                  disabled={savingEdit}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -725,13 +921,35 @@ export default function Profissionais() {
                 </Select>
               </div>
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-specialty">Especialidade (legado)</Label>
+                <Input
+                  id="edit-specialty"
+                  value={editForm.specialty}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, specialty: event.target.value }))}
+                  disabled={savingEdit}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-crp">CRP/CREFITO (legado)</Label>
+                <Input
+                  id="edit-crp"
+                  value={editForm.crp}
+                  onChange={(event) => setEditForm((prev) => ({ ...prev, crp: event.target.value }))}
+                  disabled={savingEdit}
+                />
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTarget(null)} disabled={savingEdit}>
               Cancelar
             </Button>
-            <Button onClick={() => void handleSaveEdit()} disabled={savingEdit || !editForm.roleId || !editForm.contractType}>
+            <Button onClick={() => void handleSaveEdit()} disabled={savingEdit || !canSubmitEdit}>
               {savingEdit ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>

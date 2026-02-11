@@ -8,6 +8,7 @@ const router = express.Router();
 
 const LOGO_DATA_URL_PREFIX = 'data:image/png;base64,';
 const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const DEFAULT_BUSINESS_HOURS = {
   opening_time: '08:00',
@@ -85,8 +86,93 @@ const SETTINGS_EDITABLE_FIELDS = [
   'professionals_config',
 ];
 
+let settingsSchemaReadyPromise = null;
+let settingsColumnsCache = null;
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function isUuid(value) {
+  return typeof value === 'string' && UUID_REGEX.test(value.trim());
+}
+
+function normalizeIntegerId(value) {
+  const asNumber = Number(value);
+  if (!Number.isInteger(asNumber) || asNumber <= 0) return null;
+  return asNumber;
+}
+
+function resolveUpdatedByValue(userId, columnType) {
+  if (userId === null || userId === undefined || !columnType) {
+    return { ok: false };
+  }
+
+  const type = (columnType || '').toLowerCase();
+
+  if (type === 'uuid') {
+    const normalized = typeof userId === 'string' ? userId.trim() : String(userId);
+    return isUuid(normalized) ? { ok: true, value: normalized } : { ok: false };
+  }
+
+  if (['int2', 'int4', 'int8'].includes(type)) {
+    const normalized = normalizeIntegerId(userId);
+    return normalized !== null ? { ok: true, value: normalized } : { ok: false };
+  }
+
+  return { ok: true, value: userId };
+}
+
+async function ensureSystemSettingsSchema() {
+  if (!settingsSchemaReadyPromise) {
+    settingsSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE public.system_settings
+          ADD COLUMN IF NOT EXISTS instituicao_logo_base64 text,
+          ADD COLUMN IF NOT EXISTS instituicao_logo_updated_at timestamptz DEFAULT now(),
+          ADD COLUMN IF NOT EXISTS business_hours jsonb,
+          ADD COLUMN IF NOT EXISTS professionals_config jsonb
+      `);
+
+      await pool.query(
+        `
+          UPDATE public.system_settings
+          SET business_hours = COALESCE(business_hours, $1::jsonb),
+              professionals_config = COALESCE(professionals_config, $2::jsonb)
+        `,
+        [
+          JSON.stringify(DEFAULT_BUSINESS_HOURS),
+          JSON.stringify(DEFAULT_PROFESSIONALS_CONFIG),
+        ]
+      );
+
+      settingsColumnsCache = null;
+    })().catch((error) => {
+      settingsSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  return settingsSchemaReadyPromise;
+}
+
+async function getSystemSettingsColumnsMap() {
+  if (settingsColumnsCache) return settingsColumnsCache;
+
+  const { rows } = await pool.query(
+    `
+      SELECT column_name, udt_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'system_settings'
+    `
+  );
+
+  settingsColumnsCache = new Map(
+    rows.map((row) => [row.column_name, (row.udt_name || '').toLowerCase()])
+  );
+
+  return settingsColumnsCache;
 }
 
 function parseMaybeJson(value) {
@@ -464,6 +550,8 @@ async function createSingletonSettings(seed = {}) {
 }
 
 async function ensureSingletonSettings(seed = {}) {
+  await ensureSystemSettingsSchema();
+
   const existing = await selectSingletonSettings();
   if (existing) return existing;
 
@@ -733,7 +821,8 @@ async function saveSettingsHandler(req, res) {
     }
 
     const singleton = await ensureSingletonSettings(payload);
-    const fieldsToUpdate = Object.keys(payload);
+    const settingsColumns = await getSystemSettingsColumnsMap();
+    const fieldsToUpdate = Object.keys(payload).filter((field) => settingsColumns.has(field));
 
     if (fieldsToUpdate.length === 0) {
       return successResponse(res, singleton);
@@ -758,9 +847,12 @@ async function saveSettingsHandler(req, res) {
       setClauses.push('instituicao_logo_updated_at = NOW()');
     }
 
-    const updatedByPosition = values.length + 1;
-    setClauses.push(`updated_by = $${updatedByPosition}`);
-    values.push(userId);
+    const updatedByMeta = resolveUpdatedByValue(userId, settingsColumns.get('updated_by'));
+    if (updatedByMeta.ok) {
+      const updatedByPosition = values.length + 1;
+      setClauses.push(`updated_by = $${updatedByPosition}`);
+      values.push(updatedByMeta.value);
+    }
 
     const wherePosition = values.length + 1;
     values.push(singleton.id);
