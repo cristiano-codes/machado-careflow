@@ -1,169 +1,221 @@
-// src/contexts/AuthContext.tsx
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import { apiService } from '@/services/api';
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { apiService, API_BASE_URL, User } from "@/services/api";
 
-const API_BASE = `http://${window.location.hostname}:3000`;
+type AuthUser = User & {
+  avatar_url?: string | null;
+  permissions?: string[];
+};
+
+type SignUpUserData = {
+  username: string;
+  name: string;
+  phone: string;
+};
 
 interface AuthContextType {
-  user: any | null;
-  userProfile: any | null;
+  user: AuthUser | null;
+  userProfile: AuthUser | null;
   loading: boolean;
+  mustChangePassword: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string, userData: any) => Promise<{ error?: string }>;
+  signUp: (
+    email: string,
+    password: string,
+    userData: SignUpUserData
+  ) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
-  updateProfile: (data: any) => Promise<{ error?: string }>;
+  updateProfile: (data: Record<string, unknown>) => Promise<{ error?: string }>;
+  markPasswordChangeCompleted: () => void;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function persistUser(user: AuthUser | null) {
+  if (!user) {
+    localStorage.removeItem("user");
+    sessionStorage.removeItem("user");
+    return;
+  }
+
+  const serialized = JSON.stringify(user);
+  localStorage.setItem("user", serialized);
+  sessionStorage.setItem("user", serialized);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
-  const [userProfile, setUserProfile] = useState<any | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [userProfile, setUserProfile] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Verificar autenticação no armazenamento local (sem bypass de dev)
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
+    const token = localStorage.getItem("token");
+    const userStr = localStorage.getItem("user");
 
     if (token && userStr) {
       try {
-        // Limpa artefatos antigos do bypass de desenvolvimento
-        if (token === 'dev-bypass') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-        } else {
-          const userData = JSON.parse(userStr);
-          setUser(userData);
-          setUserProfile(userData);
-          setLoading(false);
-          return;
-        }
+        const parsedUser = JSON.parse(userStr) as AuthUser;
+        setUser(parsedUser);
+        setUserProfile(parsedUser);
       } catch {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        localStorage.removeItem("token");
+        persistUser(null);
       }
     }
 
     setLoading(false);
   }, []);
 
-  // Fazer login
+  const mustChangePassword = useMemo(
+    () => Boolean(userProfile?.must_change_password),
+    [userProfile]
+  );
+
+  const refreshSession = async () => {
+    const verification = await apiService.verifyToken();
+    if (!verification.valid || !verification.user) {
+      setUser(null);
+      setUserProfile(null);
+      persistUser(null);
+      return;
+    }
+
+    const nextUser = verification.user as AuthUser;
+    setUser(nextUser);
+    setUserProfile(nextUser);
+    persistUser(nextUser);
+  };
+
   const signIn = async (email: string, password: string) => {
     try {
       const result = await apiService.login(email, password);
 
       if (result.success && result.user) {
-        setUser(result.user);
-        setUserProfile(result.user);
+        const nextUser = result.user as AuthUser;
+        setUser(nextUser);
+        setUserProfile(nextUser);
+        persistUser(nextUser);
         toast({
-          title: 'Login realizado com sucesso!',
-          description: `Bem-vindo, ${result.user.name}`,
+          title: "Login realizado com sucesso!",
+          description: `Bem-vindo, ${nextUser.name}`,
         });
         return {};
-      } else {
-        return { error: result.message };
       }
+
+      return { error: result.message || "Falha de autenticacao" };
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error("Erro no login:", error);
       toast({
-        title: 'Backend não está rodando',
-        description: "Execute 'cd institutoback && npm start' para iniciar o servidor",
-        variant: 'destructive',
-        duration: 8000,
+        title: "Falha no login",
+        description: "Nao foi possivel autenticar no servidor.",
+        variant: "destructive",
       });
-      return { error: 'Backend não está rodando. Inicie o servidor PostgreSQL e execute \"cd institutoback && npm start\"' };
+      return { error: "Erro de conexao com o servidor." };
     }
   };
 
-  // Fazer cadastro
-  const signUp = async (email: string, password: string, userData: any) => {
+  const signUp = async (email: string, password: string, userData: SignUpUserData) => {
     try {
-      const response = await fetch(`${API_BASE}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
           password,
+          confirmPassword: password,
           username: userData.username,
           name: userData.name,
           phone: userData.phone,
         }),
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
 
-      if (result.success) {
+      if (response.ok) {
         toast({
-          title: 'Cadastro realizado com sucesso!',
-          description: 'Sua solicitação foi enviada para aprovação do administrador.',
+          title: "Cadastro realizado com sucesso!",
+          description: "Sua solicitacao foi enviada para aprovacao do administrador.",
           duration: 5000,
         });
         return {};
-      } else {
-        return { error: result.message };
       }
+
+      return { error: result?.message || "Falha ao cadastrar usuario" };
     } catch (error) {
-      console.error('Erro no cadastro:', error);
-      return { error: 'Erro interno. Tente novamente.' };
+      console.error("Erro no cadastro:", error);
+      return { error: "Erro interno. Tente novamente." };
     }
   };
 
-  // Fazer logout
   const signOut = async () => {
     try {
       apiService.logout();
+      localStorage.removeItem("token");
+      sessionStorage.removeItem("token");
       setUser(null);
       setUserProfile(null);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-
+      persistUser(null);
       toast({
-        title: 'Logout realizado',
-        description: 'Até logo!',
+        title: "Logout realizado",
+        description: "Ate logo!",
       });
     } catch (error) {
-      console.error('Erro no logout:', error);
+      console.error("Erro no logout:", error);
       toast({
-        title: 'Erro no logout',
-        description: 'Ocorreu um erro ao fazer logout',
-        variant: 'destructive',
+        title: "Erro no logout",
+        description: "Ocorreu um erro ao fazer logout",
+        variant: "destructive",
       });
     }
   };
 
-  // Atualizar perfil
-  const updateProfile = async (data: any) => {
+  const updateProfile = async (data: Record<string, unknown>) => {
     try {
-      if (!user) return { error: 'Usuário não autenticado' };
+      if (!user) return { error: "Usuario nao autenticado" };
 
-      const response = await fetch(`${API_BASE}/api/users/${user.id}`, {
-        method: 'PUT',
+      const response = await fetch(`${API_BASE_URL}/users/${user.id}`, {
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
         body: JSON.stringify(data),
       });
 
-      const result = await response.json();
-
-      if (result.success) {
-        setUserProfile({ ...userProfile, ...data });
-        toast({
-          title: 'Perfil atualizado',
-          description: 'Suas informações foram atualizadas com sucesso',
-        });
-        return {};
-      } else {
-        return { error: result.message };
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { error: result?.message || "Erro ao atualizar perfil" };
       }
+
+      const nextUser = { ...(userProfile || {}), ...data } as AuthUser;
+      setUser(nextUser);
+      setUserProfile(nextUser);
+      persistUser(nextUser);
+      toast({
+        title: "Perfil atualizado",
+        description: "Suas informacoes foram atualizadas com sucesso",
+      });
+      return {};
     } catch (error) {
-      console.error('Erro ao atualizar perfil:', error);
-      return { error: 'Erro ao atualizar perfil' };
+      console.error("Erro ao atualizar perfil:", error);
+      return { error: "Erro ao atualizar perfil" };
     }
+  };
+
+  const markPasswordChangeCompleted = () => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, must_change_password: false };
+      persistUser(next);
+      return next;
+    });
+
+    setUserProfile((prev) => {
+      if (!prev) return prev;
+      return { ...prev, must_change_password: false };
+    });
   };
 
   return (
@@ -172,10 +224,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         userProfile,
         loading,
+        mustChangePassword,
         signIn,
         signUp,
         signOut,
         updateProfile,
+        markPasswordChangeCompleted,
+        refreshSession,
       }}
     >
       {children}
@@ -186,7 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

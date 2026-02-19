@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const pool = require('../config/pg');
+const authMiddleware = require('../middleware/auth');
 const router = express.Router();
 
 // Chave JWT padrão em desenvolvimento
@@ -40,6 +41,8 @@ async function initDatabase() {
         role VARCHAR(50) DEFAULT 'Usuário',
         status VARCHAR(20) DEFAULT 'pendente',
         first_access BOOLEAN DEFAULT true,
+        must_change_password BOOLEAN DEFAULT false,
+        deleted_at TIMESTAMP NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -50,9 +53,15 @@ async function initDatabase() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'Usuário'`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pendente'`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_access BOOLEAN DEFAULT true`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at)`);
 
     // Verificar se existe admin e corrigir registros antigos sem senha
-    const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
+    const adminCheck = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND deleted_at IS NULL',
+      ['admin']
+    );
     if (adminCheck.rows.length === 0) {
       const hashedPassword = await bcrypt.hash('admin', 10);
       await pool.query(`
@@ -71,7 +80,10 @@ async function initDatabase() {
 
     // Conta demo opcional apenas quando explicitamente habilitada via ENV
     if (ALLOW_DEMO_LOGIN) {
-      const demoCheck = await pool.query('SELECT * FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2', ['demo', 'demo@demo.com']);
+      const demoCheck = await pool.query(
+        'SELECT * FROM users WHERE (LOWER(username) = $1 OR LOWER(email) = $2) AND deleted_at IS NULL',
+        ['demo', 'demo@demo.com']
+      );
       if (demoCheck.rows.length === 0) {
         const hashedPassword = await bcrypt.hash('demo123', 10);
         await pool.query(`
@@ -143,14 +155,14 @@ router.post('/login', [
 
     // Encontrar usuário no banco (case-insensitive para username/email)
     let userResult = await pool.query(
-      'SELECT * FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $1',
+      'SELECT * FROM users WHERE (LOWER(username) = $1 OR LOWER(email) = $1) AND deleted_at IS NULL',
       [loweredIdentifier]
     );
 
     // Fallback para permitir login com nomes sem acentuação (ex.: Gestao → Gestão)
     if (userResult.rows.length === 0 && identifier && !identifier.includes('@') && normalizedIdentifier) {
       userResult = await pool.query(
-        'SELECT * FROM users WHERE LOWER(TRANSLATE(username, $2, $3)) = $1',
+        'SELECT * FROM users WHERE LOWER(TRANSLATE(username, $2, $3)) = $1 AND deleted_at IS NULL',
         [normalizedIdentifier, ACCENT_FROM, ACCENT_TO]
       );
     }
@@ -220,6 +232,7 @@ router.post('/login', [
         id: user.id,
         username: user.username,
         role: user.role,
+        must_change_password: user.must_change_password === true,
         permissions // <<< inclui no payload
       },
       JWT_SECRET,
@@ -233,7 +246,11 @@ router.post('/login', [
       message: 'Login realizado com sucesso',
       success: true,
       token,
-      user: { ...userWithoutPassword, permissions } // <<< inclui no JSON
+      user: {
+        ...userWithoutPassword,
+        must_change_password: user.must_change_password === true,
+        permissions
+      } // <<< inclui no JSON
     });
 
   } catch (error) {
@@ -252,7 +269,10 @@ router.get('/verify', async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id]);
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL',
+      [decoded.id]
+    );
 
     if (userResult.rows.length === 0) {
       return res.status(401).json({ message: 'Usuário não encontrado' });
@@ -279,7 +299,14 @@ router.get('/verify', async (req, res) => {
       .filter(Boolean);
 
     const { password: _, ...userWithoutPassword } = user;
-    res.json({ success: true, user: { ...userWithoutPassword, permissions } });
+    res.json({
+      success: true,
+      user: {
+        ...userWithoutPassword,
+        must_change_password: user.must_change_password === true,
+        permissions
+      }
+    });
 
   } catch (error) {
     res.status(401).json({ message: 'Token inválido' });
@@ -287,9 +314,95 @@ router.get('/verify', async (req, res) => {
 });
 
 // Rota para verificar se é primeiro acesso
+// Rota para alteracao de senha do usuario autenticado
+router.put('/change-password', authMiddleware, [
+  body('currentPassword')
+    .isString()
+    .notEmpty()
+    .withMessage('Senha atual e obrigatoria'),
+  body('newPassword')
+    .isString()
+    .isLength({ min: 8 })
+    .withMessage('A nova senha deve ter no minimo 8 caracteres'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dados invalidos',
+        errors: errors.array(),
+      });
+    }
+
+    const userId = req.user?.id;
+    const currentPassword = (req.body?.currentPassword || '').toString();
+    const newPassword = (req.body?.newPassword || '').toString();
+
+    const userResult = await pool.query(
+      'SELECT id, password FROM users WHERE id = $1 AND deleted_at IS NULL',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario nao encontrado',
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    let currentPasswordMatches = false;
+    if (user.password && user.password.startsWith('$2')) {
+      currentPasswordMatches = await bcrypt.compare(currentPassword, user.password);
+    } else if (typeof user.password === 'string') {
+      currentPasswordMatches = currentPassword === user.password;
+    }
+
+    if (!currentPasswordMatches) {
+      return res.status(400).json({
+        success: false,
+        message: 'Senha atual invalida',
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'A nova senha deve ser diferente da senha atual',
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      `UPDATE users
+          SET password = $1,
+              first_access = false,
+              must_change_password = false
+        WHERE id = $2`,
+      [hashedPassword, userId]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Senha alterada com sucesso.',
+    });
+  } catch (error) {
+    console.error('Erro ao alterar senha:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+    });
+  }
+});
+
 router.get('/first-access', async (req, res) => {
   try {
-    const adminResult = await pool.query('SELECT username, first_access FROM users WHERE username = $1', ['admin']);
+    const adminResult = await pool.query(
+      'SELECT username, first_access FROM users WHERE username = $1 AND deleted_at IS NULL',
+      ['admin']
+    );
     const firstAccess = adminResult.rows.length > 0 ? adminResult.rows[0].first_access : false;
     const username = adminResult.rows.length > 0 ? adminResult.rows[0].username : undefined;
     res.json({ firstAccess, username });
@@ -316,8 +429,9 @@ router.get('/check-user', async (req, res) => {
     let result = await pool.query(
       `SELECT id, username, email, status, first_access
          FROM users
-        WHERE LOWER(username) = $1
-           OR LOWER(email) = $1
+        WHERE (LOWER(username) = $1
+           OR LOWER(email) = $1)
+          AND deleted_at IS NULL
         LIMIT 1`,
       [loweredIdentifier]
     );
@@ -327,6 +441,7 @@ router.get('/check-user', async (req, res) => {
         `SELECT id, username, email, status, first_access
            FROM users
           WHERE LOWER(TRANSLATE(username, $2, $3)) = $1
+            AND deleted_at IS NULL
           LIMIT 1`,
         [normalizedIdentifier, ACCENT_FROM, ACCENT_TO]
       );
@@ -391,9 +506,10 @@ router.get('/users', async (req, res) => {
       );
     }
 
-    const baseQuery = `SELECT id, username, email, name, phone, role, status, first_access, created_at
-                         FROM users`;
-    const whereQuery = whereClauses.length ? ` WHERE ${whereClauses.join(' OR ')}` : '';
+    const baseQuery = `SELECT id, username, email, name, phone, role, status, first_access, must_change_password, created_at
+                         FROM users
+                        WHERE deleted_at IS NULL`;
+    const whereQuery = whereClauses.length ? ` AND (${whereClauses.join(' OR ')})` : '';
     const orderQuery = ' ORDER BY created_at DESC';
 
     const result = await pool.query(`${baseQuery}${whereQuery}${orderQuery}`, params);
@@ -407,6 +523,7 @@ router.get('/users', async (req, res) => {
       role: user.role,
       status: user.status,
       firstAccess: user.first_access,
+      must_change_password: user.must_change_password === true,
       createdAt: user.created_at
     }));
 
@@ -443,7 +560,10 @@ router.post('/setup-password', [
     const username = (req.body?.username || '').trim();
     const password = (req.body?.password || '').toString();
 
-    const userResult = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND deleted_at IS NULL',
+      [username]
+    );
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
@@ -458,7 +578,7 @@ router.post('/setup-password', [
 
     // Atualizar usuário
     await pool.query(
-      'UPDATE users SET password = $1, first_access = false WHERE id = $2',
+      'UPDATE users SET password = $1, first_access = false, must_change_password = false WHERE id = $2',
       [hashedPassword, user.id]
     );
 
@@ -528,8 +648,8 @@ router.post('/register', async (_req, res, next) => {
 
     // Criar novo usuário (status pendente para aprovação do admin)
     await pool.query(`
-      INSERT INTO users (username, email, name, phone, password, role, status, first_access)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO users (username, email, name, phone, password, role, status, first_access, must_change_password)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `, [
       username,
       email.toLowerCase(),
@@ -538,6 +658,7 @@ router.post('/register', async (_req, res, next) => {
       hashedPassword,
       'Usuário',
       'pendente',
+      false,
       false,
     ]);
 
@@ -552,3 +673,5 @@ router.post('/register', async (_req, res, next) => {
 });
 
 module.exports = router;
+
+

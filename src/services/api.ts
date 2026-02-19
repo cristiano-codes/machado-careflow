@@ -46,6 +46,7 @@ export type LoginResponse = {
     role: string;
     status?: string;
     first_access?: boolean;
+    must_change_password?: boolean;
     created_at?: string;
     updated_at?: string;
   };
@@ -57,6 +58,16 @@ export type User = {
   email: string;
   name: string;
   role: string;
+  status?: string;
+  first_access?: boolean;
+  must_change_password?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ManagedUser = User & {
+  status: string;
+  created_at: string;
 };
 
 export type SettingsPayload = {
@@ -221,11 +232,44 @@ class ApiService {
   }
 
   // ---------- USERS ----------
-  async getUsers() {
+  async getUsers(): Promise<{ users: ManagedUser[]; message?: string }> {
     const response = await fetch(`${API_BASE_URL}/users`, {
       headers: this.getAuthHeaders(),
     });
-    return response.json();
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return { users: data as ManagedUser[] };
+    }
+    return {
+      users: Array.isArray(data?.users) ? (data.users as ManagedUser[]) : [],
+      message: data?.message,
+    };
+  }
+
+  async deleteUser(id: string | number): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: "DELETE",
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao excluir usuario");
+    }
+    return { message: data?.message || "Usuario excluido com sucesso" };
+  }
+
+  async forcePasswordChange(id: string | number): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}/force-password-change`, {
+      method: "PATCH",
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao forcar redefinicao de senha");
+    }
+    return {
+      message: data?.message || "Usuario devera redefinir a senha no proximo login",
+    };
   }
 
   // ---------- SETTINGS ----------

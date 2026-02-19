@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Navigate } from "react-router-dom";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 import { Layout } from "@/components/layout/Layout";
@@ -13,7 +14,7 @@ const Index = () => {
   const [showRegister, setShowRegister] = useState(false);
   const [showFirstAccess, setShowFirstAccess] = useState(false);
   const [firstAccessUsername, setFirstAccessUsername] = useState<string | undefined>(undefined);
-  const { user, userProfile, loading, signIn, signOut } = useAuth();
+  const { user, userProfile, loading, signIn, signOut, mustChangePassword } = useAuth();
   const { settings } = useSettings();
   const { toast } = useToast();
 
@@ -96,6 +97,10 @@ const Index = () => {
       );
     }
     return <LoginForm onLogin={handleLogin} onRegister={() => setShowRegister(true)} />;
+  }
+
+  if (mustChangePassword) {
+    return <Navigate to="/trocar-senha-obrigatoria" replace />;
   }
 
   const layoutUser = userProfile ? {

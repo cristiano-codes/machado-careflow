@@ -39,10 +39,10 @@ export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps) {
       return;
     }
 
-    if (formData.newPassword.length < 6) {
+    if (formData.newPassword.length < 8) {
       toast({
         title: "Erro",
-        description: "A nova senha deve ter pelo menos 6 caracteres",
+        description: "A nova senha deve ter pelo menos 8 caracteres",
         variant: "destructive"
       });
       setIsLoading(false);

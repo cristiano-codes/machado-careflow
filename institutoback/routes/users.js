@@ -37,8 +37,9 @@ const adminMiddleware = (req, res, next) => {
 router.get('/', adminMiddleware, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, username, email, name, phone, role, status, created_at
+      SELECT id, username, email, name, phone, role, status, must_change_password, created_at
       FROM users
+      WHERE deleted_at IS NULL
       ORDER BY created_at DESC
     `);
 
@@ -59,6 +60,7 @@ router.get('/pending', adminMiddleware, async (req, res) => {
       SELECT id, username, email, name, phone, created_at
       FROM users
       WHERE status = 'pendente'
+        AND deleted_at IS NULL
       ORDER BY created_at DESC
     `);
 
@@ -78,7 +80,7 @@ router.patch('/:id/approve', adminMiddleware, async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      'UPDATE users SET status = $1 WHERE id = $2 RETURNING username, name',
+      'UPDATE users SET status = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING username, name',
       ['ativo', id]
     );
 
@@ -102,7 +104,7 @@ router.patch('/:id/reject', adminMiddleware, async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      'UPDATE users SET status = $1 WHERE id = $2 RETURNING username, name',
+      'UPDATE users SET status = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING username, name',
       ['rejeitado', id]
     );
 
@@ -126,7 +128,7 @@ router.patch('/:id/block', adminMiddleware, async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      'UPDATE users SET status = $1 WHERE id = $2 RETURNING username, name',
+      'UPDATE users SET status = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING username, name',
       ['bloqueado', id]
     );
 
@@ -145,12 +147,107 @@ router.patch('/:id/block', adminMiddleware, async (req, res) => {
 });
 
 // Buscar usuário por ID
+// Forcar redefinicao de senha no proximo login (apenas admin)
+router.patch('/:id/force-password-change', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const targetUser = await pool.query(
+      'SELECT id, role, username, name FROM users WHERE id = $1 AND deleted_at IS NULL',
+      [id]
+    );
+
+    if (targetUser.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario nao encontrado' });
+    }
+
+    const requesterRole = (req.user?.role || '').toString().trim().toLowerCase();
+    const targetRole = (targetUser.rows[0].role || '').toString().trim().toLowerCase();
+
+    if (targetRole === 'admin' && requesterRole !== 'admin') {
+      return res.status(403).json({ message: 'Apenas administrador pode alterar senha de outro administrador' });
+    }
+
+    await pool.query(
+      `UPDATE users
+          SET must_change_password = true,
+              first_access = false
+        WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+
+    return res.json({
+      message: `Usuario ${targetUser.rows[0].name} precisara redefinir a senha no proximo login.`,
+    });
+  } catch (error) {
+    console.error('Erro ao forcar redefinicao de senha:', error);
+    return res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
+// Excluir usuario (soft delete) - apenas admin
+router.delete('/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requesterId = (req.user?.id || '').toString();
+
+    if (requesterId && requesterId === id.toString()) {
+      return res.status(400).json({ message: 'Voce nao pode excluir o proprio usuario.' });
+    }
+
+    const targetUserResult = await pool.query(
+      `SELECT id, name, email, username, role
+         FROM users
+        WHERE id = $1
+          AND deleted_at IS NULL`,
+      [id]
+    );
+
+    if (targetUserResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario nao encontrado' });
+    }
+
+    const targetUser = targetUserResult.rows[0];
+    const requesterRole = (req.user?.role || '').toString().trim().toLowerCase();
+    const targetRole = (targetUser.role || '').toString().trim().toLowerCase();
+    const targetUsername = (targetUser.username || '').toString().trim().toLowerCase();
+
+    if (targetUsername === 'admin') {
+      return res.status(403).json({ message: 'Nao e permitido excluir o administrador principal.' });
+    }
+
+    if (targetRole === 'admin' && requesterRole !== 'admin') {
+      return res.status(403).json({ message: 'Apenas administrador pode excluir outro administrador.' });
+    }
+
+    await pool.query(
+      `UPDATE users
+          SET deleted_at = NOW()
+        WHERE id = $1
+          AND deleted_at IS NULL`,
+      [id]
+    );
+
+    return res.json({
+      message: `Usuario ${targetUser.name} excluido com sucesso.`,
+      user: {
+        id: targetUser.id,
+        name: targetUser.name,
+        email: targetUser.email,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao excluir usuario:', error);
+    return res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await pool.query(
-      'SELECT id, username, email, name, phone, role, status, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, name, phone, role, status, must_change_password, created_at FROM users WHERE id = $1 AND deleted_at IS NULL',
       [id]
     );
 
@@ -178,7 +275,10 @@ router.post('/:id/reset-password', adminMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Senha inválida. Mínimo 6 caracteres.' });
     }
 
-    const targetUser = await pool.query('SELECT id, role FROM users WHERE id = $1', [id]);
+    const targetUser = await pool.query(
+      'SELECT id, role FROM users WHERE id = $1 AND deleted_at IS NULL',
+      [id]
+    );
     if (targetUser.rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
@@ -194,7 +294,7 @@ router.post('/:id/reset-password', adminMiddleware, async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     await pool.query(
-      'UPDATE users SET password = $1, first_access = true, updated_at = NOW() WHERE id = $2',
+      'UPDATE users SET password = $1, first_access = true, must_change_password = false WHERE id = $2 AND deleted_at IS NULL',
       [hashedPassword, id]
     );
 

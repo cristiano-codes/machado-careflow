@@ -57,6 +57,7 @@ router.get('/users', adminMiddleware, async (req, res) => {
       `SELECT id, name, email, role, status
          FROM users
         WHERE status IN ('ativo', 'pendente', 'bloqueado', 'rejeitado')
+          AND deleted_at IS NULL
         ORDER BY name`
     );
 

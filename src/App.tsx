@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
@@ -21,12 +21,22 @@ import GerenciarUsuarios from "./pages/GerenciarUsuarios";
 import PermissionManager from "./pages/PermissionManager";
 import Profissionais from "./pages/Profissionais";
 import NovoProfissional from "./pages/NovoProfissional";
+import TrocarSenhaObrigatoria from "./pages/TrocarSenhaObrigatoria";
 
 const queryClient = new QueryClient();
 
 // Componente para rotas protegidas que precisam do Layout
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { userProfile, signOut } = useAuth();
+  const { userProfile, signOut, mustChangePassword } = useAuth();
+  const location = useLocation();
+
+  if (!userProfile) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (mustChangePassword && location.pathname !== "/trocar-senha-obrigatoria") {
+    return <Navigate to="/trocar-senha-obrigatoria" replace />;
+  }
 
   const layoutUser = userProfile ? {
     name: userProfile.name || userProfile.username || userProfile.email,
@@ -48,6 +58,7 @@ const AppContent = () => {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/dashboard" element={<Index />} />
+        <Route path="/trocar-senha-obrigatoria" element={<TrocarSenhaObrigatoria />} />
         <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/pre-agendamento" element={<ProtectedRoute><PreAgendamento /></ProtectedRoute>} />
         <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
