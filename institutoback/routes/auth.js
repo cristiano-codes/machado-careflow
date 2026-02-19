@@ -6,7 +6,14 @@ const { Pool } = require('pg');
 const router = express.Router();
 
 // Chave JWT padrão em desenvolvimento
+const isProd = process.env.NODE_ENV === 'production';
+
+if (isProd && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET obrigat\u00F3rio em produ\u00E7\u00E3o');
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const ALLOW_DEMO_LOGIN = String(process.env.ALLOW_DEMO_LOGIN || '').toLowerCase() === 'true';
 
 // Configuração do banco (Railway usa DATABASE_URL)
 const pool = process.env.DATABASE_URL
@@ -77,15 +84,17 @@ async function initDatabase() {
       }
     }
 
-    // Garantir conta demo para apresentações
-    const demoCheck = await pool.query('SELECT * FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2', ['demo', 'demo@demo.com']);
-    if (demoCheck.rows.length === 0) {
-      const hashedPassword = await bcrypt.hash('demo123', 10);
-      await pool.query(`
-        INSERT INTO users (username, email, name, role, status, first_access, password)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, ['demo', 'demo@demo.com', 'Conta Demo', 'Usuário', 'ativo', false, hashedPassword]);
-      console.log('Conta demo criada: demo@demo.com / demo123');
+    // Conta demo opcional apenas quando explicitamente habilitada via ENV
+    if (ALLOW_DEMO_LOGIN) {
+      const demoCheck = await pool.query('SELECT * FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2', ['demo', 'demo@demo.com']);
+      if (demoCheck.rows.length === 0) {
+        const hashedPassword = await bcrypt.hash('demo123', 10);
+        await pool.query(`
+          INSERT INTO users (username, email, name, role, status, first_access, password)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, ['demo', 'demo@demo.com', 'Conta Demo', 'Usu\u00E1rio', 'ativo', false, hashedPassword]);
+        console.log('Conta demo criada para ambiente com ALLOW_DEMO_LOGIN=true');
+      }
     }
 
     console.log('Banco de dados inicializado com sucesso');
@@ -120,6 +129,11 @@ router.post('/login', [
 
     const loweredIdentifier = identifier.toLowerCase();
     const normalizedIdentifier = removeDiacritics(identifier);
+    const isDemoIdentifier = loweredIdentifier === 'demo' || loweredIdentifier === 'demo@demo.com';
+
+    if (!ALLOW_DEMO_LOGIN && isDemoIdentifier) {
+      return res.status(403).json({ message: 'Credenciais inv\u00E1lidas.' });
+    }
 
     // Encontrar usuário no banco (case-insensitive para username/email)
     let userResult = await pool.query(
@@ -140,6 +154,13 @@ router.post('/login', [
     }
 
     const user = userResult.rows[0];
+    const userEmail = (user.email || '').toString().trim().toLowerCase();
+    const userUsername = (user.username || '').toString().trim().toLowerCase();
+    const isDemoAccount = userUsername === 'demo' || userEmail === 'demo@demo.com';
+
+    if (!ALLOW_DEMO_LOGIN && isDemoAccount) {
+      return res.status(403).json({ message: 'Credenciais inv\u00E1lidas.' });
+    }
 
     // Verificar se usuário está ativo
     const userStatus = (user.status || '').toString().trim().toLowerCase();
