@@ -2,16 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
-const { Pool } = require('pg');
-
-// Configuração do banco
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'instituto_lauir',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASS
-});
+const pool = require('../config/pg');
 
 // Middleware de autenticação para todas as rotas de usuários
 router.use(authMiddleware);

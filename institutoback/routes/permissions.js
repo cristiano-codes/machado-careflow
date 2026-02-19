@@ -1,15 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'instituto_lauir',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASS,
-});
+const pool = require('../config/pg');
 
 router.use(authMiddleware);
 

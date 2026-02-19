@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { Pool } = require('pg');
+const pool = require('../config/pg');
 const router = express.Router();
 
 // Chave JWT padrão em desenvolvimento
@@ -14,21 +14,6 @@ if (isProd && !process.env.JWT_SECRET) {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const ALLOW_DEMO_LOGIN = String(process.env.ALLOW_DEMO_LOGIN || '').toLowerCase() === 'true';
-
-// Configuração do banco (Railway usa DATABASE_URL)
-const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      // ssl: { rejectUnauthorized: false }, // só habilite se seu Postgres exigir SSL
-    })
-  : new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || 5432,
-      database: process.env.DB_NAME || 'instituto_lauir',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASS
-    });
-
 
 // Mapeamento simples para remover acentuação de nomes de usuário
 const ACCENT_FROM = 'ÁÀÃÂÄáàãâäÉÈÊËéèêëÍÌÎÏíìîïÓÒÕÔÖóòõôöÚÙÛÜúùûüÇçÑñ';
