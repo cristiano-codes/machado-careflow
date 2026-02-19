@@ -5,6 +5,7 @@ import { Layout } from "@/components/layout/Layout";
 import Dashboard from "./Dashboard";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { FirstAccessForm } from "@/components/auth/FirstAccessForm";
 import { apiService } from "@/services/api";
 
@@ -12,7 +13,8 @@ const Index = () => {
   const [showRegister, setShowRegister] = useState(false);
   const [showFirstAccess, setShowFirstAccess] = useState(false);
   const [firstAccessUsername, setFirstAccessUsername] = useState<string | undefined>(undefined);
-  const { user, userProfile, loading, signIn, signUp, signOut } = useAuth();
+  const { user, userProfile, loading, signIn, signOut } = useAuth();
+  const { settings } = useSettings();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -31,16 +33,22 @@ const Index = () => {
     }
   }, [user]);
 
-const handleLogin = async (credentials: { email: string; password: string }) => {
-  try {
-    const { error } = await signIn(credentials.email, credentials.password);
-    
-    if (error) {
-      throw new Error(error);
+  useEffect(() => {
+    if (!settings.allow_public_registration && showRegister) {
+      setShowRegister(false);
     }
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "E-mail ou senha incorretos";
-    if (/Primeiro acesso/i.test(msg)) {
+  }, [settings.allow_public_registration, showRegister]);
+
+  const handleLogin = async (credentials: { email: string; password: string }) => {
+    try {
+      const { error } = await signIn(credentials.email, credentials.password);
+
+      if (error) {
+        throw new Error(error);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "E-mail ou senha incorretos";
+      if (/Primeiro acesso/i.test(msg)) {
         setShowFirstAccess(true);
         setFirstAccessUsername(credentials.email);
       }
@@ -70,7 +78,7 @@ const handleLogin = async (credentials: { email: string; password: string }) => 
     );
   }
 
-  if (showRegister) {
+  if (showRegister && settings.allow_public_registration) {
     return <RegisterForm onSuccess={handleRegisterSuccess} onBackToLogin={() => setShowRegister(false)} />;
   }
 

@@ -60,6 +60,7 @@ const DEFAULT_SETTINGS = {
   data_retention_days: 365,
   auto_updates: true,
   debug_mode: false,
+  allow_public_registration: false,
   business_hours: DEFAULT_BUSINESS_HOURS,
   professionals_config: DEFAULT_PROFESSIONALS_CONFIG,
 };
@@ -82,6 +83,7 @@ const SETTINGS_EDITABLE_FIELDS = [
   'data_retention_days',
   'auto_updates',
   'debug_mode',
+  'allow_public_registration',
   'business_hours',
   'professionals_config',
 ];
@@ -131,20 +133,28 @@ async function ensureSystemSettingsSchema() {
           ADD COLUMN IF NOT EXISTS instituicao_logo_base64 text,
           ADD COLUMN IF NOT EXISTS instituicao_logo_updated_at timestamptz DEFAULT now(),
           ADD COLUMN IF NOT EXISTS business_hours jsonb,
-          ADD COLUMN IF NOT EXISTS professionals_config jsonb
+          ADD COLUMN IF NOT EXISTS professionals_config jsonb,
+          ADD COLUMN IF NOT EXISTS allow_public_registration boolean
       `);
 
       await pool.query(
         `
           UPDATE public.system_settings
           SET business_hours = COALESCE(business_hours, $1::jsonb),
-              professionals_config = COALESCE(professionals_config, $2::jsonb)
+              professionals_config = COALESCE(professionals_config, $2::jsonb),
+              allow_public_registration = COALESCE(allow_public_registration, false)
         `,
         [
           JSON.stringify(DEFAULT_BUSINESS_HOURS),
           JSON.stringify(DEFAULT_PROFESSIONALS_CONFIG),
         ]
       );
+
+      await pool.query(`
+        ALTER TABLE public.system_settings
+          ALTER COLUMN allow_public_registration SET DEFAULT false,
+          ALTER COLUMN allow_public_registration SET NOT NULL
+      `);
 
       settingsColumnsCache = null;
     })().catch((error) => {
@@ -435,6 +445,7 @@ async function createSingletonSettings(seed = {}) {
     normalizedSeed.data_retention_days,
     normalizedSeed.auto_updates,
     normalizedSeed.debug_mode,
+    normalizedSeed.allow_public_registration,
     JSON.stringify(normalizedSeed.business_hours),
     JSON.stringify(normalizedSeed.professionals_config),
   ];
@@ -461,6 +472,7 @@ async function createSingletonSettings(seed = {}) {
           data_retention_days,
           auto_updates,
           debug_mode,
+          allow_public_registration,
           business_hours,
           professionals_config
         ) VALUES (
@@ -482,8 +494,9 @@ async function createSingletonSettings(seed = {}) {
           $15,
           $16,
           $17,
-          $18::jsonb,
-          $19::jsonb
+          $18,
+          $19::jsonb,
+          $20::jsonb
         )
         RETURNING *
       `,
@@ -516,6 +529,7 @@ async function createSingletonSettings(seed = {}) {
           data_retention_days,
           auto_updates,
           debug_mode,
+          allow_public_registration,
           business_hours,
           professionals_config
         ) VALUES (
@@ -537,8 +551,9 @@ async function createSingletonSettings(seed = {}) {
           $16,
           $17,
           $18,
-          $19::jsonb,
-          $20::jsonb
+          $19,
+          $20::jsonb,
+          $21::jsonb
         )
         RETURNING *
       `,
@@ -576,6 +591,34 @@ function successResponse(res, data) {
     settings: normalizedData,
   });
 }
+
+router.get('/public', async (_req, res) => {
+  try {
+    const row = await ensureSingletonSettings();
+    const normalized = normalizeSettingsRow(row);
+    const allow = Boolean(normalized.allow_public_registration);
+
+    return res.json({
+      success: true,
+      allow_public_registration: allow,
+      data: { allow_public_registration: allow },
+      settings: { allow_public_registration: allow },
+    });
+  } catch (error) {
+    console.error('[settings][public][GET] erro ao buscar configuracao publica:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+
+    return res.json({
+      success: false,
+      allow_public_registration: false,
+      data: { allow_public_registration: false },
+      settings: { allow_public_registration: false },
+    });
+  }
+});
 
 async function ensureDefaultProfessionalRoles() {
   const { rows } = await pool.query(
@@ -820,6 +863,16 @@ async function saveSettingsHandler(req, res) {
       payload.professionals_config = validation.value;
     }
 
+    if (
+      Object.prototype.hasOwnProperty.call(payload, 'allow_public_registration') &&
+      typeof payload.allow_public_registration !== 'boolean'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'allow_public_registration deve ser booleano.',
+      });
+    }
+
     const singleton = await ensureSingletonSettings(payload);
     const settingsColumns = await getSystemSettingsColumnsMap();
     const fieldsToUpdate = Object.keys(payload).filter((field) => settingsColumns.has(field));
@@ -881,6 +934,7 @@ async function saveSettingsHandler(req, res) {
 
 router.put('/', authorize('configuracoes', 'edit'), saveSettingsHandler);
 router.post('/', authorize('configuracoes', 'edit'), saveSettingsHandler);
+router.patch('/', authorize('configuracoes', 'edit'), saveSettingsHandler);
 
 module.exports = router;
 

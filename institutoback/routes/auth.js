@@ -105,6 +105,27 @@ async function initDatabase() {
 
 initDatabase();
 
+async function isPublicRegistrationEnabled() {
+  try {
+    const result = await pool.query(
+      `SELECT allow_public_registration FROM public.system_settings LIMIT 1`
+    );
+
+    if (result.rows.length === 0) {
+      return false;
+    }
+
+    return result.rows[0].allow_public_registration === true;
+  } catch (error) {
+    if (error?.code === '42703' || error?.code === '42P01') {
+      return false;
+    }
+
+    console.error('Erro ao verificar cadastro publico:', error);
+    return false;
+  }
+}
+
 // Rota de login
 router.post('/login', [
   body('username').notEmpty().withMessage('Username é obrigatório'),
@@ -467,7 +488,13 @@ router.post('/setup-password', [
 });
 
 // Rota para registro de novos usuários
-router.post('/register', [
+router.post('/register', async (_req, res, next) => {
+  const enabled = await isPublicRegistrationEnabled();
+  if (!enabled) {
+    return res.status(403).json({ message: 'Cadastro indispon\u00EDvel.' });
+  }
+  return next();
+}, [
   body('username').notEmpty().withMessage('Username é obrigatório'),
   body('email').isEmail().withMessage('Email deve ser válido'),
   body('name').notEmpty().withMessage('Nome é obrigatório'),

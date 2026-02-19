@@ -118,15 +118,17 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
 
           </form>
           
-          <div className="mt-6 text-center">
-            <Button 
-              variant="link" 
-              onClick={onRegister}
-              className="text-primary hover:text-primary-hover font-medium"
-            >
-              Primeiro Acesso? Crie sua conta
-            </Button>
-          </div>
+          {settings.allow_public_registration && (
+            <div className="mt-6 text-center">
+              <Button
+                variant="link"
+                onClick={onRegister}
+                className="text-primary hover:text-primary-hover font-medium"
+              >
+                Primeiro Acesso? Crie sua conta
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

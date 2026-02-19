@@ -86,7 +86,7 @@ export default function Configuracoes() {
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-1">
-              <SystemSettingsSection />
+              <SystemSettingsSection canEdit={canEdit} />
             </AccordionContent>
           </AccordionItem>
 

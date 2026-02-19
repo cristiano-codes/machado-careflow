@@ -77,6 +77,7 @@ export type SettingsPayload = {
   data_retention_days: number;
   auto_updates: boolean;
   debug_mode: boolean;
+  allow_public_registration: boolean;
   business_hours: BusinessHours;
   professionals_config: ProfessionalsConfig;
 };
@@ -140,6 +141,12 @@ type SettingsResponse = {
   success: boolean;
   settings?: SettingsPayload;
   data?: SettingsPayload;
+  message?: string;
+};
+
+type PublicSettingsResponse = {
+  success: boolean;
+  allow_public_registration: boolean;
   message?: string;
 };
 
@@ -261,6 +268,47 @@ class ApiService {
       throw new Error(message);
     }
     return r.json();
+  }
+
+  async getPublicSettings(): Promise<PublicSettingsResponse> {
+    const response = await fetch(`${API_BASE_URL}/settings/public`, {
+      headers: { "Content-Type": "application/json" },
+    });
+    let raw: unknown = {};
+
+    try {
+      raw = await response.json();
+    } catch {
+      raw = {};
+    }
+
+    const parsed = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const fromRoot = parsed.allow_public_registration;
+    const fromSettings =
+      parsed.settings && typeof parsed.settings === "object"
+        ? (parsed.settings as Record<string, unknown>).allow_public_registration
+        : undefined;
+    const fromData =
+      parsed.data && typeof parsed.data === "object"
+        ? (parsed.data as Record<string, unknown>).allow_public_registration
+        : undefined;
+
+    const allow =
+      typeof fromRoot === "boolean"
+        ? fromRoot
+        : typeof fromSettings === "boolean"
+          ? fromSettings
+          : typeof fromData === "boolean"
+            ? fromData
+            : false;
+
+    const message = typeof parsed.message === "string" ? parsed.message : undefined;
+
+    return {
+      success: response.ok && parsed.success !== false,
+      allow_public_registration: allow,
+      message,
+    };
   }
 
   // ---------- SETTINGS: PROFESSIONAL ROLES ----------

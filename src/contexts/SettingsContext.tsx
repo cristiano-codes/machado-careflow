@@ -29,6 +29,7 @@ export interface Settings {
   data_retention_days: number;
   auto_updates: boolean;
   debug_mode: boolean;
+  allow_public_registration: boolean;
   business_hours: BusinessHours;
   professionals_config: ProfessionalsConfig;
 }
@@ -82,6 +83,7 @@ const defaultSettings: Settings = {
   data_retention_days: 365,
   auto_updates: true,
   debug_mode: false,
+  allow_public_registration: false,
   business_hours: defaultBusinessHours,
   professionals_config: defaultProfessionalsConfig,
 };
@@ -169,6 +171,7 @@ function toApiSettingsPayload(settings: Settings): SettingsPayload {
     data_retention_days: settings.data_retention_days,
     auto_updates: settings.auto_updates,
     debug_mode: settings.debug_mode,
+    allow_public_registration: settings.allow_public_registration,
     business_hours: settings.business_hours,
     professionals_config: settings.professionals_config,
   };
@@ -211,6 +214,19 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const lastFaviconSignatureRef = useRef<string>("");
+  const pendingLoadsRef = useRef(0);
+
+  function startLoading() {
+    pendingLoadsRef.current += 1;
+    setLoading(true);
+  }
+
+  function endLoading() {
+    pendingLoadsRef.current = Math.max(0, pendingLoadsRef.current - 1);
+    if (pendingLoadsRef.current === 0) {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     const cached = readCachedSettings();
@@ -220,7 +236,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     const token = localStorage.getItem("token");
     if (!token) {
-      setLoading(false);
+      void fetchPublicSettings();
       return;
     }
 
@@ -246,14 +262,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, [settings.instituicao_logo_base64, settings.instituicao_logo_updated_at]);
 
   async function fetchSettings() {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+    const token = localStorage.getItem("token");
+    if (!token) {
+      await fetchPublicSettings();
+      return;
+    }
 
-      setLoading(true);
+    startLoading();
+    try {
       setError(null);
 
       const response = await apiService.getSettings();
@@ -262,12 +278,41 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (response.success && serverSettings) {
         const normalized = normalizeSettings(serverSettings);
         setSettings(normalized);
-        persistSettingsCache(serverSettings);
+        persistSettingsCache(normalized);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar configurações");
     } finally {
-      setLoading(false);
+      endLoading();
+    }
+  }
+
+  async function fetchPublicSettings() {
+    if (localStorage.getItem("token")) {
+      return;
+    }
+
+    startLoading();
+    try {
+      const response = await apiService.getPublicSettings();
+      if (typeof response.allow_public_registration === "boolean") {
+        // Evita sobrescrever estado privado caso o usuário tenha autenticado durante a request
+        if (localStorage.getItem("token")) {
+          return;
+        }
+        setSettings((prev) => {
+          const next = normalizeSettings({
+            ...prev,
+            allow_public_registration: response.allow_public_registration,
+          });
+          persistSettingsCache(next);
+          return next;
+        });
+      }
+    } catch {
+      // fallback silencioso: mantem defaults/cache local
+    } finally {
+      endLoading();
     }
   }
 
@@ -295,7 +340,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (persistedSettings) {
         const normalized = normalizeSettings(persistedSettings);
         setSettings(normalized);
-        persistSettingsCache(persistedSettings);
+        persistSettingsCache(normalized);
       } else {
         await fetchSettings();
       }

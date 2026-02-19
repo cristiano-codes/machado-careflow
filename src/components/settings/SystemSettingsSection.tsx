@@ -1,103 +1,103 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useSettings } from "@/contexts/SettingsContext";
+import { useToast } from "@/hooks/use-toast";
 
-export default function SystemSettingsSection() {
-  const [systemSettings, setSystemSettings] = useState({
-    tempoSessaoMin: 30,
-    tentativasLogin: 5,
-    modoDebug: false,
-    notificacoes: true,
-    backupAutomatico: true,
-  });
+interface SystemSettingsSectionProps {
+  canEdit?: boolean;
+}
+
+export default function SystemSettingsSection({ canEdit = true }: SystemSettingsSectionProps) {
+  const { settings, saveSettings } = useSettings();
+  const { toast } = useToast();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [allowPublicRegistration, setAllowPublicRegistration] = useState(
+    settings.allow_public_registration
+  );
+
+  useEffect(() => {
+    setAllowPublicRegistration(settings.allow_public_registration);
+  }, [settings.allow_public_registration]);
+
+  async function handleSave() {
+    try {
+      setSaving(true);
+      await saveSettings({ allow_public_registration: allowPublicRegistration });
+
+      toast({
+        title: "Configuracoes salvas",
+        description: "Politica de cadastro publico atualizada.",
+      });
+
+      setIsEditing(false);
+    } catch (err: unknown) {
+      toast({
+        title: "Erro ao salvar",
+        description: err instanceof Error ? err.message : "Nao foi possivel salvar a configuracao.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Pilar Sistema</CardTitle>
+        <CardDescription className="text-xs">
+          Controle de acesso ao cadastro publico na tela de login.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="tempo_sessao">Tempo de sessao (min)</Label>
-            <Input
-              id="tempo_sessao"
-              type="number"
-              min={1}
-              value={systemSettings.tempoSessaoMin}
-              onChange={(e) =>
-                setSystemSettings((prev) => ({
-                  ...prev,
-                  tempoSessaoMin: Number(e.target.value || 0),
-                }))
-              }
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="tentativas_login">Tentativas de login</Label>
-            <Input
-              id="tentativas_login"
-              type="number"
-              min={1}
-              value={systemSettings.tentativasLogin}
-              onChange={(e) =>
-                setSystemSettings((prev) => ({
-                  ...prev,
-                  tentativasLogin: Number(e.target.value || 0),
-                }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-md border p-3">
-            <Label htmlFor="modo_debug" className="text-sm">
-              Modo debug
+        <div className="flex items-center justify-between rounded-md border p-3">
+          <div className="space-y-1">
+            <Label htmlFor="allow_public_registration" className="text-sm">
+              Permitir cadastro publico
             </Label>
-            <Switch
-              id="modo_debug"
-              checked={systemSettings.modoDebug}
-              onCheckedChange={(checked) =>
-                setSystemSettings((prev) => ({ ...prev, modoDebug: checked }))
-              }
-            />
+            <p className="text-xs text-muted-foreground">
+              Quando ligado, exibe o link "Crie sua conta" no login e libera o endpoint de registro.
+            </p>
           </div>
-
-          <div className="flex items-center justify-between rounded-md border p-3">
-            <Label htmlFor="notificacoes" className="text-sm">
-              Notificacoes
-            </Label>
-            <Switch
-              id="notificacoes"
-              checked={systemSettings.notificacoes}
-              onCheckedChange={(checked) =>
-                setSystemSettings((prev) => ({ ...prev, notificacoes: checked }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-md border p-3 md:col-span-2">
-            <Label htmlFor="backup_automatico" className="text-sm">
-              Backup automatico
-            </Label>
-            <Switch
-              id="backup_automatico"
-              checked={systemSettings.backupAutomatico}
-              onCheckedChange={(checked) =>
-                setSystemSettings((prev) => ({ ...prev, backupAutomatico: checked }))
-              }
-            />
-          </div>
+          <Switch
+            id="allow_public_registration"
+            checked={allowPublicRegistration}
+            onCheckedChange={setAllowPublicRegistration}
+            disabled={!canEdit || !isEditing || saving}
+          />
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t pt-2">
-          <p className="text-xs text-muted-foreground">Integracao no proximo passo</p>
-          <Button type="button" size="sm" disabled>
-            Salvar
-          </Button>
+          {!canEdit ? (
+            <p className="text-xs text-muted-foreground">Somente leitura</p>
+          ) : isEditing ? (
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => {
+                  setAllowPublicRegistration(settings.allow_public_registration);
+                  setIsEditing(false);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
+                {saving ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" size="sm" onClick={() => setIsEditing(true)}>
+              Editar
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
