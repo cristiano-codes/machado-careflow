@@ -111,7 +111,7 @@ export function UserManagement() {
       setIsLoading(true);
 
       // Chama o backend local em vez do supabase
-      const res = await fetch(`${API_BASE}/api/users`, {
+      const res = await fetch(`${API_BASE}/users`, {
         headers: getAuthHeaders(),
       });
 
@@ -179,7 +179,7 @@ export function UserManagement() {
 
     setIsResetting(true);
     try {
-      const endpoint = `${API_BASE}/api/users/${resetModal.user.id}/reset-password`;
+      const endpoint = `${API_BASE}/users/${resetModal.user.id}/reset-password`;
       const res = await fetch(endpoint, {
         method: "POST",
         headers: getAuthHeaders(true),
@@ -223,17 +223,17 @@ export function UserManagement() {
         case "approve":
           newStatus = "ativo";
           message = "Usuário aprovado com sucesso";
-          endpoint = `${API_BASE}/api/users/${userId}/approve`;
+          endpoint = `${API_BASE}/users/${userId}/approve`;
           break;
         case "reject":
           newStatus = "rejeitado";
           message = "Usuário rejeitado";
-          endpoint = `${API_BASE}/api/users/${userId}/reject`;
+          endpoint = `${API_BASE}/users/${userId}/reject`;
           break;
         case "block":
           newStatus = "bloqueado";
           message = "Usuário bloqueado";
-          endpoint = `${API_BASE}/api/users/${userId}/block`;
+          endpoint = `${API_BASE}/users/${userId}/block`;
           break;
         default:
           return;
