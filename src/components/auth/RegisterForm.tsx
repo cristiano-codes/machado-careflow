@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { UserPlus, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { InstitutionLogo } from '@/components/branding/InstitutionLogo';
+import { API_BASE_URL } from '@/services/api';
 
 interface RegisterFormProps {
   onSuccess: () => void;
@@ -50,7 +51,7 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
