@@ -88,6 +88,13 @@ export type LinkableProfessionalUser = {
   professional_id?: string | null;
 };
 
+export type RegistrationMode = "ADMIN_ONLY" | "PUBLIC_SIGNUP" | "INVITE_ONLY";
+export type PublicSignupDefaultStatus = "pendente" | "ativo";
+export type LinkPolicy =
+  | "MANUAL_LINK_ADMIN"
+  | "AUTO_LINK_BY_EMAIL"
+  | "SELF_CLAIM_WITH_APPROVAL";
+
 export type SettingsPayload = {
   instituicao_nome: string;
   instituicao_email: string;
@@ -106,6 +113,11 @@ export type SettingsPayload = {
   data_retention_days: number;
   auto_updates: boolean;
   debug_mode: boolean;
+  registration_mode: RegistrationMode;
+  public_signup_default_status: PublicSignupDefaultStatus;
+  link_policy: LinkPolicy;
+  allow_create_user_from_professional: boolean;
+  block_duplicate_email: boolean;
   allow_public_registration: boolean;
   allow_professional_view_others: boolean;
   business_hours: BusinessHours;
@@ -191,8 +203,28 @@ export type ProfessionalMeResponse = {
   message?: string;
 };
 
+export type ProfessionalLinkRequestStatus = "pending" | "approved" | "rejected";
+
+export type ProfessionalLinkRequest = {
+  id: string;
+  user_id: string;
+  professional_id: string;
+  status: ProfessionalLinkRequestStatus;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  decided_at?: string | null;
+  decided_by_user_id?: string | null;
+  user_name?: string | null;
+  user_email?: string | null;
+  professional_name?: string | null;
+  professional_email?: string | null;
+  decided_by_name?: string | null;
+};
+
 type PublicSettingsResponse = {
   success: boolean;
+  registration_mode?: RegistrationMode;
   allow_public_registration: boolean;
   instituicao_nome?: string | null;
   instituicao_logo_url?: string | null;
@@ -413,6 +445,86 @@ class ApiService {
     return { message: data?.message || "Vinculo removido com sucesso" };
   }
 
+  async createProfessionalLinkRequest(
+    professionalId: string,
+    notes?: string
+  ): Promise<{ message: string; request?: ProfessionalLinkRequest }> {
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/${professionalId}/link-requests`,
+      {
+        method: "POST",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(notes ? { notes } : {}),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao solicitar vinculo");
+    }
+    return {
+      message: data?.message || "Solicitacao de vinculo enviada com sucesso",
+      request: data?.request,
+    };
+  }
+
+  async getProfessionalLinkRequests(
+    status?: ProfessionalLinkRequestStatus
+  ): Promise<ProfessionalLinkRequest[]> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    const response = await fetch(`${API_BASE_URL}/profissionais/link-requests${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao carregar solicitacoes de vinculo");
+    }
+    return Array.isArray(data?.requests) ? data.requests : [];
+  }
+
+  async approveProfessionalLinkRequest(
+    requestId: string,
+    notes?: string
+  ): Promise<{ message: string; request?: ProfessionalLinkRequest }> {
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/link-requests/${requestId}/approve`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(notes ? { notes } : {}),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao aprovar solicitacao de vinculo");
+    }
+    return {
+      message: data?.message || "Solicitacao aprovada com sucesso",
+      request: data?.request,
+    };
+  }
+
+  async rejectProfessionalLinkRequest(
+    requestId: string,
+    notes?: string
+  ): Promise<{ message: string; request?: ProfessionalLinkRequest }> {
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/link-requests/${requestId}/reject`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(notes ? { notes } : {}),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao rejeitar solicitacao de vinculo");
+    }
+    return {
+      message: data?.message || "Solicitacao rejeitada com sucesso",
+      request: data?.request,
+    };
+  }
+
   // ---------- SETTINGS ----------
   /**
    * Busca as configurações atuais
@@ -500,6 +612,13 @@ class ApiService {
 
     const allowRaw = pick("allow_public_registration");
     const allow = typeof allowRaw === "boolean" ? allowRaw : false;
+    const registrationModeRaw = pick("registration_mode");
+    const registrationMode =
+      registrationModeRaw === "ADMIN_ONLY" ||
+      registrationModeRaw === "PUBLIC_SIGNUP" ||
+      registrationModeRaw === "INVITE_ONLY"
+        ? registrationModeRaw
+        : undefined;
     const instituicaoNome = parseOptionalString(pick("instituicao_nome"));
     const instituicaoLogoUrl = parseOptionalString(pick("instituicao_logo_url"));
     const instituicaoLogoBase64 = parseOptionalString(pick("instituicao_logo_base64"));
@@ -508,6 +627,7 @@ class ApiService {
 
     return {
       success: response.ok && parsed.success !== false,
+      registration_mode: registrationMode,
       allow_public_registration: allow,
       instituicao_nome: instituicaoNome,
       instituicao_logo_url: instituicaoLogoUrl,

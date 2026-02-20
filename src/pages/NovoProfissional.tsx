@@ -24,6 +24,7 @@ export default function NovoProfissional() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const allowCreateUserFromProfessional = settings.allow_create_user_from_professional;
 
   const contractOptions = useMemo(
     () =>
@@ -76,11 +77,12 @@ export default function NovoProfissional() {
   });
 
   useEffect(() => {
+    if (!allowCreateUserFromProfessional) return;
     if (form.email && !form.username) {
       const prefix = form.email.split("@")[0];
       setForm((prev) => ({ ...prev, username: prefix }));
     }
-  }, [form.email, form.username]);
+  }, [allowCreateUserFromProfessional, form.email, form.username]);
 
   useEffect(() => {
     const loadProfessionalRoles = async () => {
@@ -148,11 +150,15 @@ export default function NovoProfissional() {
         throw new Error("Horas semanais deve ser um numero inteiro positivo");
       }
 
+      if (allowCreateUserFromProfessional && !form.username.trim()) {
+        throw new Error("Username e obrigatorio quando a criacao de acesso estiver habilitada");
+      }
+
       const res = await apiService.createProfessional({
         name: form.name,
         email: form.email,
         phone: form.phone || undefined,
-        username: form.username,
+        username: allowCreateUserFromProfessional ? form.username : "",
         role: form.role,
         specialty: form.specialty || undefined,
         crp: form.crp || undefined,
@@ -207,7 +213,11 @@ export default function NovoProfissional() {
         <Card>
           <CardHeader>
             <CardTitle>Dados principais</CardTitle>
-            <CardDescription>Esses dados criam o usuario e o vinculo com profissionais</CardDescription>
+            <CardDescription>
+              {allowCreateUserFromProfessional
+                ? "Esses dados podem criar o usuario e o vinculo com profissionais."
+                : "Cadastro profissional sem criacao automatica de usuario (acesso desativado nas configuracoes)."}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
@@ -233,15 +243,21 @@ export default function NovoProfissional() {
                   <Label htmlFor="phone">Telefone</Label>
                   <Input id="phone" value={form.phone} onChange={(e) => setValue("phone", e.target.value)} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    value={form.username}
-                    onChange={(e) => setValue("username", e.target.value)}
-                    required
-                  />
-                </div>
+                {allowCreateUserFromProfessional ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                      id="username"
+                      value={form.username}
+                      onChange={(e) => setValue("username", e.target.value)}
+                      required
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2 rounded-md border p-3 text-xs text-muted-foreground">
+                    Criacao de acesso por este formulario esta desativada (allow_create_user_from_professional = false).
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">

@@ -3,6 +3,16 @@ const { randomUUID } = require('crypto');
 const pool = require('../config/pg');
 const authMiddleware = require('../middleware/auth');
 const { authorize } = require('../middleware/authorize');
+const {
+  REGISTRATION_MODES,
+  PUBLIC_SIGNUP_DEFAULT_STATUSES,
+  LINK_POLICIES,
+  DEFAULT_ACCESS_SETTINGS,
+  normalizeRegistrationMode,
+  normalizePublicSignupDefaultStatus,
+  normalizeLinkPolicy,
+  deriveAllowPublicRegistration,
+} = require('../lib/accessSettings');
 
 const router = express.Router();
 
@@ -62,7 +72,13 @@ const DEFAULT_SETTINGS = {
   data_retention_days: 365,
   auto_updates: true,
   debug_mode: false,
-  allow_public_registration: false,
+  registration_mode: DEFAULT_ACCESS_SETTINGS.registration_mode,
+  public_signup_default_status: DEFAULT_ACCESS_SETTINGS.public_signup_default_status,
+  link_policy: DEFAULT_ACCESS_SETTINGS.link_policy,
+  allow_create_user_from_professional:
+    DEFAULT_ACCESS_SETTINGS.allow_create_user_from_professional,
+  block_duplicate_email: DEFAULT_ACCESS_SETTINGS.block_duplicate_email,
+  allow_public_registration: DEFAULT_ACCESS_SETTINGS.allow_public_registration,
   allow_professional_view_others: false,
   business_hours: DEFAULT_BUSINESS_HOURS,
   professionals_config: DEFAULT_PROFESSIONALS_CONFIG,
@@ -86,6 +102,11 @@ const SETTINGS_EDITABLE_FIELDS = [
   'data_retention_days',
   'auto_updates',
   'debug_mode',
+  'registration_mode',
+  'public_signup_default_status',
+  'link_policy',
+  'allow_create_user_from_professional',
+  'block_duplicate_email',
   'allow_public_registration',
   'allow_professional_view_others',
   'business_hours',
@@ -138,6 +159,11 @@ async function ensureSystemSettingsSchema() {
           ADD COLUMN IF NOT EXISTS instituicao_logo_updated_at timestamptz DEFAULT now(),
           ADD COLUMN IF NOT EXISTS business_hours jsonb,
           ADD COLUMN IF NOT EXISTS professionals_config jsonb,
+          ADD COLUMN IF NOT EXISTS registration_mode text,
+          ADD COLUMN IF NOT EXISTS public_signup_default_status text,
+          ADD COLUMN IF NOT EXISTS link_policy text,
+          ADD COLUMN IF NOT EXISTS allow_create_user_from_professional boolean,
+          ADD COLUMN IF NOT EXISTS block_duplicate_email boolean,
           ADD COLUMN IF NOT EXISTS allow_public_registration boolean,
           ADD COLUMN IF NOT EXISTS allow_professional_view_others boolean
       `);
@@ -147,17 +173,57 @@ async function ensureSystemSettingsSchema() {
           UPDATE public.system_settings
           SET business_hours = COALESCE(business_hours, $1::jsonb),
               professionals_config = COALESCE(professionals_config, $2::jsonb),
-              allow_public_registration = COALESCE(allow_public_registration, false),
+              registration_mode = CASE
+                WHEN UPPER(COALESCE(registration_mode, '')) IN ('ADMIN_ONLY', 'PUBLIC_SIGNUP', 'INVITE_ONLY')
+                  THEN UPPER(registration_mode)
+                WHEN allow_public_registration = true THEN 'PUBLIC_SIGNUP'
+                ELSE $3
+              END,
+              public_signup_default_status = CASE
+                WHEN LOWER(COALESCE(public_signup_default_status, '')) IN ('pendente', 'ativo')
+                  THEN LOWER(public_signup_default_status)
+                ELSE $4
+              END,
+              link_policy = CASE
+                WHEN UPPER(COALESCE(link_policy, '')) IN ('MANUAL_LINK_ADMIN', 'AUTO_LINK_BY_EMAIL', 'SELF_CLAIM_WITH_APPROVAL')
+                  THEN UPPER(link_policy)
+                ELSE $5
+              END,
+              allow_create_user_from_professional = COALESCE(
+                allow_create_user_from_professional,
+                $6
+              ),
+              block_duplicate_email = COALESCE(block_duplicate_email, $7),
+              allow_public_registration = COALESCE(
+                allow_public_registration,
+                registration_mode = 'PUBLIC_SIGNUP',
+                false
+              ),
               allow_professional_view_others = COALESCE(allow_professional_view_others, false)
         `,
         [
           JSON.stringify(DEFAULT_BUSINESS_HOURS),
           JSON.stringify(DEFAULT_PROFESSIONALS_CONFIG),
+          DEFAULT_ACCESS_SETTINGS.registration_mode,
+          DEFAULT_ACCESS_SETTINGS.public_signup_default_status,
+          DEFAULT_ACCESS_SETTINGS.link_policy,
+          DEFAULT_ACCESS_SETTINGS.allow_create_user_from_professional,
+          DEFAULT_ACCESS_SETTINGS.block_duplicate_email,
         ]
       );
 
       await pool.query(`
         ALTER TABLE public.system_settings
+          ALTER COLUMN registration_mode SET DEFAULT '${DEFAULT_ACCESS_SETTINGS.registration_mode}',
+          ALTER COLUMN registration_mode SET NOT NULL,
+          ALTER COLUMN public_signup_default_status SET DEFAULT '${DEFAULT_ACCESS_SETTINGS.public_signup_default_status}',
+          ALTER COLUMN public_signup_default_status SET NOT NULL,
+          ALTER COLUMN link_policy SET DEFAULT '${DEFAULT_ACCESS_SETTINGS.link_policy}',
+          ALTER COLUMN link_policy SET NOT NULL,
+          ALTER COLUMN allow_create_user_from_professional SET DEFAULT ${DEFAULT_ACCESS_SETTINGS.allow_create_user_from_professional ? 'true' : 'false'},
+          ALTER COLUMN allow_create_user_from_professional SET NOT NULL,
+          ALTER COLUMN block_duplicate_email SET DEFAULT ${DEFAULT_ACCESS_SETTINGS.block_duplicate_email ? 'true' : 'false'},
+          ALTER COLUMN block_duplicate_email SET NOT NULL,
           ALTER COLUMN allow_public_registration SET DEFAULT false,
           ALTER COLUMN allow_public_registration SET NOT NULL,
           ALTER COLUMN allow_professional_view_others SET DEFAULT false,
@@ -474,7 +540,11 @@ function normalizePublicLogoBase64(value) {
   return normalized;
 }
 
-function buildPublicSettingsResponse(normalized, req, allowPublicRegistration) {
+function buildPublicSettingsResponse(normalized, req) {
+  const registrationMode = normalizeRegistrationMode(
+    normalized?.registration_mode ||
+      (normalized?.allow_public_registration ? 'PUBLIC_SIGNUP' : null)
+  );
   const instituicao_nome = normalizePublicName(normalized?.instituicao_nome);
   const instituicao_logo_url = normalizePublicLogoUrl(normalized?.instituicao_logo_url, req);
   const instituicao_logo_base64 = instituicao_logo_url
@@ -482,7 +552,8 @@ function buildPublicSettingsResponse(normalized, req, allowPublicRegistration) {
     : normalizePublicLogoBase64(normalized?.instituicao_logo_base64);
 
   return {
-    allow_public_registration: Boolean(allowPublicRegistration),
+    registration_mode: registrationMode,
+    allow_public_registration: deriveAllowPublicRegistration(registrationMode),
     instituicao_nome,
     instituicao_logo_url,
     instituicao_logo_base64,
@@ -491,6 +562,24 @@ function buildPublicSettingsResponse(normalized, req, allowPublicRegistration) {
 
 function normalizeSettingsRow(row) {
   const source = row || {};
+  const registration_mode = normalizeRegistrationMode(
+    source.registration_mode ||
+      (source.allow_public_registration === true ? 'PUBLIC_SIGNUP' : null)
+  );
+  const public_signup_default_status = normalizePublicSignupDefaultStatus(
+    source.public_signup_default_status
+  );
+  const link_policy = normalizeLinkPolicy(source.link_policy);
+  const allow_create_user_from_professional =
+    typeof source.allow_create_user_from_professional === 'boolean'
+      ? source.allow_create_user_from_professional
+      : DEFAULT_ACCESS_SETTINGS.allow_create_user_from_professional;
+  const block_duplicate_email =
+    typeof source.block_duplicate_email === 'boolean'
+      ? source.block_duplicate_email
+      : DEFAULT_ACCESS_SETTINGS.block_duplicate_email;
+  const allow_public_registration = deriveAllowPublicRegistration(registration_mode);
+
   const businessHoursValidation = validateBusinessHours(
     source.business_hours || DEFAULT_SETTINGS.business_hours
   );
@@ -501,6 +590,12 @@ function normalizeSettingsRow(row) {
   return {
     ...DEFAULT_SETTINGS,
     ...source,
+    registration_mode,
+    public_signup_default_status,
+    link_policy,
+    allow_create_user_from_professional,
+    block_duplicate_email,
+    allow_public_registration,
     business_hours: businessHoursValidation.ok
       ? businessHoursValidation.value
       : clone(DEFAULT_BUSINESS_HOURS),
@@ -535,6 +630,11 @@ async function createSingletonSettings(seed = {}) {
     normalizedSeed.data_retention_days,
     normalizedSeed.auto_updates,
     normalizedSeed.debug_mode,
+    normalizedSeed.registration_mode,
+    normalizedSeed.public_signup_default_status,
+    normalizedSeed.link_policy,
+    normalizedSeed.allow_create_user_from_professional,
+    normalizedSeed.block_duplicate_email,
     normalizedSeed.allow_public_registration,
     normalizedSeed.allow_professional_view_others,
     JSON.stringify(normalizedSeed.business_hours),
@@ -563,6 +663,11 @@ async function createSingletonSettings(seed = {}) {
           data_retention_days,
           auto_updates,
           debug_mode,
+          registration_mode,
+          public_signup_default_status,
+          link_policy,
+          allow_create_user_from_professional,
+          block_duplicate_email,
           allow_public_registration,
           allow_professional_view_others,
           business_hours,
@@ -588,8 +693,13 @@ async function createSingletonSettings(seed = {}) {
           $17,
           $18,
           $19,
-          $20::jsonb,
-          $21::jsonb
+          $20,
+          $21,
+          $22,
+          $23,
+          $24,
+          $25::jsonb,
+          $26::jsonb
         )
         RETURNING *
       `,
@@ -622,6 +732,11 @@ async function createSingletonSettings(seed = {}) {
           data_retention_days,
           auto_updates,
           debug_mode,
+          registration_mode,
+          public_signup_default_status,
+          link_policy,
+          allow_create_user_from_professional,
+          block_duplicate_email,
           allow_public_registration,
           allow_professional_view_others,
           business_hours,
@@ -647,8 +762,13 @@ async function createSingletonSettings(seed = {}) {
           $18,
           $19,
           $20,
-          $21::jsonb,
-          $22::jsonb
+          $21,
+          $22,
+          $23,
+          $24,
+          $25,
+          $26::jsonb,
+          $27::jsonb
         )
         RETURNING *
       `,
@@ -691,11 +811,7 @@ router.get('/public', async (req, res) => {
   try {
     const row = await ensureSingletonSettings();
     const normalized = normalizeSettingsRow(row);
-    const publicData = buildPublicSettingsResponse(
-      normalized,
-      req,
-      normalized.allow_public_registration
-    );
+    const publicData = buildPublicSettingsResponse(normalized, req);
 
     return res.json({
       success: true,
@@ -710,11 +826,7 @@ router.get('/public', async (req, res) => {
       stack: error?.stack,
     });
 
-    const fallbackData = buildPublicSettingsResponse(
-      DEFAULT_SETTINGS,
-      req,
-      false
-    );
+    const fallbackData = buildPublicSettingsResponse(DEFAULT_SETTINGS, req);
 
     return res.json({
       success: false,
@@ -969,6 +1081,56 @@ async function saveSettingsHandler(req, res) {
     }
 
     if (
+      Object.prototype.hasOwnProperty.call(payload, 'registration_mode') &&
+      typeof payload.registration_mode !== 'string'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'registration_mode deve ser string.',
+      });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(payload, 'public_signup_default_status') &&
+      typeof payload.public_signup_default_status !== 'string'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'public_signup_default_status deve ser string.',
+      });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(payload, 'link_policy') &&
+      typeof payload.link_policy !== 'string'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'link_policy deve ser string.',
+      });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(payload, 'allow_create_user_from_professional') &&
+      typeof payload.allow_create_user_from_professional !== 'boolean'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'allow_create_user_from_professional deve ser booleano.',
+      });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(payload, 'block_duplicate_email') &&
+      typeof payload.block_duplicate_email !== 'boolean'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'block_duplicate_email deve ser booleano.',
+      });
+    }
+
+    if (
       Object.prototype.hasOwnProperty.call(payload, 'allow_public_registration') &&
       typeof payload.allow_public_registration !== 'boolean'
     ) {
@@ -986,6 +1148,61 @@ async function saveSettingsHandler(req, res) {
         success: false,
         message: 'allow_professional_view_others deve ser booleano.',
       });
+    }
+
+    if (
+      !Object.prototype.hasOwnProperty.call(payload, 'registration_mode') &&
+      Object.prototype.hasOwnProperty.call(payload, 'allow_public_registration')
+    ) {
+      payload.registration_mode = payload.allow_public_registration
+        ? 'PUBLIC_SIGNUP'
+        : DEFAULT_ACCESS_SETTINGS.registration_mode;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'registration_mode')) {
+      const normalizedRegistrationMode = normalizeRegistrationMode(payload.registration_mode);
+      if (
+        payload.registration_mode &&
+        normalizedRegistrationMode !== payload.registration_mode.toString().trim().toUpperCase()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `registration_mode invalido. Use: ${REGISTRATION_MODES.join(', ')}`,
+        });
+      }
+      payload.registration_mode = normalizedRegistrationMode;
+      payload.allow_public_registration = deriveAllowPublicRegistration(normalizedRegistrationMode);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'public_signup_default_status')) {
+      const normalizedSignupStatus = normalizePublicSignupDefaultStatus(
+        payload.public_signup_default_status
+      );
+      if (
+        payload.public_signup_default_status &&
+        normalizedSignupStatus !== payload.public_signup_default_status.toString().trim().toLowerCase()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `public_signup_default_status invalido. Use: ${PUBLIC_SIGNUP_DEFAULT_STATUSES.join(', ')}`,
+        });
+      }
+      payload.public_signup_default_status = normalizedSignupStatus;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'link_policy')) {
+      const normalizedLinkPolicy = normalizeLinkPolicy(payload.link_policy);
+      if (
+        payload.link_policy &&
+        normalizedLinkPolicy !== payload.link_policy.toString().trim().toUpperCase()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `link_policy invalido. Use: ${LINK_POLICIES.join(', ')}`,
+        });
+      }
+      payload.link_policy = normalizedLinkPolicy;
     }
 
     const singleton = await ensureSingletonSettings(payload);

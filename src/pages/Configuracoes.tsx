@@ -78,11 +78,11 @@ export default function Configuracoes() {
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="sistema" className="rounded-lg border bg-card px-1.5">
+          <AccordionItem value="acesso-cadastros" className="rounded-lg border bg-card px-1.5">
             <AccordionTrigger className="py-1.5 hover:no-underline">
               <span className="flex items-center gap-2 text-sm font-medium">
                 <Cog className="h-4 w-4" />
-                Sistema
+                Acesso e Cadastros
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-1">

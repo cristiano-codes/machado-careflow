@@ -4,6 +4,10 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const pool = require('../config/pg');
 const authMiddleware = require('../middleware/auth');
+const {
+  DEFAULT_ACCESS_SETTINGS,
+  readAccessSettings,
+} = require('../lib/accessSettings');
 const router = express.Router();
 
 // Chave JWT padrão em desenvolvimento
@@ -111,24 +115,124 @@ async function initDatabase() {
 
 initDatabase();
 
-async function isPublicRegistrationEnabled() {
+async function readAccessSettingsSafe(contextLabel = 'auth') {
   try {
-    const result = await pool.query(
-      `SELECT allow_public_registration FROM public.system_settings LIMIT 1`
+    return await readAccessSettings(pool);
+  } catch (error) {
+    if (error?.code !== '42703' && error?.code !== '42P01') {
+      console.warn(`[${contextLabel}] Falha ao carregar configuracoes de acesso:`, error?.message || error);
+    }
+    return { ...DEFAULT_ACCESS_SETTINGS };
+  }
+}
+
+async function getProfessionalLinkColumn(client) {
+  const db = client || pool;
+  const { rows } = await db.query(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'professionals'
+        AND column_name IN ('user_id_int', 'user_id')
+      ORDER BY CASE column_name WHEN 'user_id_int' THEN 0 ELSE 1 END
+      LIMIT 1
+    `
+  );
+
+  return rows[0]?.column_name || null;
+}
+
+async function autoLinkProfessionalByEmail(user, contextLabel = 'auth') {
+  const userId = (user?.id || '').toString().trim();
+  const email = (user?.email || '').toString().trim().toLowerCase();
+  if (!userId || !email) return null;
+
+  const accessSettings = await readAccessSettingsSafe(`${contextLabel}:settings`);
+  if (accessSettings.link_policy !== 'AUTO_LINK_BY_EMAIL') {
+    return null;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const linkColumn = await getProfessionalLinkColumn(client);
+    if (!linkColumn) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const alreadyLinked = await client.query(
+      `
+        SELECT p.id
+        FROM public.professionals p
+        WHERE COALESCE(
+          to_jsonb(p)->>'user_id_int',
+          to_jsonb(p)->>'user_id'
+        ) = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [userId]
+    );
+    if (alreadyLinked.rows.length > 0) {
+      await client.query('COMMIT');
+      return alreadyLinked.rows[0].id;
+    }
+
+    const candidateResult = await client.query(
+      `
+        SELECT p.id
+        FROM public.professionals p
+        WHERE LOWER(TRIM(COALESCE(p.email, ''))) = $1
+          AND COALESCE(
+            to_jsonb(p)->>'user_id_int',
+            to_jsonb(p)->>'user_id'
+          ) IS NULL
+        ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
+        FOR UPDATE
+      `,
+      [email]
     );
 
-    if (result.rows.length === 0) {
-      return false;
+    if (candidateResult.rows.length !== 1) {
+      await client.query('COMMIT');
+      if (candidateResult.rows.length > 1) {
+        console.warn(
+          `[${contextLabel}] Auto-link ignorado por ambiguidade de e-mail (${email}). Matches=${candidateResult.rows.length}`
+        );
+      }
+      return null;
     }
 
-    return result.rows[0].allow_public_registration === true;
+    const professionalId = candidateResult.rows[0].id;
+    const updateResult = await client.query(
+      `
+        UPDATE public.professionals
+        SET ${linkColumn} = $1,
+            updated_at = NOW()
+        WHERE id = $2
+          AND COALESCE(
+            to_jsonb(professionals)->>'user_id_int',
+            to_jsonb(professionals)->>'user_id'
+          ) IS NULL
+      `,
+      [userId, professionalId]
+    );
+
+    await client.query('COMMIT');
+    if (updateResult.rowCount === 1) {
+      return professionalId;
+    }
+
+    return null;
   } catch (error) {
-    if (error?.code === '42703' || error?.code === '42P01') {
-      return false;
-    }
-
-    console.error('Erro ao verificar cadastro publico:', error);
-    return false;
+    await client.query('ROLLBACK');
+    console.warn(`[${contextLabel}] Falha no auto-link por e-mail:`, error?.message || error);
+    return null;
+  } finally {
+    client.release();
   }
 }
 
@@ -303,6 +407,7 @@ router.post('/login', [
     if (!isValidPassword) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }
+    await autoLinkProfessionalByEmail(user, 'auth:login');
 
     // >>> NOVO: buscar permissões do usuário
     const permsRes = await pool.query(
@@ -383,6 +488,8 @@ router.get('/verify', async (req, res) => {
     }
 
     const user = userResult.rows[0];
+
+    await autoLinkProfessionalByEmail(user, 'auth:verify');
 
     // >>> NOVO: buscar permissões também no verify
     const permsRes = await pool.query(
@@ -703,21 +810,25 @@ router.post('/setup-password', [
 });
 
 // Rota para registro de novos usuários
-router.post('/register', async (_req, res, next) => {
-  const enabled = await isPublicRegistrationEnabled();
-  if (!enabled) {
-    return res.status(403).json({ message: 'Cadastro indispon\u00EDvel.' });
+router.post('/register', async (req, res, next) => {
+  const accessSettings = await readAccessSettingsSafe('auth:register');
+  if (accessSettings.registration_mode !== 'PUBLIC_SIGNUP') {
+    return res.status(403).json({
+      message: 'Cadastro publico desativado pelo administrador.',
+    });
   }
+
+  req.accessSettings = accessSettings;
   return next();
 }, [
-  body('username').notEmpty().withMessage('Username é obrigatório'),
-  body('email').isEmail().withMessage('Email deve ser válido'),
-  body('name').notEmpty().withMessage('Nome é obrigatório'),
-  body('phone').notEmpty().withMessage('Telefone é obrigatório'),
+  body('username').notEmpty().withMessage('Username e obrigatorio'),
+  body('email').isEmail().withMessage('Email deve ser valido'),
+  body('name').notEmpty().withMessage('Nome e obrigatorio'),
+  body('phone').notEmpty().withMessage('Telefone e obrigatorio'),
   body('password').isLength({ min: 6 }).withMessage('Senha deve ter pelo menos 6 caracteres'),
   body('confirmPassword').custom((value, { req }) => {
     if (value !== req.body.password) {
-      throw new Error('Confirmação de senha não confere');
+      throw new Error('Confirmacao de senha nao confere');
     }
     return true;
   })
@@ -726,59 +837,82 @@ router.post('/register', async (_req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        message: 'Dados inválidos',
+        message: 'Dados invalidos',
         errors: errors.array()
       });
     }
 
     const username = (req.body?.username || '').trim();
-    const email = (req.body?.email || '').trim();
+    const email = (req.body?.email || '').trim().toLowerCase();
     const name = (req.body?.name || '').trim();
     const phone = (req.body?.phone || '').trim();
     const password = (req.body?.password || '').toString();
+    const accessSettings = req.accessSettings || (await readAccessSettingsSafe('auth:register:handler'));
 
     if (!username || !email || !name || !phone) {
-      return res.status(400).json({ message: 'Dados obrigatórios ausentes' });
+      return res.status(400).json({ message: 'Dados obrigatorios ausentes' });
     }
 
-    // Verificar se usuário já existe
-    const existingUser = await pool.query(
-      'SELECT * FROM users WHERE username = $1 OR email = $2',
-      [username, email]
+    const existingUsername = await pool.query(
+      'SELECT id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+      [username]
+    );
+    if (existingUsername.rows.length > 0) {
+      return res.status(409).json({ message: 'Username ja cadastrado.' });
+    }
+
+    if (accessSettings.block_duplicate_email) {
+      const existingEmail = await pool.query(
+        'SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+        [email]
+      );
+      if (existingEmail.rows.length > 0) {
+        return res.status(409).json({ message: 'E-mail ja cadastrado.' });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const defaultStatus =
+      accessSettings.public_signup_default_status === 'ativo' ? 'ativo' : 'pendente';
+
+    await pool.query(
+      'INSERT INTO users (username, email, name, phone, password, role, status, first_access, must_change_password) ' +
+        'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [
+        username,
+        email,
+        name,
+        phone,
+        hashedPassword,
+        'Usuario',
+        defaultStatus,
+        false,
+        false,
+      ]
     );
 
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({
-        message: 'Usuário ou email já existe'
-      });
+    return res.status(201).json({
+      success: true,
+      status: defaultStatus,
+      message:
+        defaultStatus === 'ativo'
+          ? 'Usuario cadastrado com sucesso! Seu acesso ja esta liberado.'
+          : 'Usuario cadastrado com sucesso! Aguarde a aprovacao do administrador para acessar o sistema.',
+    });
+  } catch (error) {
+    if (error?.code === '23505') {
+      const constraint = (error?.constraint || '').toString().toLowerCase();
+      if (constraint.includes('users_email')) {
+        return res.status(409).json({ message: 'E-mail ja cadastrado.' });
+      }
+      if (constraint.includes('users_username')) {
+        return res.status(409).json({ message: 'Username ja cadastrado.' });
+      }
+      return res.status(409).json({ message: 'Conflito ao cadastrar usuario.' });
     }
 
-    // Criptografar senha
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Criar novo usuário (status pendente para aprovação do admin)
-    await pool.query(`
-      INSERT INTO users (username, email, name, phone, password, role, status, first_access, must_change_password)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `, [
-      username,
-      email.toLowerCase(),
-      name,
-      phone,
-      hashedPassword,
-      'Usuário',
-      'pendente',
-      false,
-      false,
-    ]);
-
-    res.json({
-      message: 'Usuário cadastrado com sucesso! Aguarde a aprovação do administrador para acessar o sistema.'
-    });
-
-  } catch (error) {
     console.error('Erro no registro:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    return res.status(500).json({ message: 'Erro interno do servidor' });
   }
 });
 

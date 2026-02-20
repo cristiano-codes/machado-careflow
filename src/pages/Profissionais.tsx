@@ -23,6 +23,7 @@ import {
   type ProfessionalRole,
 } from "@/services/api";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { CalendarClock, Pencil, Plus, Trash2 } from "lucide-react";
 
@@ -255,6 +256,7 @@ export default function Profissionais() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { settings } = useSettings();
+  const { userProfile } = useAuth();
   const { canCreate, canEdit, permissions } = useModulePermissions("profissionais");
 
   const [professionals, setProfessionals] = useState<ProfessionalRow[]>([]);
@@ -292,6 +294,7 @@ export default function Profissionais() {
   const [scaleForm, setScaleForm] = useState<WeekScale>(createEmptyWeekScale());
   const [savingScale, setSavingScale] = useState(false);
   const [inactivatingId, setInactivatingId] = useState<string | null>(null);
+  const [requestingLinkForId, setRequestingLinkForId] = useState<string | null>(null);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -308,6 +311,10 @@ export default function Profissionais() {
   }, [settings.professionals_config.suggested_weekly_hours]);
 
   const canManageStatus = canEdit || permissions.has("status") || permissions.has("*");
+  const canRequestLink =
+    settings.link_policy === "SELF_CLAIM_WITH_APPROVAL" &&
+    !canEdit &&
+    !userProfile?.professional_id;
 
   const loadProfessionals = useCallback(async () => {
     try {
@@ -785,6 +792,29 @@ export default function Profissionais() {
     setLinkActionLoading(null);
   }
 
+  async function handleRequestLink(professional: ProfessionalRow) {
+    try {
+      setRequestingLinkForId(professional.id);
+      const response = await apiService.createProfessionalLinkRequest(String(professional.id));
+      toast({
+        title: "Solicitacao enviada",
+        description: response.message || "Solicitacao de vinculo enviada com sucesso.",
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Nao foi possivel enviar solicitacao de vinculo";
+      toast({
+        title: "Solicitacao de vinculo",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setRequestingLinkForId(null);
+    }
+  }
+
   return (
     <ProtectedRoute module="profissionais" permission="view">
       <div className="mx-auto max-w-7xl space-y-4">
@@ -894,6 +924,18 @@ export default function Profissionais() {
                               <Trash2 className="mr-1 h-3.5 w-3.5" />
                               Excluir
                             </Button>
+                            {canRequestLink && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleRequestLink(professional)}
+                                disabled={requestingLinkForId === professional.id}
+                              >
+                                {requestingLinkForId === professional.id
+                                  ? "Solicitando..."
+                                  : "Solicitar vinculo"}
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

@@ -33,7 +33,7 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
     if (formData.password !== formData.confirmPassword) {
       toast({
         title: "Erro",
-        description: "As senhas não coincidem",
+        description: "As senhas nÃ£o coincidem",
         variant: "destructive"
       });
       return;
@@ -62,16 +62,21 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
       const data = await response.json();
 
       if (response.ok) {
+        const createdStatus = (data?.status || '').toString().trim().toLowerCase();
+        const isActiveByDefault = createdStatus === 'ativo';
+
         toast({
           title: "Cadastro realizado com sucesso!",
-          description: "Sua solicitação foi enviada para aprovação do administrador. Você receberá um email quando seu acesso for liberado.",
+          description: isActiveByDefault
+            ? "Sua conta foi criada e o acesso ja esta liberado."
+            : "Sua solicitacao foi enviada para aprovacao do administrador. Voce sera avisado quando o acesso for liberado.",
           duration: 5000
         });
         onSuccess();
       } else {
         toast({
           title: "Erro no cadastro",
-          description: data.message || 'Erro ao criar usuário',
+          description: data.message || 'Erro ao criar usuÃ¡rio',
           variant: "destructive"
         });
       }
@@ -115,13 +120,13 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="username">Nome de Usuário</Label>
+              <Label htmlFor="username">Nome de UsuÃ¡rio</Label>
               <Input
                 id="username"
                 type="text"
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                placeholder="Digite seu nome de usuário"
+                placeholder="Digite seu nome de usuÃ¡rio"
                 required
               />
             </div>
@@ -231,3 +236,4 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
     </div>
   );
 }
+

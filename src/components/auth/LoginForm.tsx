@@ -20,6 +20,8 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const { settings } = useSettings();
+  const canShowRegister =
+    settings.registration_mode === "PUBLIC_SIGNUP" || settings.allow_public_registration;
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -118,7 +120,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
 
           </form>
           
-          {settings.allow_public_registration && (
+          {canShowRegister && (
             <div className="mt-6 text-center">
               <Button
                 variant="link"

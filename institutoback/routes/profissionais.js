@@ -1,17 +1,49 @@
 const express = require('express');
+const { randomUUID } = require('crypto');
 const router = express.Router();
 const pool = require('../config/pg');
 const bcrypt = require('bcryptjs');
 const authMiddleware = require('../middleware/auth');
 const { authorize } = require('../middleware/authorize');
+const {
+  DEFAULT_ACCESS_SETTINGS,
+  readAccessSettings,
+} = require('../lib/accessSettings');
 
 router.use(authMiddleware);
 
-const DEFAULT_CONTRACT_TYPES = ['CLT', 'PJ', 'Voluntário', 'Estágio', 'Temporário'];
+const DEFAULT_CONTRACT_TYPES = ['CLT', 'PJ', 'VoluntÃ¡rio', 'EstÃ¡gio', 'TemporÃ¡rio'];
 const SCALE_KEYS = ['seg', 'ter', 'qua', 'qui', 'sex'];
 const DEFAULT_WEEK_SCALE = { seg: true, ter: true, qua: true, qui: true, sex: true };
 const DEFAULT_DAY_START_TIME = '08:00';
 const DEFAULT_DAY_END_TIME = '17:20';
+const ADMIN_ROLE_ALIASES = ['coordenador geral', 'administrador', 'admin', 'gestao', 'gestÃƒÂ£o', 'gestor'];
+
+async function readAccessSettingsSafe(contextLabel = 'profissionais') {
+  try {
+    return await readAccessSettings(pool);
+  } catch (error) {
+    if (!['42703', '42P01'].includes(error?.code)) {
+      console.warn(`[${contextLabel}] Falha ao carregar configuracoes de acesso:`, error?.message || error);
+    }
+    return { ...DEFAULT_ACCESS_SETTINGS };
+  }
+}
+
+function isAdminUser(user) {
+  const role = (user?.role || '').toString().trim().toLowerCase();
+  if (ADMIN_ROLE_ALIASES.includes(role)) return true;
+
+  const scopes = Array.isArray(user?.permissions)
+    ? user.permissions
+        .map((scope) => (typeof scope === 'string' ? scope.trim().toLowerCase() : ''))
+        .filter(Boolean)
+    : [];
+
+  return scopes.some((scope) =>
+    ['admin:all', 'admin', 'users:manage', 'manage:users', 'permissions:manage', 'manage:permissions'].includes(scope)
+  );
+}
 
 function normalizeText(value) {
   return (value || '')
@@ -259,7 +291,7 @@ function validateProfessionalPayload(payload, options = {}) {
   const name = (payload?.name || '').toString().trim();
   const email = (payload?.email || '').toString().trim().toLowerCase();
   const username = (payload?.username || '').toString().trim();
-  const role = (payload?.role || 'Usuário').toString().trim() || 'Usuário';
+  const role = (payload?.role || 'UsuÃ¡rio').toString().trim() || 'UsuÃ¡rio';
   const phone = (payload?.phone || '').toString().trim() || null;
   const crp = (payload?.crp || '').toString().trim() || null;
   const specialty = (payload?.specialty || '').toString().trim() || null;
@@ -277,7 +309,7 @@ function validateProfessionalPayload(payload, options = {}) {
   const birthDate = payload?.data_nascimento ? payload.data_nascimento.toString().trim() : null;
 
   if (!name) {
-    return { ok: false, message: 'Nome é obrigatório' };
+    return { ok: false, message: 'Nome Ã© obrigatÃ³rio' };
   }
 
   if (
@@ -296,7 +328,7 @@ function validateProfessionalPayload(payload, options = {}) {
   if (!tipoContrato) {
       return {
       ok: false,
-      message: `tipo_contrato obrigatório. Valores aceitos: ${allowedContractTypes.join(', ')}`,
+      message: `tipo_contrato obrigatÃ³rio. Valores aceitos: ${allowedContractTypes.join(', ')}`,
     };
   }
 
@@ -305,7 +337,7 @@ function validateProfessionalPayload(payload, options = {}) {
   }
 
   if (birthDate && !isValidDateValue(birthDate)) {
-    return { ok: false, message: 'data_nascimento inválida. Use o formato YYYY-MM-DD' };
+    return { ok: false, message: 'data_nascimento invÃ¡lida. Use o formato YYYY-MM-DD' };
   }
 
   if (!weeklyScale) {
@@ -317,11 +349,11 @@ function validateProfessionalPayload(payload, options = {}) {
   }
 
   if (!status) {
-    return { ok: false, message: 'status inválido. Use ATIVO ou INATIVO' };
+    return { ok: false, message: 'status invÃ¡lido. Use ATIVO ou INATIVO' };
   }
 
   if (requireUserIdentity && (!email || !username)) {
-    return { ok: false, message: 'E-mail e username são obrigatórios' };
+    return { ok: false, message: 'E-mail e username sÃ£o obrigatÃ³rios' };
   }
 
   return {
@@ -419,6 +451,104 @@ async function getProfessionalLinkColumn(client) {
   return rows[0]?.column_name || null;
 }
 
+async function getColumnSqlType(client, tableName, columnName) {
+  const db = client || pool;
+  const { rows } = await db.query(
+    `
+      SELECT format_type(a.atttypid, a.atttypmod) AS sql_type
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relname = $1
+        AND a.attname = $2
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+      LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  return rows[0]?.sql_type || null;
+}
+
+async function ensureProfessionalLinkRequestsSchema(client) {
+  const db = client || pool;
+  const usersIdType = (await getColumnSqlType(db, 'users', 'id')) || 'uuid';
+  const professionalsIdType =
+    (await getColumnSqlType(db, 'professionals', 'id')) || 'uuid';
+
+  try {
+    await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  } catch (error) {
+    // Alguns ambientes nao permitem CREATE EXTENSION em runtime.
+  }
+
+  await db.query(
+    `
+      CREATE TABLE IF NOT EXISTS public.professional_link_requests (
+        id uuid PRIMARY KEY,
+        user_id ${usersIdType} NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        professional_id ${professionalsIdType} NOT NULL REFERENCES public.professionals(id) ON DELETE CASCADE,
+        status text NOT NULL DEFAULT 'pending',
+        notes text NULL,
+        decided_at timestamptz NULL,
+        decided_by_user_id ${usersIdType} NULL REFERENCES public.users(id) ON DELETE SET NULL,
+        created_at timestamptz NOT NULL DEFAULT NOW(),
+        updated_at timestamptz NOT NULL DEFAULT NOW(),
+        CONSTRAINT professional_link_requests_status_check
+          CHECK (status IN ('pending', 'approved', 'rejected'))
+      )
+    `
+  );
+
+  await db.query(
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_professional_link_requests_user_pending
+      ON public.professional_link_requests (user_id)
+      WHERE status = 'pending'
+    `
+  );
+  await db.query(
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_professional_link_requests_professional_pending
+      ON public.professional_link_requests (professional_id)
+      WHERE status = 'pending'
+    `
+  );
+
+  await db.query(
+    `
+      CREATE INDEX IF NOT EXISTS idx_professional_link_requests_status_created_at
+      ON public.professional_link_requests (status, created_at DESC)
+    `
+  );
+}
+
+function denyIfManualLinkRequiresAdmin(accessSettings, req, res) {
+  if (accessSettings.link_policy !== 'MANUAL_LINK_ADMIN') {
+    return false;
+  }
+
+  if (isAdminUser(req.user)) {
+    return false;
+  }
+
+  res.status(403).json({
+    success: false,
+    message: 'Apenas administradores podem vincular ou desvincular usuarios nesta politica.',
+  });
+  return true;
+}
+
+function normalizeLinkRequestStatus(value) {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (['pending', 'approved', 'rejected'].includes(normalized)) {
+    return normalized;
+  }
+  return null;
+}
+
 async function resolveAgendaAccessContext(user, client) {
   const db = client || pool;
   const linkedProfessional = await getLinkedProfessionalByUserId(user?.id, db);
@@ -440,13 +570,14 @@ async function resolveAgendaAccessContext(user, client) {
   };
 }
 
-// Criar novo profissional (cria usuário + vínculo)
+// Criar novo profissional (cria usuÃ¡rio + vÃ­nculo)
 router.post('/', authorize('profissionais', 'create'), async (req, res) => {
   const client = await pool.connect();
   try {
+    const accessSettings = await readAccessSettingsSafe('profissionais:create');
     const runtimeConfig = await getProfessionalsRuntimeConfig();
     const validation = validateProfessionalPayload(req.body, {
-      requireUserIdentity: true,
+      requireUserIdentity: accessSettings.allow_create_user_from_professional === true,
       allowedContractTypes: runtimeConfig.allowedContractTypes,
       defaultWeekScale: runtimeConfig.defaultWeekScale,
       defaultStartTime: runtimeConfig.defaultStartTime,
@@ -457,7 +588,18 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
     }
 
     const payload = validation.data;
+    const normalizedEmail = (payload.email || '').toString().trim().toLowerCase();
+
     await client.query('BEGIN');
+
+    const linkColumn = await getProfessionalLinkColumn(client);
+    if (!linkColumn) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({
+        success: false,
+        message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+      });
+    }
 
     let selectedRole = null;
     if (payload.role_id !== null) {
@@ -474,48 +616,78 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
 
     const resolvedFuncao = payload.funcao || selectedRole?.nome || null;
 
-    const dup = await client.query(
-      'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2) LIMIT 1',
-      [payload.username, payload.email]
-    );
-    if (dup.rows.length) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ success: false, message: 'Username ou e-mail já existe' });
+    if (accessSettings.block_duplicate_email && normalizedEmail) {
+      const duplicateProfessionalEmail = await client.query(
+        'SELECT id FROM public.professionals WHERE LOWER(COALESCE(email, \'\')) = LOWER($1) LIMIT 1',
+        [normalizedEmail]
+      );
+      if (duplicateProfessionalEmail.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, message: 'Ja existe profissional com este e-mail.' });
+      }
     }
 
-    const hashedPassword = await bcrypt.hash('123456', 10);
+    let user = null;
+    if (accessSettings.allow_create_user_from_professional) {
+      const duplicateUsername = await client.query(
+        'SELECT id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+        [payload.username]
+      );
+      if (duplicateUsername.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, message: 'Username ja existe.' });
+      }
 
-    const userResult = await client.query(
-      `INSERT INTO users (username, email, name, phone, role, status, first_access, password)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, username, email, name, role, status`,
-      [payload.username, payload.email, payload.name, payload.phone, payload.role, 'ativo', true, hashedPassword]
-    );
-    const user = userResult.rows[0];
+      if (accessSettings.block_duplicate_email && normalizedEmail) {
+        const duplicateUserEmail = await client.query(
+          'SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+          [normalizedEmail]
+        );
+        if (duplicateUserEmail.rows.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ success: false, message: 'E-mail ja existe.' });
+        }
+      }
 
-    const profResult = await client.query(
-      `INSERT INTO professionals (
-         user_id, user_id_int, crp, specialty, phone, email, status,
-         role_id, funcao, horas_semanais, data_nascimento, tipo_contrato, escala_semanal
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
-       RETURNING *`,
-      [
-        null,
-        user.id,
-        payload.crp,
-        payload.specialty,
-        payload.phone,
-        payload.email,
-        payload.status,
-        payload.role_id,
-        resolvedFuncao,
-        payload.horas_semanais,
-        payload.data_nascimento,
-        payload.tipo_contrato,
-        JSON.stringify(payload.escala_semanal),
-      ]
-    );
+      const hashedPassword = await bcrypt.hash('123456', 10);
+      const userResult = await client.query(
+        'INSERT INTO users (username, email, name, phone, role, status, first_access, password) ' +
+          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ' +
+          'RETURNING id, username, email, name, role, status',
+        [
+          payload.username,
+          normalizedEmail || null,
+          payload.name,
+          payload.phone,
+          payload.role,
+          'ativo',
+          true,
+          hashedPassword,
+        ]
+      );
+      user = userResult.rows[0] || null;
+    }
+
+    const professionalInsertSql =
+      'INSERT INTO professionals (' +
+      linkColumn +
+      ', crp, specialty, phone, email, status, role_id, funcao, horas_semanais, data_nascimento, tipo_contrato, escala_semanal) ' +
+      'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb) RETURNING *';
+
+    const profResult = await client.query(professionalInsertSql, [
+      user?.id || null,
+      payload.crp,
+      payload.specialty,
+      payload.phone,
+      normalizedEmail || null,
+      payload.status,
+      payload.role_id,
+      resolvedFuncao,
+      payload.horas_semanais,
+      payload.data_nascimento,
+      payload.tipo_contrato,
+      JSON.stringify(payload.escala_semanal),
+    ]);
 
     await client.query('COMMIT');
 
@@ -525,13 +697,27 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
         ...profResult.rows[0],
         role_id: profResult.rows[0]?.role_id ?? payload.role_id ?? null,
         role_nome: selectedRole?.nome ?? resolvedFuncao,
-        user_name: user.name,
-        user_email: user.email,
-        user_role: user.role,
+        user_name: user?.name || null,
+        user_email: user?.email || null,
+        user_role: user?.role || null,
       },
     });
   } catch (error) {
     await client.query('ROLLBACK');
+    if (error?.code === '23505') {
+      const constraint = (error?.constraint || '').toString().toLowerCase();
+      if (constraint.includes('users_email')) {
+        return res.status(409).json({ success: false, message: 'E-mail ja existe.' });
+      }
+      if (constraint.includes('users_username')) {
+        return res.status(409).json({ success: false, message: 'Username ja existe.' });
+      }
+      if (constraint.includes('professionals_user_id')) {
+        return res.status(409).json({ success: false, message: 'Usuario ja vinculado a outro profissional.' });
+      }
+      return res.status(409).json({ success: false, message: 'Conflito ao criar profissional.' });
+    }
+
     console.error('Erro ao criar profissional:', error);
     return res.status(500).json({ success: false, message: error?.message || 'Erro ao criar profissional' });
   } finally {
@@ -539,7 +725,7 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
   }
 });
 
-// Lista profissionais + dados do usuário vinculado e carga do dia
+// Lista profissionais + dados do usuÃ¡rio vinculado e carga do dia
 router.get('/', authorize('profissionais', 'view'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().split('T')[0];
   const forAgenda =
@@ -704,6 +890,7 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
   const client = await pool.connect();
 
   try {
+    const accessSettings = await readAccessSettingsSafe('profissionais:update');
     const existingResult = await client.query(
       `SELECT
          p.*,
@@ -722,7 +909,7 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       [id]
     );
     if (existingResult.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Profissional não encontrado' });
+      return res.status(404).json({ success: false, message: 'Profissional nÃ£o encontrado' });
     }
 
     const existing = existingResult.rows[0];
@@ -731,7 +918,7 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       name: req.body?.name ?? existing.user_name,
       email: req.body?.email ?? existing.user_email ?? existing.email,
       username: req.body?.username ?? existing.user_username,
-      role: req.body?.role ?? existing.user_role ?? 'Usuário',
+      role: req.body?.role ?? existing.user_role ?? 'UsuÃ¡rio',
       phone: req.body?.phone ?? existing.phone,
       crp: req.body?.crp ?? existing.crp,
       specialty: req.body?.specialty ?? existing.specialty,
@@ -782,19 +969,54 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       existing.specialty ||
       null;
 
+    if (accessSettings.block_duplicate_email && payload.email) {
+      const duplicateProfessionalEmail = await client.query(
+        `
+          SELECT id
+          FROM public.professionals
+          WHERE id <> $1
+            AND LOWER(COALESCE(email, '')) = LOWER($2)
+          LIMIT 1
+        `,
+        [id, payload.email]
+      );
+      if (duplicateProfessionalEmail.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          message: 'Ja existe profissional com este e-mail.',
+        });
+      }
+    }
+
     if (existing.linked_user_id) {
+      const duplicateClauses = ['LOWER(username) = LOWER($2)'];
+      const duplicateParams = [existing.linked_user_id, payload.username];
+
+      if (accessSettings.block_duplicate_email && payload.email) {
+        duplicateParams.push(payload.email);
+        duplicateClauses.push(`LOWER(email) = LOWER($${duplicateParams.length})`);
+      }
+
       const duplicateIdentity = await client.query(
-        `SELECT 1
-         FROM users
-         WHERE id <> $1
-           AND (LOWER(username) = LOWER($2) OR LOWER(email) = LOWER($3))
-         LIMIT 1`,
-        [existing.linked_user_id, payload.username, payload.email]
+        `
+          SELECT 1
+          FROM users
+          WHERE id <> $1
+            AND (${duplicateClauses.join(' OR ')})
+          LIMIT 1
+        `,
+        duplicateParams
       );
 
       if (duplicateIdentity.rows.length > 0) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, message: 'Username ou e-mail já existe' });
+        return res.status(409).json({
+          success: false,
+          message: accessSettings.block_duplicate_email
+            ? 'Username ou e-mail ja existe.'
+            : 'Username ja existe.',
+        });
       }
 
       await client.query(
@@ -865,6 +1087,22 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
     });
   } catch (error) {
     await client.query('ROLLBACK');
+    if (error?.code === '23505') {
+      const constraint = (error?.constraint || '').toString().toLowerCase();
+      if (constraint.includes('users_email')) {
+        return res.status(409).json({ success: false, message: 'E-mail ja existe.' });
+      }
+      if (constraint.includes('users_username')) {
+        return res.status(409).json({ success: false, message: 'Username ja existe.' });
+      }
+      if (constraint.includes('professionals_email')) {
+        return res.status(409).json({
+          success: false,
+          message: 'Ja existe profissional com este e-mail.',
+        });
+      }
+      return res.status(409).json({ success: false, message: 'Conflito ao atualizar profissional.' });
+    }
     console.error('Erro ao atualizar profissional:', error);
     return res.status(500).json({ success: false, message: error?.message || 'Erro ao atualizar profissional' });
   } finally {
@@ -958,7 +1196,7 @@ router.patch('/:id/status', authorize('profissionais', 'status'), async (req, re
   const status = normalizeStatus(req.body?.status);
 
   if (!status) {
-    return res.status(400).json({ success: false, message: 'status inválido. Use ATIVO ou INATIVO' });
+    return res.status(400).json({ success: false, message: 'status invÃ¡lido. Use ATIVO ou INATIVO' });
   }
 
   try {
@@ -972,7 +1210,7 @@ router.patch('/:id/status', authorize('profissionais', 'status'), async (req, re
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Profissional não encontrado' });
+      return res.status(404).json({ success: false, message: 'Profissional nÃ£o encontrado' });
     }
 
     return res.json({ success: true, professional: result.rows[0] });
@@ -1001,6 +1239,11 @@ router.patch('/:id/link-user', authorize('profissionais', 'edit'), async (req, r
       success: false,
       message: 'userId e obrigatorio',
     });
+  }
+
+  const accessSettings = await readAccessSettingsSafe('profissionais:link-user');
+  if (denyIfManualLinkRequiresAdmin(accessSettings, req, res)) {
+    return;
   }
 
   const client = await pool.connect();
@@ -1139,6 +1382,11 @@ router.patch('/:id/unlink-user', authorize('profissionais', 'edit'), async (req,
     });
   }
 
+  const accessSettings = await readAccessSettingsSafe('profissionais:unlink-user');
+  if (denyIfManualLinkRequiresAdmin(accessSettings, req, res)) {
+    return;
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1223,6 +1471,590 @@ router.patch('/:id/unlink-user', authorize('profissionais', 'edit'), async (req,
   }
 });
 
+router.post('/:id/link-requests', authorize('profissionais', 'view'), async (req, res) => {
+  const professionalId = (req.params?.id || '').toString().trim();
+  const requesterUserId = (req.user?.id || '').toString().trim();
+  const notesRaw = req.body?.notes;
+  const notes =
+    typeof notesRaw === 'string' && notesRaw.trim().length > 0
+      ? notesRaw.trim().slice(0, 1000)
+      : null;
+
+  if (!professionalId) {
+    return res.status(400).json({
+      success: false,
+      message: 'professionalId invalido',
+    });
+  }
+
+  if (!requesterUserId) {
+    return res.status(401).json({
+      success: false,
+      message: 'Usuario autenticado invalido',
+    });
+  }
+
+  const accessSettings = await readAccessSettingsSafe('profissionais:link-request:create');
+  if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+    return res.status(403).json({
+      success: false,
+      message: 'Solicitacao de vinculo desativada pela politica atual.',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await ensureProfessionalLinkRequestsSchema(client);
+
+    const linkColumn = await getProfessionalLinkColumn(client);
+    if (!linkColumn) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({
+        success: false,
+        message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+      });
+    }
+
+    const userResult = await client.query(
+      `
+        SELECT id, name, email
+        FROM public.users
+        WHERE id::text = $1
+          AND deleted_at IS NULL
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [requesterUserId]
+    );
+    if (userResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario nao encontrado',
+      });
+    }
+
+    const professionalResult = await client.query(
+      `
+        SELECT
+          p.id,
+          COALESCE(
+            to_jsonb(p)->>'user_id_int',
+            to_jsonb(p)->>'user_id'
+          ) AS linked_user_id
+        FROM public.professionals p
+        WHERE p.id = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [professionalId]
+    );
+    if (professionalResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Profissional nao encontrado',
+      });
+    }
+
+    const professional = professionalResult.rows[0];
+    if (
+      professional.linked_user_id &&
+      String(professional.linked_user_id) !== requesterUserId
+    ) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Profissional ja vinculado a outro usuario.',
+      });
+    }
+
+    if (String(professional.linked_user_id || '') === requesterUserId) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Usuario ja esta vinculado a este profissional.',
+      });
+    }
+
+    const userLinkedElsewhere = await client.query(
+      `
+        SELECT p.id
+        FROM public.professionals p
+        WHERE COALESCE(
+          to_jsonb(p)->>'user_id_int',
+          to_jsonb(p)->>'user_id'
+        ) = $1
+          AND p.id <> $2
+        LIMIT 1
+      `,
+      [requesterUserId, professionalId]
+    );
+    if (userLinkedElsewhere.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Usuario ja vinculado a outro profissional.',
+      });
+    }
+
+    const inserted = await client.query(
+      `
+        INSERT INTO public.professional_link_requests (
+          id,
+          user_id,
+          professional_id,
+          status,
+          notes
+        )
+        VALUES ($1, $2, $3, 'pending', $4)
+        RETURNING id::text AS id,
+                  user_id::text AS user_id,
+                  professional_id::text AS professional_id,
+                  status,
+                  notes,
+                  created_at,
+                  updated_at
+      `,
+      [randomUUID(), requesterUserId, professionalId, notes]
+    );
+
+    await client.query('COMMIT');
+    return res.status(201).json({
+      success: true,
+      message: 'Solicitacao de vinculo enviada com sucesso.',
+      request: inserted.rows[0],
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (error?.code === '23505') {
+      const constraint = (error?.constraint || '').toString().toLowerCase();
+      if (constraint.includes('idx_professional_link_requests_user_pending')) {
+        return res.status(409).json({
+          success: false,
+          message: 'Voce ja possui uma solicitacao pendente.',
+        });
+      }
+      if (constraint.includes('idx_professional_link_requests_professional_pending')) {
+        return res.status(409).json({
+          success: false,
+          message: 'Este profissional ja possui solicitacao pendente.',
+        });
+      }
+    }
+
+    console.error('Erro ao criar solicitacao de vinculo:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao criar solicitacao de vinculo',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/link-requests', authorize('profissionais', 'edit'), async (req, res) => {
+  const accessSettings = await readAccessSettingsSafe('profissionais:link-request:list');
+  if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+    return res.status(403).json({
+      success: false,
+      message: 'Solicitacoes de vinculo desativadas pela politica atual.',
+    });
+  }
+
+  if (!isAdminUser(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Apenas administradores podem listar solicitacoes de vinculo.',
+    });
+  }
+
+  const requestedStatus = normalizeLinkRequestStatus(req.query?.status);
+  if (req.query?.status !== undefined && !requestedStatus) {
+    return res.status(400).json({
+      success: false,
+      message: 'status invalido. Use pending, approved ou rejected.',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await ensureProfessionalLinkRequestsSchema(client);
+
+    const where = requestedStatus ? 'WHERE lr.status = $1' : '';
+    const params = requestedStatus ? [requestedStatus] : [];
+
+    const { rows } = await client.query(
+      `
+        SELECT
+          lr.id::text AS id,
+          lr.user_id::text AS user_id,
+          lr.professional_id::text AS professional_id,
+          lr.status,
+          lr.notes,
+          lr.created_at,
+          lr.updated_at,
+          lr.decided_at,
+          lr.decided_by_user_id::text AS decided_by_user_id,
+          u.name AS user_name,
+          u.email AS user_email,
+          COALESCE(pr.nome, p.funcao, p.specialty, p.email, 'Profissional') AS professional_name,
+          p.email AS professional_email,
+          d.name AS decided_by_name
+        FROM public.professional_link_requests lr
+        LEFT JOIN public.users u ON u.id = lr.user_id
+        LEFT JOIN public.professionals p ON p.id = lr.professional_id
+        LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+        LEFT JOIN public.users d ON d.id = lr.decided_by_user_id
+        ${where}
+        ORDER BY lr.created_at ASC
+      `,
+      params
+    );
+
+    return res.json({
+      success: true,
+      requests: rows,
+    });
+  } catch (error) {
+    console.error('Erro ao listar solicitacoes de vinculo:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao listar solicitacoes de vinculo',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+router.patch('/link-requests/:id/approve', authorize('profissionais', 'edit'), async (req, res) => {
+  const requestId = (req.params?.id || '').toString().trim();
+  const decidedByUserId = (req.user?.id || '').toString().trim();
+  const notesRaw = req.body?.notes;
+  const notes =
+    typeof notesRaw === 'string' && notesRaw.trim().length > 0
+      ? notesRaw.trim().slice(0, 1000)
+      : null;
+
+  if (!requestId) {
+    return res.status(400).json({
+      success: false,
+      message: 'requestId invalido',
+    });
+  }
+
+  const accessSettings = await readAccessSettingsSafe('profissionais:link-request:approve');
+  if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+    return res.status(403).json({
+      success: false,
+      message: 'Solicitacoes de vinculo desativadas pela politica atual.',
+    });
+  }
+
+  if (!isAdminUser(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Apenas administradores podem aprovar solicitacoes de vinculo.',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await ensureProfessionalLinkRequestsSchema(client);
+
+    const linkColumn = await getProfessionalLinkColumn(client);
+    if (!linkColumn) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({
+        success: false,
+        message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+      });
+    }
+
+    const requestResult = await client.query(
+      `
+        SELECT
+          lr.id::text AS id,
+          lr.user_id::text AS user_id,
+          lr.professional_id::text AS professional_id,
+          lr.status
+        FROM public.professional_link_requests lr
+        WHERE lr.id::text = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [requestId]
+    );
+    if (requestResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Solicitacao de vinculo nao encontrada',
+      });
+    }
+
+    const requestRow = requestResult.rows[0];
+    if (requestRow.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Esta solicitacao ja foi decidida.',
+      });
+    }
+
+    const userResult = await client.query(
+      `
+        SELECT id
+        FROM public.users
+        WHERE id::text = $1
+          AND deleted_at IS NULL
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [requestRow.user_id]
+    );
+    if (userResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario da solicitacao nao encontrado',
+      });
+    }
+
+    const professionalResult = await client.query(
+      `
+        SELECT
+          p.id,
+          COALESCE(
+            to_jsonb(p)->>'user_id_int',
+            to_jsonb(p)->>'user_id'
+          ) AS linked_user_id
+        FROM public.professionals p
+        WHERE p.id::text = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [requestRow.professional_id]
+    );
+    if (professionalResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Profissional da solicitacao nao encontrado',
+      });
+    }
+
+    const currentProfessional = professionalResult.rows[0];
+    if (
+      currentProfessional.linked_user_id &&
+      String(currentProfessional.linked_user_id) !== String(requestRow.user_id)
+    ) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Profissional ja vinculado a outro usuario.',
+      });
+    }
+
+    const userLinkedElsewhere = await client.query(
+      `
+        SELECT p.id
+        FROM public.professionals p
+        WHERE p.id::text <> $2
+          AND COALESCE(
+            to_jsonb(p)->>'user_id_int',
+            to_jsonb(p)->>'user_id'
+          ) = $1
+        LIMIT 1
+      `,
+      [requestRow.user_id, requestRow.professional_id]
+    );
+    if (userLinkedElsewhere.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Usuario ja vinculado a outro profissional.',
+      });
+    }
+
+    if (!currentProfessional.linked_user_id) {
+      const linkResult = await client.query(
+        `
+          UPDATE public.professionals
+          SET ${linkColumn} = $1,
+              updated_at = NOW()
+          WHERE id::text = $2
+            AND COALESCE(
+              to_jsonb(professionals)->>'user_id_int',
+              to_jsonb(professionals)->>'user_id'
+            ) IS NULL
+        `,
+        [requestRow.user_id, requestRow.professional_id]
+      );
+
+      if (linkResult.rowCount !== 1) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          message: 'Nao foi possivel efetivar o vinculo por conflito concorrente.',
+        });
+      }
+    }
+
+    const approvedResult = await client.query(
+      `
+        UPDATE public.professional_link_requests
+        SET status = 'approved',
+            notes = COALESCE($2, notes),
+            decided_at = NOW(),
+            decided_by_user_id = $3,
+            updated_at = NOW()
+        WHERE id::text = $1
+        RETURNING id::text AS id,
+                  user_id::text AS user_id,
+                  professional_id::text AS professional_id,
+                  status,
+                  notes,
+                  created_at,
+                  updated_at,
+                  decided_at,
+                  decided_by_user_id::text AS decided_by_user_id
+      `,
+      [requestId, notes, decidedByUserId || null]
+    );
+
+    await client.query('COMMIT');
+    return res.json({
+      success: true,
+      message: 'Solicitacao aprovada e vinculo efetivado.',
+      request: approvedResult.rows[0],
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (error?.code === '23505') {
+      const constraint = (error?.constraint || '').toString().toLowerCase();
+      if (constraint.includes('professionals_user_id')) {
+        return res.status(409).json({
+          success: false,
+          message: 'Usuario ja vinculado a outro profissional.',
+        });
+      }
+    }
+
+    console.error('Erro ao aprovar solicitacao de vinculo:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao aprovar solicitacao de vinculo',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+router.patch('/link-requests/:id/reject', authorize('profissionais', 'edit'), async (req, res) => {
+  const requestId = (req.params?.id || '').toString().trim();
+  const decidedByUserId = (req.user?.id || '').toString().trim();
+  const notesRaw = req.body?.notes;
+  const notes =
+    typeof notesRaw === 'string' && notesRaw.trim().length > 0
+      ? notesRaw.trim().slice(0, 1000)
+      : null;
+
+  if (!requestId) {
+    return res.status(400).json({
+      success: false,
+      message: 'requestId invalido',
+    });
+  }
+
+  const accessSettings = await readAccessSettingsSafe('profissionais:link-request:reject');
+  if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+    return res.status(403).json({
+      success: false,
+      message: 'Solicitacoes de vinculo desativadas pela politica atual.',
+    });
+  }
+
+  if (!isAdminUser(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Apenas administradores podem rejeitar solicitacoes de vinculo.',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await ensureProfessionalLinkRequestsSchema(client);
+
+    const requestResult = await client.query(
+      `
+        SELECT id::text AS id, status
+        FROM public.professional_link_requests
+        WHERE id::text = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [requestId]
+    );
+    if (requestResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Solicitacao de vinculo nao encontrada',
+      });
+    }
+
+    if (requestResult.rows[0].status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Esta solicitacao ja foi decidida.',
+      });
+    }
+
+    const rejectedResult = await client.query(
+      `
+        UPDATE public.professional_link_requests
+        SET status = 'rejected',
+            notes = COALESCE($2, notes),
+            decided_at = NOW(),
+            decided_by_user_id = $3,
+            updated_at = NOW()
+        WHERE id::text = $1
+        RETURNING id::text AS id,
+                  user_id::text AS user_id,
+                  professional_id::text AS professional_id,
+                  status,
+                  notes,
+                  created_at,
+                  updated_at,
+                  decided_at,
+                  decided_by_user_id::text AS decided_by_user_id
+      `,
+      [requestId, notes, decidedByUserId || null]
+    );
+
+    await client.query('COMMIT');
+    return res.json({
+      success: true,
+      message: 'Solicitacao rejeitada.',
+      request: rejectedResult.rows[0],
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao rejeitar solicitacao de vinculo:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao rejeitar solicitacao de vinculo',
+    });
+  } finally {
+    client.release();
+  }
+});
+
 router.get('/me', authorize('profissionais', 'view'), async (req, res) => {
   try {
     const accessContext = await resolveAgendaAccessContext(req.user, pool);
@@ -1288,7 +2120,7 @@ router.get('/:id/agenda', authorize('profissionais', 'view'), async (req, res) =
       accessContext.linkedProfessionalId &&
       String(accessContext.linkedProfessionalId) === String(id);
 
-    // Protege contra IDOR: profissional não pode consultar agenda arbitraria sem permissão + config.
+    // Protege contra IDOR: profissional nÃ£o pode consultar agenda arbitraria sem permissÃ£o + config.
     if (
       accessContext.linkedProfessionalId &&
       !isOwnAgenda &&
@@ -1338,7 +2170,7 @@ router.get('/:id/agenda', authorize('profissionais', 'view'), async (req, res) =
   }
 });
 
-// Estatísticas gerais dos profissionais
+// EstatÃ­sticas gerais dos profissionais
 router.get('/stats/resumo', authorize('profissionais', 'view'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().split('T')[0];
 
@@ -1363,8 +2195,8 @@ router.get('/stats/resumo', authorize('profissionais', 'view'), async (req, res)
       }
     });
   } catch (error) {
-    console.error('Erro ao buscar estatísticas de profissionais:', error);
-    res.status(500).json({ success: false, message: 'Erro ao buscar estatísticas' });
+    console.error('Erro ao buscar estatÃ­sticas de profissionais:', error);
+    res.status(500).json({ success: false, message: 'Erro ao buscar estatÃ­sticas' });
   }
 });
 
@@ -1416,6 +2248,7 @@ router.get('/:id', authorize('profissionais', 'view'), async (req, res) => {
 });
 
 module.exports = router;
+
 
 
 

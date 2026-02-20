@@ -17,6 +17,8 @@ const Index = () => {
   const { user, userProfile, loading, signIn, signOut, mustChangePassword } = useAuth();
   const { settings } = useSettings();
   const { toast } = useToast();
+  const canShowPublicSignup =
+    settings.registration_mode === "PUBLIC_SIGNUP" || settings.allow_public_registration;
 
   useEffect(() => {
     if (!user) {
@@ -35,10 +37,10 @@ const Index = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!settings.allow_public_registration && showRegister) {
+    if (!canShowPublicSignup && showRegister) {
       setShowRegister(false);
     }
-  }, [settings.allow_public_registration, showRegister]);
+  }, [canShowPublicSignup, showRegister]);
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
@@ -79,7 +81,7 @@ const Index = () => {
     );
   }
 
-  if (showRegister && settings.allow_public_registration) {
+  if (showRegister && canShowPublicSignup) {
     return <RegisterForm onSuccess={handleRegisterSuccess} onBackToLogin={() => setShowRegister(false)} />;
   }
 

@@ -5,6 +5,9 @@ import {
   type SettingsPayload,
   type BusinessHours,
   type ProfessionalsConfig,
+  type RegistrationMode,
+  type PublicSignupDefaultStatus,
+  type LinkPolicy,
 } from "@/services/api";
 import { updateFaviconFromLogo } from "@/lib/favicon";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +32,11 @@ export interface Settings {
   data_retention_days: number;
   auto_updates: boolean;
   debug_mode: boolean;
+  registration_mode: RegistrationMode;
+  public_signup_default_status: PublicSignupDefaultStatus;
+  link_policy: LinkPolicy;
+  allow_create_user_from_professional: boolean;
+  block_duplicate_email: boolean;
   allow_public_registration: boolean;
   allow_professional_view_others: boolean;
   business_hours: BusinessHours;
@@ -84,6 +92,11 @@ const defaultSettings: Settings = {
   data_retention_days: 365,
   auto_updates: true,
   debug_mode: false,
+  registration_mode: "INVITE_ONLY",
+  public_signup_default_status: "pendente",
+  link_policy: "MANUAL_LINK_ADMIN",
+  allow_create_user_from_professional: true,
+  block_duplicate_email: true,
   allow_public_registration: false,
   allow_professional_view_others: false,
   business_hours: defaultBusinessHours,
@@ -146,9 +159,47 @@ function normalizeProfessionalsConfig(value: unknown): ProfessionalsConfig {
 }
 
 function normalizeSettings(value: Partial<Settings>): Settings {
+  const registrationModeRaw = (value.registration_mode || "").toString().trim().toUpperCase();
+  const registrationMode: RegistrationMode =
+    registrationModeRaw === "ADMIN_ONLY" ||
+    registrationModeRaw === "PUBLIC_SIGNUP" ||
+    registrationModeRaw === "INVITE_ONLY"
+      ? registrationModeRaw
+      : value.allow_public_registration
+        ? "PUBLIC_SIGNUP"
+        : defaultSettings.registration_mode;
+
+  const signupStatusRaw = (value.public_signup_default_status || "").toString().trim().toLowerCase();
+  const publicSignupDefaultStatus: PublicSignupDefaultStatus =
+    signupStatusRaw === "ativo" || signupStatusRaw === "pendente"
+      ? signupStatusRaw
+      : defaultSettings.public_signup_default_status;
+
+  const linkPolicyRaw = (value.link_policy || "").toString().trim().toUpperCase();
+  const linkPolicy: LinkPolicy =
+    linkPolicyRaw === "MANUAL_LINK_ADMIN" ||
+    linkPolicyRaw === "AUTO_LINK_BY_EMAIL" ||
+    linkPolicyRaw === "SELF_CLAIM_WITH_APPROVAL"
+      ? linkPolicyRaw
+      : defaultSettings.link_policy;
+
+  const allowPublicRegistration = registrationMode === "PUBLIC_SIGNUP";
+
   return {
     ...defaultSettings,
     ...value,
+    registration_mode: registrationMode,
+    public_signup_default_status: publicSignupDefaultStatus,
+    link_policy: linkPolicy,
+    allow_create_user_from_professional:
+      typeof value.allow_create_user_from_professional === "boolean"
+        ? value.allow_create_user_from_professional
+        : defaultSettings.allow_create_user_from_professional,
+    block_duplicate_email:
+      typeof value.block_duplicate_email === "boolean"
+        ? value.block_duplicate_email
+        : defaultSettings.block_duplicate_email,
+    allow_public_registration: allowPublicRegistration,
     business_hours: normalizeBusinessHours(value.business_hours),
     professionals_config: normalizeProfessionalsConfig(value.professionals_config),
   };
@@ -173,6 +224,11 @@ function toApiSettingsPayload(settings: Settings): SettingsPayload {
     data_retention_days: settings.data_retention_days,
     auto_updates: settings.auto_updates,
     debug_mode: settings.debug_mode,
+    registration_mode: settings.registration_mode,
+    public_signup_default_status: settings.public_signup_default_status,
+    link_policy: settings.link_policy,
+    allow_create_user_from_professional: settings.allow_create_user_from_professional,
+    block_duplicate_email: settings.block_duplicate_email,
     allow_public_registration: settings.allow_public_registration,
     allow_professional_view_others: settings.allow_professional_view_others,
     business_hours: settings.business_hours,
@@ -298,31 +354,37 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     startLoading();
     try {
       const response = await apiService.getPublicSettings();
+      // Evita sobrescrever estado privado caso o usuario tenha autenticado durante a request
+      if (localStorage.getItem("token")) {
+        return;
+      }
+
+      const publicSettingsPatch: Partial<Settings> = {};
+
+      if (response.registration_mode) {
+        publicSettingsPatch.registration_mode = response.registration_mode;
+      }
+
       if (typeof response.allow_public_registration === "boolean") {
-        // Evita sobrescrever estado privado caso o usuario tenha autenticado durante a request
-        if (localStorage.getItem("token")) {
-          return;
+        publicSettingsPatch.allow_public_registration = response.allow_public_registration;
+      }
+
+      if (response.instituicao_nome !== undefined && response.instituicao_nome !== null) {
+        const normalizedName = response.instituicao_nome.trim();
+        if (normalizedName.length > 0) {
+          publicSettingsPatch.instituicao_nome = normalizedName;
         }
+      }
 
-        const publicSettingsPatch: Partial<Settings> = {
-          allow_public_registration: response.allow_public_registration,
-        };
+      if (response.instituicao_logo_url !== undefined) {
+        publicSettingsPatch.instituicao_logo_url = response.instituicao_logo_url;
+      }
 
-        if (response.instituicao_nome !== undefined && response.instituicao_nome !== null) {
-          const normalizedName = response.instituicao_nome.trim();
-          if (normalizedName.length > 0) {
-            publicSettingsPatch.instituicao_nome = normalizedName;
-          }
-        }
+      if (response.instituicao_logo_base64 !== undefined) {
+        publicSettingsPatch.instituicao_logo_base64 = response.instituicao_logo_base64;
+      }
 
-        if (response.instituicao_logo_url !== undefined) {
-          publicSettingsPatch.instituicao_logo_url = response.instituicao_logo_url;
-        }
-
-        if (response.instituicao_logo_base64 !== undefined) {
-          publicSettingsPatch.instituicao_logo_base64 = response.instituicao_logo_base64;
-        }
-
+      if (Object.keys(publicSettingsPatch).length > 0) {
         setSettings((prev) => {
           const next = normalizeSettings({ ...prev, ...publicSettingsPatch });
           persistSettingsCache(next);
