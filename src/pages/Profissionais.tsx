@@ -17,7 +17,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
-import { apiService, type ProfessionalRole } from "@/services/api";
+import {
+  apiService,
+  type LinkableProfessionalUser,
+  type ProfessionalRole,
+} from "@/services/api";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useToast } from "@/hooks/use-toast";
 import { CalendarClock, Pencil, Plus, Trash2 } from "lucide-react";
@@ -204,6 +208,13 @@ function getFunctionLabel(professional: ApiProfessional) {
   return professional.role_nome || professional.funcao || professional.specialty || "Nao informado";
 }
 
+function getLinkedUserLabel(user: LinkableProfessionalUser) {
+  const name = (user.name || "").toString().trim() || `Usuario ${user.id}`;
+  const email = (user.email || "").toString().trim();
+  if (!email) return name;
+  return `${name} (${email})`;
+}
+
 function getScaleSummary(scale: WeekScale) {
   const enabled = WEEK_DAYS.filter((day) => scale[day].ativo);
   if (enabled.length === 0) return "Sem escala";
@@ -272,6 +283,10 @@ export default function Profissionais() {
     weeklyScale: createEmptyWeekScale(),
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [linkableUsers, setLinkableUsers] = useState<LinkableProfessionalUser[]>([]);
+  const [loadingLinkableUsers, setLoadingLinkableUsers] = useState(false);
+  const [selectedLinkedUserId, setSelectedLinkedUserId] = useState("");
+  const [linkActionLoading, setLinkActionLoading] = useState<"link" | "unlink" | null>(null);
 
   const [scaleTarget, setScaleTarget] = useState<ProfessionalRow | null>(null);
   const [scaleForm, setScaleForm] = useState<WeekScale>(createEmptyWeekScale());
@@ -341,6 +356,30 @@ export default function Profissionais() {
     }
   }, [toast]);
 
+  const loadLinkableUsers = useCallback(
+    async (professionalId: string) => {
+      try {
+        setLoadingLinkableUsers(true);
+        const users = await apiService.getLinkableProfessionalUsers(professionalId);
+        setLinkableUsers(users);
+      } catch (err) {
+        setLinkableUsers([]);
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Erro ao carregar usuarios elegiveis para vinculo";
+        toast({
+          title: "Vinculo de usuario",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingLinkableUsers(false);
+      }
+    },
+    [toast]
+  );
+
   useEffect(() => {
     void loadProfessionals();
   }, [loadProfessionals]);
@@ -384,6 +423,14 @@ export default function Profissionais() {
     editForm.name.trim().length > 0 &&
     (!requiresLinkedIdentity ||
       (editForm.email.trim().length > 0 && editForm.username.trim().length > 0));
+  const currentLinkedUser = useMemo(() => {
+    if (!editTarget?.linked_user_id) return null;
+    return (
+      linkableUsers.find(
+        (user) => String(user.id) === String(editTarget.linked_user_id)
+      ) || null
+    );
+  }, [editTarget?.linked_user_id, linkableUsers]);
 
   function openEditDialog(professional: ProfessionalRow) {
     const roleId = resolveRoleId(professional, roles);
@@ -393,6 +440,11 @@ export default function Profissionais() {
       (email.includes("@") ? email.split("@")[0] : "");
 
     setEditTarget(professional);
+    setSelectedLinkedUserId(
+      professional.linked_user_id ? String(professional.linked_user_id) : ""
+    );
+    setLinkableUsers([]);
+    setLinkActionLoading(null);
     setEditForm({
       name: professional.user_name || "",
       email,
@@ -410,6 +462,7 @@ export default function Profissionais() {
       crp: professional.crp || "",
       weeklyScale: cloneScale(professional.escala_normalizada),
     });
+    void loadLinkableUsers(String(professional.id));
   }
 
   function updateEditScaleDay(day: WeekDay, checked: boolean) {
@@ -500,6 +553,111 @@ export default function Profissionais() {
       toast({ title: "Editar profissional", description: message, variant: "destructive" });
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  async function handleLinkUserToProfessional() {
+    if (!editTarget) return;
+
+    if (!selectedLinkedUserId) {
+      toast({
+        title: "Vinculo de usuario",
+        description: "Selecione um usuario para vincular.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setLinkActionLoading("link");
+      const result = await apiService.linkProfessionalUser(
+        String(editTarget.id),
+        selectedLinkedUserId
+      );
+
+      const linkedUser =
+        linkableUsers.find(
+          (user) => String(user.id) === String(selectedLinkedUserId)
+        ) || null;
+
+      setEditTarget((prev) =>
+        prev
+          ? {
+              ...prev,
+              linked_user_id: selectedLinkedUserId,
+              user_name: linkedUser?.name || prev.user_name,
+              user_email: linkedUser?.email || prev.user_email,
+              user_username: linkedUser?.username || prev.user_username,
+            }
+          : prev
+      );
+
+      if (linkedUser) {
+        setEditForm((prev) => ({
+          ...prev,
+          email: linkedUser.email ? String(linkedUser.email) : prev.email,
+          username: linkedUser.username
+            ? String(linkedUser.username)
+            : prev.username,
+        }));
+      }
+
+      await loadLinkableUsers(String(editTarget.id));
+      await loadProfessionals();
+      toast({
+        title: "Vinculo atualizado",
+        description: result.message,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Nao foi possivel vincular usuario ao profissional";
+      toast({
+        title: "Vinculo de usuario",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setLinkActionLoading(null);
+    }
+  }
+
+  async function handleUnlinkUserFromProfessional() {
+    if (!editTarget) return;
+
+    try {
+      setLinkActionLoading("unlink");
+      const result = await apiService.unlinkProfessionalUser(String(editTarget.id));
+
+      setEditTarget((prev) =>
+        prev
+          ? {
+              ...prev,
+              linked_user_id: null,
+            }
+          : prev
+      );
+      setSelectedLinkedUserId("");
+
+      await loadLinkableUsers(String(editTarget.id));
+      await loadProfessionals();
+      toast({
+        title: "Vinculo removido",
+        description: result.message,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Nao foi possivel desvincular usuario do profissional";
+      toast({
+        title: "Vinculo de usuario",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setLinkActionLoading(null);
     }
   }
 
@@ -618,6 +776,13 @@ export default function Profissionais() {
     } finally {
       setInactivatingId(null);
     }
+  }
+
+  function closeEditDialog() {
+    setEditTarget(null);
+    setLinkableUsers([]);
+    setSelectedLinkedUserId("");
+    setLinkActionLoading(null);
   }
 
   return (
@@ -749,7 +914,7 @@ export default function Profissionais() {
         </Card>
       </div>
 
-      <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
+      <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && closeEditDialog()}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Editar profissional</DialogTitle>
@@ -797,6 +962,79 @@ export default function Profissionais() {
                   onChange={(event) => setEditForm((prev) => ({ ...prev, username: event.target.value }))}
                   disabled={savingEdit}
                 />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Usuario vinculado</Label>
+              <Select
+                value={selectedLinkedUserId}
+                onValueChange={setSelectedLinkedUserId}
+                disabled={
+                  savingEdit ||
+                  loadingLinkableUsers ||
+                  linkActionLoading !== null
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      loadingLinkableUsers
+                        ? "Carregando usuarios elegiveis..."
+                        : "Selecione um usuario"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {linkableUsers.map((user) => (
+                    <SelectItem key={user.id} value={String(user.id)}>
+                      {getLinkedUserLabel(user)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {currentLinkedUser ? (
+                <p className="text-xs text-muted-foreground">
+                  Vinculo atual: {getLinkedUserLabel(currentLinkedUser)}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Profissional sem usuario vinculado.
+                </p>
+              )}
+
+              {linkableUsers.length === 0 && !loadingLinkableUsers ? (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum usuario ativo disponivel para vinculacao.
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleLinkUserToProfessional()}
+                  disabled={
+                    savingEdit ||
+                    linkActionLoading !== null ||
+                    !selectedLinkedUserId
+                  }
+                >
+                  {linkActionLoading === "link" ? "Vinculando..." : "Vincular"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleUnlinkUserFromProfessional()}
+                  disabled={
+                    savingEdit ||
+                    linkActionLoading !== null ||
+                    !editTarget?.linked_user_id
+                  }
+                >
+                  {linkActionLoading === "unlink" ? "Desvinculando..." : "Desvincular"}
+                </Button>
               </div>
             </div>
 
@@ -946,7 +1184,7 @@ export default function Profissionais() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditTarget(null)} disabled={savingEdit}>
+            <Button variant="outline" onClick={closeEditDialog} disabled={savingEdit || linkActionLoading !== null}>
               Cancelar
             </Button>
             <Button onClick={() => void handleSaveEdit()} disabled={savingEdit || !canSubmitEdit}>

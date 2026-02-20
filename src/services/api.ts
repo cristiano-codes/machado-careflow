@@ -79,6 +79,15 @@ export type ManagedUser = User & {
   created_at: string;
 };
 
+export type LinkableProfessionalUser = {
+  id: string;
+  name: string;
+  email?: string | null;
+  username?: string | null;
+  status?: string | null;
+  professional_id?: string | null;
+};
+
 export type SettingsPayload = {
   instituicao_nome: string;
   instituicao_email: string;
@@ -329,6 +338,74 @@ class ApiService {
         professionalId ? { professional_id: professionalId } : {}
       ),
     });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao desvincular usuario do profissional");
+    }
+    return { message: data?.message || "Vinculo removido com sucesso" };
+  }
+
+  async getLinkableProfessionalUsers(
+    professionalId?: string
+  ): Promise<LinkableProfessionalUser[]> {
+    const query = professionalId
+      ? `?professional_id=${encodeURIComponent(professionalId)}`
+      : "";
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/linkable-users${query}`,
+      {
+        headers: this.getAuthHeaders(),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        data?.message || "Falha ao carregar usuarios elegiveis para vinculo"
+      );
+    }
+    const users = Array.isArray(data?.users) ? data.users : [];
+    return users.map((item: any) => ({
+      id: String(item?.id ?? ""),
+      name: (item?.name || "").toString(),
+      email: item?.email ?? null,
+      username: item?.username ?? null,
+      status: item?.status ?? null,
+      professional_id:
+        item?.professional_id === null || item?.professional_id === undefined
+          ? null
+          : String(item.professional_id),
+    }));
+  }
+
+  async linkProfessionalUser(
+    professionalId: string,
+    userId: string | number
+  ): Promise<{ message: string }> {
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/${professionalId}/link-user`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ userId }),
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao vincular usuario ao profissional");
+    }
+    return { message: data?.message || "Vinculo atualizado com sucesso" };
+  }
+
+  async unlinkProfessionalUser(
+    professionalId: string
+  ): Promise<{ message: string }> {
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/${professionalId}/unlink-user`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+      }
+    );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(data?.message || "Falha ao desvincular usuario do profissional");
