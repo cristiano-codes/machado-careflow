@@ -124,6 +124,7 @@ Prefixo: `/api`
 
 - `POST /api/auth/login`
 - `GET /api/auth/verify`
+- `PUT /api/auth/change-password`
 - `GET /api/auth/first-access`
 - `GET /api/auth/check-user`
 - `POST /api/auth/setup-password`
@@ -136,6 +137,8 @@ Prefixo: `/api`
 - `PATCH /api/users/:id/approve`
 - `PATCH /api/users/:id/reject`
 - `PATCH /api/users/:id/block`
+- `PATCH /api/users/:id/force-password-change`
+- `DELETE /api/users/:id`
 - `GET /api/users/:id`
 - `POST /api/users/:id/reset-password`
 
@@ -169,11 +172,262 @@ Prefixo: `/api`
 - `GET /api/profissionais/:id/agenda`
 - `GET /api/profissionais/stats/resumo`
 
+## Especificacao da API - Governanca de Usuarios
+
+Base path: `/api`
+
+Premissas:
+
+- Todas as rotas de `users` usam JWT (`Authorization: Bearer <token>`).
+- Rotas administrativas de `users` exigem `adminMiddleware`.
+- `adminMiddleware` aceita papeis de governanca e/ou escopos administrativos.
+
+### `PATCH /users/:id/approve`
+
+Objetivo: definir usuario como ativo (acao usada para "Aprovar" e "Ativar").
+
+Request:
+
+- Params: `id` (obrigatorio)
+- Body: nao obrigatorio (eventual body e ignorado)
+
+Query:
+
+```sql
+UPDATE users
+SET status = 'ativo'
+WHERE id = $2
+  AND deleted_at IS NULL
+RETURNING username, name;
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Usuario <nome> aprovado com sucesso!",
+  "user": { "username": "u", "name": "Nome" }
+}
+```
+
+Status codes:
+
+- `200` sucesso
+- `401` token ausente/invalido
+- `403` sem permissao administrativa
+- `404` usuario nao encontrado (ou excluido logicamente)
+- `500` erro interno
+
+### `PATCH /users/:id/reject`
+
+Objetivo: definir usuario como rejeitado.
+
+Request:
+
+- Params: `id` (obrigatorio)
+- Body: nao obrigatorio
+
+Query:
+
+```sql
+UPDATE users
+SET status = 'rejeitado'
+WHERE id = $2
+  AND deleted_at IS NULL
+RETURNING username, name;
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Usuario <nome> rejeitado.",
+  "user": { "username": "u", "name": "Nome" }
+}
+```
+
+Status codes:
+
+- `200`, `401`, `403`, `404`, `500`
+
+### `PATCH /users/:id/block`
+
+Objetivo: bloquear usuario ativo.
+
+Request:
+
+- Params: `id` (obrigatorio)
+- Body: nao obrigatorio
+
+Query:
+
+```sql
+UPDATE users
+SET status = 'bloqueado'
+WHERE id = $2
+  AND deleted_at IS NULL
+RETURNING username, name;
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Usuario <nome> bloqueado.",
+  "user": { "username": "u", "name": "Nome" }
+}
+```
+
+Status codes:
+
+- `200`, `401`, `403`, `404`, `500`
+
+### `PATCH /users/:id/force-password-change`
+
+Objetivo: exigir troca obrigatoria de senha no proximo login.
+
+Request:
+
+- Params: `id` (obrigatorio)
+- Body: nao obrigatorio
+
+Queries:
+
+```sql
+SELECT id, role, username, name
+FROM users
+WHERE id = $1
+  AND deleted_at IS NULL;
+```
+
+```sql
+UPDATE users
+SET must_change_password = true,
+    first_access = false
+WHERE id = $1
+  AND deleted_at IS NULL;
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Usuario <nome> precisara redefinir a senha no proximo login."
+}
+```
+
+Status codes:
+
+- `200` sucesso
+- `401` token ausente/invalido
+- `403` sem permissao administrativa ou tentativa de nao-admin operar conta `admin`
+- `404` usuario nao encontrado
+- `500` erro interno
+
+### `DELETE /users/:id`
+
+Objetivo: exclusao logica de usuario (soft delete).
+
+Request:
+
+- Params: `id` (obrigatorio)
+- Body: nao utilizado
+
+Queries:
+
+```sql
+SELECT id, name, email, username, role
+FROM users
+WHERE id = $1
+  AND deleted_at IS NULL;
+```
+
+```sql
+UPDATE users
+SET deleted_at = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL;
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Usuario <nome> excluido com sucesso.",
+  "user": { "id": 1, "name": "Nome", "email": "mail@dominio" }
+}
+```
+
+Status codes:
+
+- `200` sucesso
+- `400` tentativa de autoexclusao
+- `401` token ausente/invalido
+- `403` tentativa de excluir `admin` principal ou conta `admin` sem perfil `admin`
+- `404` usuario nao encontrado
+- `500` erro interno
+
+### `PUT /auth/change-password`
+
+Objetivo: alterar senha do usuario autenticado e remover obrigatoriedade de troca.
+
+Request:
+
+- Headers: `Authorization: Bearer <token>`
+- Body:
+
+```json
+{
+  "currentPassword": "senhaAtual",
+  "newPassword": "novaSenhaComMinimo8"
+}
+```
+
+Queries:
+
+```sql
+SELECT id, password
+FROM users
+WHERE id = $1
+  AND deleted_at IS NULL;
+```
+
+```sql
+UPDATE users
+SET password = $1,
+    first_access = false,
+    must_change_password = false
+WHERE id = $2;
+```
+
+Response `200`:
+
+```json
+{
+  "success": true,
+  "message": "Senha alterada com sucesso."
+}
+```
+
+Status codes:
+
+- `200` sucesso
+- `400` payload invalido, senha atual incorreta ou nova senha igual a atual
+- `401` token ausente/invalido
+- `404` usuario nao encontrado
+- `500` erro interno
+
+Erros comuns:
+
+- `message: "Dados invalidos"`
+- `message: "Senha atual invalida"`
+- `message: "A nova senha deve ser diferente da senha atual"`
+- `message: "Usuario nao encontrado"`
+
 ## Comportamento importante
 
 - O backend testa conexao com banco no bootstrap (`sequelize.authenticate()`) antes de subir o servidor.
-- Em `NODE_ENV != production`, o CORS esta aberto.
-- Em `production`, o CORS usa allowlist definida em `server.js`.
+- O CORS atual usa `origin: true` e `credentials: true`, com resposta global para preflight `OPTIONS`.
 
 ## Deploy
 

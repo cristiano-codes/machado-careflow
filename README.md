@@ -53,6 +53,73 @@ Paginas em `src/pages`:
 - `PermissionManager`
 - `Configuracoes`
 
+## Governanca de Usuarios
+
+### Estados do usuario
+
+O ciclo de vida atual do usuario usa os estados abaixo na coluna `users.status`:
+
+- `pendente`: cadastro criado e aguardando avaliacao administrativa.
+- `ativo`: usuario apto a autenticar no sistema.
+- `bloqueado`: acesso negado ate reativacao.
+- `rejeitado`: acesso negado por decisao administrativa.
+
+Complementos de governanca:
+
+- `users.must_change_password`:
+  - `true`: autentica, mas deve trocar senha antes de navegar no sistema.
+  - `false`: fluxo normal apos login.
+- `users.first_access`:
+  - `true`: login bloqueado com orientacao para definir senha no fluxo de primeiro acesso.
+  - `false`: login permitido se demais condicoes forem atendidas.
+- `users.deleted_at`:
+  - `NULL`: registro ativo no dominio.
+  - `timestamp`: usuario excluido logicamente (soft delete), removido das listagens e do login.
+
+### Fluxo de aprovacao
+
+1. Usuario e criado em `POST /api/auth/register` com `status='pendente'`.
+2. Perfil com privilegio administrativo executa uma acao:
+   - Aprovar/Ativar: `PATCH /api/users/:id/approve` -> `status='ativo'`
+   - Rejeitar: `PATCH /api/users/:id/reject` -> `status='rejeitado'`
+   - Bloquear: `PATCH /api/users/:id/block` -> `status='bloqueado'`
+3. Somente `status='ativo'` permite login.
+
+### Politica de senha obrigatoria
+
+- Acao administrativa: `PATCH /api/users/:id/force-password-change`
+  - define `must_change_password=true` e `first_access=false`.
+- Login retorna a flag `must_change_password`.
+- Frontend redireciona para rota de troca obrigatoria.
+- Ao concluir `PUT /api/auth/change-password`, backend grava:
+  - `first_access=false`
+  - `must_change_password=false`
+
+### Soft delete
+
+- Exclusao administrativa: `DELETE /api/users/:id`.
+- Implementacao atual: `UPDATE users SET deleted_at = NOW()`.
+- Impacto:
+  - usuario nao aparece em listagens administrativas;
+  - usuario nao autentica (`login` e `verify` filtram `deleted_at IS NULL`);
+  - nao existe endpoint publico de restauracao no estado atual.
+
+### Regras de permissao
+
+- As rotas administrativas de usuarios exigem autenticacao JWT e `adminMiddleware`.
+- O middleware aceita:
+  - papeis de alta governanca (`coordenador geral`, `administrador`, `admin`, `gestao`, `gestor`);
+  - ou escopos de permissao (`admin:all`, `admin`, `manage:users`, `users:manage`).
+- Regras adicionais de seguranca:
+  - apenas `admin` pode operar senha/exclusao de outro `admin`;
+  - nao e permitido excluir o proprio usuario;
+  - nao e permitido excluir o usuario principal `admin`.
+
+Para detalhes formais do modulo e da API:
+
+- `docs/user-management.md`
+- `institutoback/README.md` (secao de especificacao de endpoints de governanca)
+
 ## Requisitos
 
 - Node.js 18+
