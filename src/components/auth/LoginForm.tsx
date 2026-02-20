@@ -74,7 +74,7 @@ export function LoginForm({ onLogin, onRegister }: LoginFormProps) {
                 <Input
                   id="email"
                   type="text"
-                  placeholder="Digite seu usuario"
+                  placeholder="Digite seu usuário"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
