@@ -64,7 +64,7 @@ export function PermissionManager() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const API_BASE = useMemo(() => {
+  const API_BASE_URL = useMemo(() => {
     const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
     const fallback = 'http://localhost:3000';
 
@@ -87,7 +87,12 @@ export function PermissionManager() {
       }
     }
 
-    return base.replace(/\/$/, '');
+    const normalizedBase = base.replace(/\/+$/, '');
+    if (/\/api$/i.test(normalizedBase)) {
+      return normalizedBase;
+    }
+
+    return `${normalizedBase}/api`;
   }, []);
 
   function getAuthHeaders(withJson = false) {
@@ -118,12 +123,21 @@ export function PermissionManager() {
   }
 
   async function parseJson<T>(res: Response, fallbackMessage: string): Promise<T> {
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
     if (!res.ok) {
       let message = fallbackMessage;
       try {
-        const payload = await res.json();
-        if (payload?.message) {
-          message = payload.message;
+        if (contentType.includes('application/json')) {
+          const payload = await res.json();
+          if (payload?.message) {
+            message = payload.message;
+          }
+        } else {
+          const text = (await res.text()).trim();
+          if (text) {
+            message = `${fallbackMessage} (HTTP ${res.status})`;
+          }
         }
       } catch (error) {
         // Ignore JSON parse errors for error payloads
@@ -131,16 +145,20 @@ export function PermissionManager() {
       throw new Error(message);
     }
 
+    if (!contentType.includes('application/json')) {
+      throw new Error(`${fallbackMessage}: resposta invalida do servidor`);
+    }
+
     try {
       return (await res.json()) as T;
     } catch (error) {
-      return {} as T;
+      throw new Error(`${fallbackMessage}: resposta JSON invalida`);
     }
   }
 
   const loadUsers = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/permissions/users`, {
+      const res = await fetch(`${API_BASE_URL}/permissions/users`, {
         headers: getAuthHeaders(),
       });
 
@@ -165,7 +183,7 @@ export function PermissionManager() {
 
   const loadModules = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/permissions/modules`, {
+      const res = await fetch(`${API_BASE_URL}/permissions/modules`, {
         headers: getAuthHeaders(),
       });
 
@@ -189,7 +207,7 @@ export function PermissionManager() {
 
   const loadPermissionsList = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/permissions/permissions`, {
+      const res = await fetch(`${API_BASE_URL}/permissions/permissions`, {
         headers: getAuthHeaders(),
       });
 
@@ -215,7 +233,7 @@ export function PermissionManager() {
 
   const loadOverviewPermissions = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/permissions/overview`, {
+      const res = await fetch(`${API_BASE_URL}/permissions/overview`, {
         headers: getAuthHeaders(),
       });
 
@@ -245,7 +263,7 @@ export function PermissionManager() {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/permissions/users/${userId}/permissions`,
+        `${API_BASE_URL}/permissions/users/${userId}/permissions`,
         {
           headers: getAuthHeaders(),
         }
@@ -302,7 +320,7 @@ export function PermissionManager() {
     try {
       const endpoint = hasPermission ? 'revoke' : 'grant';
       const res = await fetch(
-        `${API_BASE}/api/permissions/users/${selectedUser}/${endpoint}`,
+        `${API_BASE_URL}/permissions/users/${selectedUser}/${endpoint}`,
         {
           method: 'POST',
           headers: getAuthHeaders(true),
@@ -346,7 +364,7 @@ export function PermissionManager() {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/permissions/users/${userId}/grant-basic`,
+        `${API_BASE_URL}/permissions/users/${userId}/grant-basic`,
         {
           method: 'POST',
           headers: getAuthHeaders(true),
@@ -387,7 +405,7 @@ export function PermissionManager() {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/permissions/users/${userId}/grant-all`,
+        `${API_BASE_URL}/permissions/users/${userId}/grant-all`,
         {
           method: 'POST',
           headers: getAuthHeaders(true),
@@ -428,7 +446,7 @@ export function PermissionManager() {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/permissions/users/${selectedUser}/revoke-module`,
+        `${API_BASE_URL}/permissions/users/${selectedUser}/revoke-module`,
         {
           method: 'POST',
           headers: getAuthHeaders(true),

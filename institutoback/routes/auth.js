@@ -17,7 +17,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const ALLOW_DEMO_LOGIN = String(process.env.ALLOW_DEMO_LOGIN || '').toLowerCase() === 'true';
 
 // Mapeamento simples para remover acentuação de nomes de usuário
-const ACCENT_FROM = 'ÁÀÃÂÄáàãâäÉÈÊËéèêëÍÌÎÏíìîïÓÒÕÔÖóòõôöÚÙÛÜúùûüÇçÑñ';
+const ACCENT_FROM = [
+  0x00c1, 0x00c0, 0x00c3, 0x00c2, 0x00c4, 0x00e1, 0x00e0, 0x00e3, 0x00e2, 0x00e4,
+  0x00c9, 0x00c8, 0x00ca, 0x00cb, 0x00e9, 0x00e8, 0x00ea, 0x00eb,
+  0x00cd, 0x00cc, 0x00ce, 0x00cf, 0x00ed, 0x00ec, 0x00ee, 0x00ef,
+  0x00d3, 0x00d2, 0x00d5, 0x00d4, 0x00d6, 0x00f3, 0x00f2, 0x00f5, 0x00f4, 0x00f6,
+  0x00da, 0x00d9, 0x00db, 0x00dc, 0x00fa, 0x00f9, 0x00fb, 0x00fc,
+  0x00c7, 0x00e7, 0x00d1, 0x00f1,
+]
+  .map((code) => String.fromCharCode(code))
+  .join('');
 const ACCENT_TO = 'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn';
 
 const removeDiacritics = (value = '') =>
@@ -233,11 +242,25 @@ router.post('/login', [
     );
 
     // Fallback para permitir login com nomes sem acentuação (ex.: Gestao → Gestão)
-    if (userResult.rows.length === 0 && identifier && !identifier.includes('@') && normalizedIdentifier) {
-      userResult = await pool.query(
-        'SELECT * FROM users WHERE LOWER(TRANSLATE(username, $2, $3)) = $1 AND deleted_at IS NULL',
-        [normalizedIdentifier, ACCENT_FROM, ACCENT_TO]
-      );
+    const shouldTryAccentInsensitiveLookup =
+      userResult.rows.length === 0 &&
+      identifier &&
+      !identifier.includes('@') &&
+      normalizedIdentifier &&
+      normalizedIdentifier !== loweredIdentifier;
+
+    if (shouldTryAccentInsensitiveLookup) {
+      try {
+        userResult = await pool.query(
+          'SELECT * FROM users WHERE LOWER(TRANSLATE(username, $2, $3)) = $1 AND deleted_at IS NULL',
+          [normalizedIdentifier, ACCENT_FROM, ACCENT_TO]
+        );
+      } catch (fallbackError) {
+        console.warn(
+          '[auth][login] Falha no fallback sem acento; seguindo com resultado principal:',
+          fallbackError?.message || fallbackError
+        );
+      }
     }
 
     if (userResult.rows.length === 0) {
