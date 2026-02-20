@@ -1,4 +1,5 @@
 const DEFAULT_FAVICON_HREF = "/favicon.ico";
+const DEFAULT_APPLE_TOUCH_HREF = "/logo.png";
 const MAX_DATA_URL_BYTES = 120 * 1024;
 
 function withVersion(href: string, versionKey?: string): string {
@@ -38,15 +39,15 @@ function isPngDataUrl(logoDataUrl: string): boolean {
 function applyFallback(versionKey?: string) {
   const iconLink = getOrCreateLink("icon");
   iconLink.rel = "icon";
-  iconLink.type = "image/x-icon";
-  iconLink.removeAttribute("sizes");
+  iconLink.removeAttribute("type");
+  iconLink.setAttribute("sizes", "any");
   iconLink.href = withVersion(DEFAULT_FAVICON_HREF, versionKey);
 
   const appleTouchLink = getOrCreateLink("apple-touch-icon");
   appleTouchLink.rel = "apple-touch-icon";
   appleTouchLink.removeAttribute("type");
   appleTouchLink.setAttribute("sizes", "180x180");
-  appleTouchLink.href = withVersion(DEFAULT_FAVICON_HREF, versionKey);
+  appleTouchLink.href = withVersion(DEFAULT_APPLE_TOUCH_HREF, versionKey);
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -126,7 +127,7 @@ export async function updateFaviconFromLogo(
     appleTouchLink.setAttribute("sizes", "180x180");
 
     if (getDataUrlSizeBytes(appleTouchDataUrl) > MAX_DATA_URL_BYTES) {
-      appleTouchLink.href = withVersion(DEFAULT_FAVICON_HREF, resolvedVersion);
+      appleTouchLink.href = withVersion(DEFAULT_APPLE_TOUCH_HREF, resolvedVersion);
       appleTouchLink.removeAttribute("type");
     } else {
       appleTouchLink.href = withVersion(appleTouchDataUrl, resolvedVersion);
