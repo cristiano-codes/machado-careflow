@@ -8,6 +8,7 @@ const router = express.Router();
 
 const LOGO_DATA_URL_PREFIX = 'data:image/png;base64,';
 const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
+const MAX_PUBLIC_LOGO_BYTES = 300 * 1024;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const DEFAULT_BUSINESS_HOURS = {
@@ -47,6 +48,7 @@ const DEFAULT_SETTINGS = {
   instituicao_email: 'contato@institutolauir.com.br',
   instituicao_telefone: '(11) 3456-7890',
   instituicao_endereco: 'Rua das Flores, 123 - Sao Paulo, SP',
+  instituicao_logo_url: null,
   instituicao_logo_base64: null,
   email_notifications: true,
   sms_notifications: false,
@@ -399,6 +401,88 @@ function validateInstitutionLogoDataUrl(value) {
   return null;
 }
 
+function normalizePublicName(value) {
+  if (typeof value !== 'string') return DEFAULT_SETTINGS.instituicao_nome;
+  const normalized = value.trim();
+  return normalized || DEFAULT_SETTINGS.instituicao_nome;
+}
+
+function resolveRequestOrigin(req) {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const forwardedHost = req.headers['x-forwarded-host'];
+
+  const protocol = Array.isArray(forwardedProto)
+    ? forwardedProto[0]
+    : typeof forwardedProto === 'string'
+      ? forwardedProto.split(',')[0].trim()
+      : req.protocol;
+
+  const host = Array.isArray(forwardedHost)
+    ? forwardedHost[0]
+    : typeof forwardedHost === 'string'
+      ? forwardedHost.split(',')[0].trim()
+      : req.headers.host;
+
+  if (!host || typeof host !== 'string') return null;
+  return `${protocol || 'http'}://${host}`;
+}
+
+function normalizePublicLogoUrl(value, req) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  if (/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+
+  if (normalized.startsWith('//')) {
+    const protocol = req.protocol || 'https';
+    return `${protocol}:${normalized}`;
+  }
+
+  if (normalized.startsWith('data:') || normalized.startsWith('javascript:')) {
+    return null;
+  }
+
+  const publicPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  if (!publicPath.startsWith('/uploads/')) {
+    return publicPath;
+  }
+
+  const origin = resolveRequestOrigin(req);
+  return origin ? `${origin}${publicPath}` : publicPath;
+}
+
+function normalizePublicLogoBase64(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized.startsWith(LOGO_DATA_URL_PREFIX)) return null;
+
+  const payload = normalized.slice(LOGO_DATA_URL_PREFIX.length);
+  if (!payload) return null;
+
+  const logoBytes = estimateBase64Bytes(payload);
+  if (logoBytes > MAX_PUBLIC_LOGO_BYTES) return null;
+
+  return normalized;
+}
+
+function buildPublicSettingsResponse(normalized, req, allowPublicRegistration) {
+  const instituicao_nome = normalizePublicName(normalized?.instituicao_nome);
+  const instituicao_logo_url = normalizePublicLogoUrl(normalized?.instituicao_logo_url, req);
+  const instituicao_logo_base64 = instituicao_logo_url
+    ? null
+    : normalizePublicLogoBase64(normalized?.instituicao_logo_base64);
+
+  return {
+    allow_public_registration: Boolean(allowPublicRegistration),
+    instituicao_nome,
+    instituicao_logo_url,
+    instituicao_logo_base64,
+  };
+}
+
 function normalizeSettingsRow(row) {
   const source = row || {};
   const businessHoursValidation = validateBusinessHours(
@@ -592,17 +676,21 @@ function successResponse(res, data) {
   });
 }
 
-router.get('/public', async (_req, res) => {
+router.get('/public', async (req, res) => {
   try {
     const row = await ensureSingletonSettings();
     const normalized = normalizeSettingsRow(row);
-    const allow = Boolean(normalized.allow_public_registration);
+    const publicData = buildPublicSettingsResponse(
+      normalized,
+      req,
+      normalized.allow_public_registration
+    );
 
     return res.json({
       success: true,
-      allow_public_registration: allow,
-      data: { allow_public_registration: allow },
-      settings: { allow_public_registration: allow },
+      ...publicData,
+      data: publicData,
+      settings: publicData,
     });
   } catch (error) {
     console.error('[settings][public][GET] erro ao buscar configuracao publica:', {
@@ -611,11 +699,17 @@ router.get('/public', async (_req, res) => {
       stack: error?.stack,
     });
 
+    const fallbackData = buildPublicSettingsResponse(
+      DEFAULT_SETTINGS,
+      req,
+      false
+    );
+
     return res.json({
       success: false,
-      allow_public_registration: false,
-      data: { allow_public_registration: false },
-      settings: { allow_public_registration: false },
+      ...fallbackData,
+      data: fallbackData,
+      settings: fallbackData,
     });
   }
 });

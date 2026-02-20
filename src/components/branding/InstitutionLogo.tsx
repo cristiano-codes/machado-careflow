@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,16 @@ export function InstitutionLogo({
     settings?.instituicao_logo_base64?.trim() ||
     settings?.instituicao_logo_url?.trim() ||
     "/logo.png";
+  const [resolvedLogoSrc, setResolvedLogoSrc] = useState(logoSrc);
+
+  useEffect(() => {
+    setResolvedLogoSrc(logoSrc);
+  }, [logoSrc]);
+
+  function handleLogoError() {
+    if (resolvedLogoSrc === "/logo.png") return;
+    setResolvedLogoSrc("/logo.png");
+  }
 
   return (
     <div className={cn("inline-flex items-center gap-2", className)}>
@@ -35,10 +46,11 @@ export function InstitutionLogo({
         style={{ width: size, height: size }}
       >
         <img
-          src={logoSrc}
+          src={resolvedLogoSrc}
           alt={`Logo ${institutionName}`}
           className="h-full w-full object-cover"
           loading={loading}
+          onError={handleLogoError}
         />
       </div>
 

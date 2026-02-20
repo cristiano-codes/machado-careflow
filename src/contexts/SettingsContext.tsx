@@ -296,15 +296,32 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await apiService.getPublicSettings();
       if (typeof response.allow_public_registration === "boolean") {
-        // Evita sobrescrever estado privado caso o usuário tenha autenticado durante a request
+        // Evita sobrescrever estado privado caso o usuario tenha autenticado durante a request
         if (localStorage.getItem("token")) {
           return;
         }
+
+        const publicSettingsPatch: Partial<Settings> = {
+          allow_public_registration: response.allow_public_registration,
+        };
+
+        if (response.instituicao_nome !== undefined && response.instituicao_nome !== null) {
+          const normalizedName = response.instituicao_nome.trim();
+          if (normalizedName.length > 0) {
+            publicSettingsPatch.instituicao_nome = normalizedName;
+          }
+        }
+
+        if (response.instituicao_logo_url !== undefined) {
+          publicSettingsPatch.instituicao_logo_url = response.instituicao_logo_url;
+        }
+
+        if (response.instituicao_logo_base64 !== undefined) {
+          publicSettingsPatch.instituicao_logo_base64 = response.instituicao_logo_base64;
+        }
+
         setSettings((prev) => {
-          const next = normalizeSettings({
-            ...prev,
-            allow_public_registration: response.allow_public_registration,
-          });
+          const next = normalizeSettings({ ...prev, ...publicSettingsPatch });
           persistSettingsCache(next);
           return next;
         });
@@ -315,7 +332,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       endLoading();
     }
   }
-
   function updateSettings(newSettings: Partial<Settings>) {
     setSettings((prev) => normalizeSettings({ ...prev, ...newSettings }));
   }
@@ -368,4 +384,5 @@ export function useSettings() {
   if (!ctx) throw new Error("useSettings deve ser usado dentro de um SettingsProvider");
   return ctx;
 }
+
 

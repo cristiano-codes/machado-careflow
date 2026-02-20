@@ -158,6 +158,9 @@ type SettingsResponse = {
 type PublicSettingsResponse = {
   success: boolean;
   allow_public_registration: boolean;
+  instituicao_nome?: string | null;
+  instituicao_logo_url?: string | null;
+  instituicao_logo_base64?: string | null;
   message?: string;
 };
 
@@ -327,30 +330,50 @@ class ApiService {
     }
 
     const parsed = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-    const fromRoot = parsed.allow_public_registration;
     const fromSettings =
       parsed.settings && typeof parsed.settings === "object"
-        ? (parsed.settings as Record<string, unknown>).allow_public_registration
-        : undefined;
+        ? (parsed.settings as Record<string, unknown>)
+        : null;
     const fromData =
       parsed.data && typeof parsed.data === "object"
-        ? (parsed.data as Record<string, unknown>).allow_public_registration
-        : undefined;
+        ? (parsed.data as Record<string, unknown>)
+        : null;
 
-    const allow =
-      typeof fromRoot === "boolean"
-        ? fromRoot
-        : typeof fromSettings === "boolean"
-          ? fromSettings
-          : typeof fromData === "boolean"
-            ? fromData
-            : false;
+    function pick(field: string): unknown {
+      if (Object.prototype.hasOwnProperty.call(parsed, field)) return parsed[field];
+      if (fromSettings && Object.prototype.hasOwnProperty.call(fromSettings, field)) {
+        return fromSettings[field];
+      }
+      if (fromData && Object.prototype.hasOwnProperty.call(fromData, field)) {
+        return fromData[field];
+      }
+      return undefined;
+    }
+
+    function parseOptionalString(
+      value: unknown
+    ): string | null | undefined {
+      if (value === undefined) return undefined;
+      if (value === null) return null;
+      if (typeof value !== "string") return undefined;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
+    const allowRaw = pick("allow_public_registration");
+    const allow = typeof allowRaw === "boolean" ? allowRaw : false;
+    const instituicaoNome = parseOptionalString(pick("instituicao_nome"));
+    const instituicaoLogoUrl = parseOptionalString(pick("instituicao_logo_url"));
+    const instituicaoLogoBase64 = parseOptionalString(pick("instituicao_logo_base64"));
 
     const message = typeof parsed.message === "string" ? parsed.message : undefined;
 
     return {
       success: response.ok && parsed.success !== false,
       allow_public_registration: allow,
+      instituicao_nome: instituicaoNome,
+      instituicao_logo_url: instituicaoLogoUrl,
+      instituicao_logo_base64: instituicaoLogoBase64,
       message,
     };
   }
