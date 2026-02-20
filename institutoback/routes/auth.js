@@ -123,6 +123,79 @@ async function isPublicRegistrationEnabled() {
   }
 }
 
+function normalizeScopes(scopes) {
+  if (!Array.isArray(scopes)) return [];
+  return scopes
+    .map((scope) => (typeof scope === 'string' ? scope.trim().toLowerCase() : ''))
+    .filter(Boolean);
+}
+
+function hasScope(scopes, target) {
+  const normalizedTarget = (target || '').toString().trim().toLowerCase();
+  if (!normalizedTarget) return false;
+
+  const normalized = normalizeScopes(scopes);
+  return (
+    normalized.includes(normalizedTarget) ||
+    normalized.includes('*:*') ||
+    normalized.includes('*') ||
+    normalized.includes('agenda:*')
+  );
+}
+
+async function resolveProfessionalAuthContext(userId, scopes) {
+  const userIdText = (userId || '').toString().trim();
+  if (!userIdText) {
+    return {
+      professional_id: null,
+      can_view_all_professionals: false,
+      allow_professional_view_others: false,
+    };
+  }
+
+  let professionalId = null;
+  try {
+    const professionalResult = await pool.query(
+      `
+        SELECT p.id
+        FROM public.professionals p
+        WHERE COALESCE(
+          to_jsonb(p)->>'user_id_int',
+          to_jsonb(p)->>'user_id'
+        ) = $1
+        ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      [userIdText]
+    );
+    professionalId = professionalResult.rows[0]?.id || null;
+  } catch (error) {
+    console.error('[auth] Falha ao resolver professional_id do usuario:', error?.message || error);
+  }
+
+  let allowProfessionalViewOthers = false;
+  try {
+    const settingsResult = await pool.query(
+      'SELECT allow_professional_view_others FROM public.system_settings LIMIT 1'
+    );
+    allowProfessionalViewOthers = settingsResult.rows[0]?.allow_professional_view_others === true;
+  } catch (error) {
+    if (!['42703', '42P01'].includes(error?.code)) {
+      console.error('[auth] Falha ao ler allow_professional_view_others:', error?.message || error);
+    }
+  }
+
+  const canViewAllByPermission = hasScope(scopes, 'agenda:view_all_professionals');
+  const canViewAllProfessionals =
+    Boolean(professionalId) && allowProfessionalViewOthers && canViewAllByPermission;
+
+  return {
+    professional_id: professionalId,
+    can_view_all_professionals: canViewAllProfessionals,
+    allow_professional_view_others: allowProfessionalViewOthers,
+  };
+}
+
 // Rota de login
 router.post('/login', [
   body('username').notEmpty().withMessage('Username é obrigatório'),
@@ -226,6 +299,8 @@ router.post('/login', [
       })
       .filter(Boolean);
 
+    const professionalAuthContext = await resolveProfessionalAuthContext(user.id, permissions);
+
     // Gerar token JWT (mantido 24h neste passo)
     const token = jwt.sign(
       {
@@ -233,6 +308,8 @@ router.post('/login', [
         username: user.username,
         role: user.role,
         must_change_password: user.must_change_password === true,
+        professional_id: professionalAuthContext.professional_id,
+        can_view_all_professionals: professionalAuthContext.can_view_all_professionals,
         permissions // <<< inclui no payload
       },
       JWT_SECRET,
@@ -249,6 +326,10 @@ router.post('/login', [
       user: {
         ...userWithoutPassword,
         must_change_password: user.must_change_password === true,
+        professional_id: professionalAuthContext.professional_id,
+        can_view_all_professionals: professionalAuthContext.can_view_all_professionals,
+        allow_professional_view_others:
+          professionalAuthContext.allow_professional_view_others,
         permissions
       } // <<< inclui no JSON
     });
@@ -298,12 +379,18 @@ router.get('/verify', async (req, res) => {
       })
       .filter(Boolean);
 
+    const professionalAuthContext = await resolveProfessionalAuthContext(user.id, permissions);
+
     const { password: _, ...userWithoutPassword } = user;
     res.json({
       success: true,
       user: {
         ...userWithoutPassword,
         must_change_password: user.must_change_password === true,
+        professional_id: professionalAuthContext.professional_id,
+        can_view_all_professionals: professionalAuthContext.can_view_all_professionals,
+        allow_professional_view_others:
+          professionalAuthContext.allow_professional_view_others,
         permissions
       }
     });

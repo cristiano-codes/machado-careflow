@@ -345,6 +345,84 @@ function validateProfessionalPayload(payload, options = {}) {
   };
 }
 
+function normalizePermissionScopes(scopes) {
+  if (!Array.isArray(scopes)) return [];
+  return scopes
+    .map((scope) => (typeof scope === 'string' ? scope.trim().toLowerCase() : ''))
+    .filter(Boolean);
+}
+
+function hasPermissionScope(scopes, targetScope) {
+  const normalizedTarget = (targetScope || '').toString().trim().toLowerCase();
+  if (!normalizedTarget) return false;
+
+  const normalizedScopes = normalizePermissionScopes(scopes);
+  return (
+    normalizedScopes.includes(normalizedTarget) ||
+    normalizedScopes.includes('*') ||
+    normalizedScopes.includes('*:*') ||
+    normalizedScopes.includes('agenda:*')
+  );
+}
+
+async function getAllowProfessionalViewOthers(client) {
+  const db = client || pool;
+  try {
+    const { rows } = await db.query(
+      'SELECT allow_professional_view_others FROM public.system_settings LIMIT 1'
+    );
+    return rows[0]?.allow_professional_view_others === true;
+  } catch (error) {
+    if (!['42703', '42P01'].includes(error?.code)) {
+      console.error('[profissionais] Falha ao ler allow_professional_view_others:', error);
+    }
+    return false;
+  }
+}
+
+async function getLinkedProfessionalByUserId(userId, client) {
+  const db = client || pool;
+  const normalizedUserId = (userId || '').toString().trim();
+  if (!normalizedUserId) return null;
+
+  const { rows } = await db.query(
+    `
+      SELECT p.id, p.status
+      FROM public.professionals p
+      WHERE COALESCE(
+        to_jsonb(p)->>'user_id_int',
+        to_jsonb(p)->>'user_id'
+      ) = $1
+      ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
+      LIMIT 1
+    `,
+    [normalizedUserId]
+  );
+
+  return rows[0] || null;
+}
+
+async function resolveAgendaAccessContext(user, client) {
+  const db = client || pool;
+  const linkedProfessional = await getLinkedProfessionalByUserId(user?.id, db);
+  const allowProfessionalViewOthers = await getAllowProfessionalViewOthers(db);
+  const canViewAllByPermission = hasPermissionScope(
+    user?.permissions,
+    'agenda:view_all_professionals'
+  );
+
+  return {
+    linkedProfessionalId: linkedProfessional?.id || null,
+    linkedProfessionalStatus: linkedProfessional?.status || null,
+    allowProfessionalViewOthers,
+    canViewAllByPermission,
+    canViewOtherProfessionals:
+      Boolean(linkedProfessional?.id) &&
+      allowProfessionalViewOthers &&
+      canViewAllByPermission,
+  };
+}
+
 // Criar novo profissional (cria usuário + vínculo)
 router.post('/', authorize('profissionais', 'create'), async (req, res) => {
   const client = await pool.connect();
@@ -447,8 +525,16 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
 // Lista profissionais + dados do usuário vinculado e carga do dia
 router.get('/', authorize('profissionais', 'view'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().split('T')[0];
+  const forAgenda =
+    ['1', 'true', 'sim', 'yes'].includes(
+      (req.query.for_agenda || '').toString().trim().toLowerCase()
+    );
 
   try {
+    const accessContext = forAgenda
+      ? await resolveAgendaAccessContext(req.user, pool)
+      : null;
+
     const query = `
       WITH agenda_hoje AS (
         SELECT professional_id, COUNT(*)::int AS total
@@ -470,104 +556,47 @@ router.get('/', authorize('profissionais', 'view'), async (req, res) => {
         p.tipo_contrato,
         p.escala_semanal,
         COALESCE(pr.nome, p.funcao) AS role_nome,
-        u.id AS linked_user_id,
-        COALESCE(
-          u.name,
-          (
-            SELECT u2.name
-            FROM public.users u2
-            WHERE p.user_id_int IS NULL
-              AND p.email IS NOT NULL
-              AND LOWER(u2.email) = LOWER(p.email)
-            LIMIT 1
-          ),
-          p.email,
-          ''
-        ) AS user_name,
-        COALESCE(
-          u.email,
-          (
-            SELECT u2.email
-            FROM public.users u2
-            WHERE p.user_id_int IS NULL
-              AND p.email IS NOT NULL
-              AND LOWER(u2.email) = LOWER(p.email)
-            LIMIT 1
-          ),
-          p.email
-        ) AS user_email,
-        COALESCE(
-          u.role,
-          (
-            SELECT u2.role
-            FROM public.users u2
-            WHERE p.user_id_int IS NULL
-              AND p.email IS NOT NULL
-              AND LOWER(u2.email) = LOWER(p.email)
-            LIMIT 1
-          ),
-          'Usuário'
-        ) AS user_role,
-        COALESCE(
-          u.status,
-          (
-            SELECT u2.status
-            FROM public.users u2
-            WHERE p.user_id_int IS NULL
-              AND p.email IS NOT NULL
-              AND LOWER(u2.email) = LOWER(p.email)
-            LIMIT 1
-          ),
-          'ativo'
-        ) AS user_status,
-        COALESCE(
-          u.username,
-          (
-            SELECT u2.username
-            FROM public.users u2
-            WHERE p.user_id_int IS NULL
-              AND p.email IS NOT NULL
-              AND LOWER(u2.email) = LOWER(p.email)
-            LIMIT 1
-          ),
-          split_part(COALESCE(p.email, ''), '@', 1)
-        ) AS user_username,
+        u.id::text AS linked_user_id,
+        COALESCE(u.name, p.email, '') AS user_name,
+        COALESCE(u.email, p.email) AS user_email,
+        COALESCE(u.role, 'Usuario') AS user_role,
+        COALESCE(u.status, 'ativo') AS user_status,
+        COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
         COALESCE(a.total, 0) AS agenda_hoje
       FROM professionals p
       LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
-      LEFT JOIN public.users u ON u.id = p.user_id_int
+      LEFT JOIN public.users u
+        ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
       LEFT JOIN agenda_hoje a ON a.professional_id = p.id
-      ORDER BY COALESCE(
-        u.name,
-        (
-          SELECT u2.name
-          FROM public.users u2
-          WHERE p.user_id_int IS NULL
-            AND p.email IS NOT NULL
-            AND LOWER(u2.email) = LOWER(p.email)
-          LIMIT 1
-        ),
-        p.email,
-        ''
-      ) NULLS LAST, p.created_at DESC;
+      ORDER BY COALESCE(u.name, p.email, '') NULLS LAST, p.created_at DESC;
     `;
 
     const result = await pool.query(query, [date]);
+    let professionals = Array.isArray(result.rows) ? result.rows : [];
+
+    if (
+      forAgenda &&
+      accessContext?.linkedProfessionalId &&
+      !accessContext.canViewOtherProfessionals
+    ) {
+      professionals = professionals.filter(
+        (item) => String(item.id) === String(accessContext.linkedProfessionalId)
+      );
+    }
 
     res.json({
       success: true,
-      professionals: Array.isArray(result.rows) ? result.rows : []
+      professionals,
     });
   } catch (error) {
     console.error('Erro ao listar profissionais:', error);
     res.status(500).json({
       success: false,
       message: error?.message || 'Erro ao listar profissionais',
-      professionals: []
+      professionals: [],
     });
   }
 });
-
 // Atualizar profissional (dados principais)
 router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
   const { id } = req.params;
@@ -578,75 +607,19 @@ router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
       `SELECT
          p.*,
          COALESCE(pr.nome, p.funcao) AS role_nome,
-         u.id AS linked_user_id,
-         COALESCE(
-           u.name,
-           (
-             SELECT u2.name
-             FROM public.users u2
-             WHERE p.user_id_int IS NULL
-               AND p.email IS NOT NULL
-               AND LOWER(u2.email) = LOWER(p.email)
-             LIMIT 1
-           ),
-           p.email,
-           ''
-         ) AS user_name,
-         COALESCE(
-           u.email,
-           (
-             SELECT u2.email
-             FROM public.users u2
-             WHERE p.user_id_int IS NULL
-               AND p.email IS NOT NULL
-               AND LOWER(u2.email) = LOWER(p.email)
-             LIMIT 1
-           ),
-           p.email
-         ) AS user_email,
-         COALESCE(
-           u.username,
-           (
-             SELECT u2.username
-             FROM public.users u2
-             WHERE p.user_id_int IS NULL
-               AND p.email IS NOT NULL
-               AND LOWER(u2.email) = LOWER(p.email)
-             LIMIT 1
-           ),
-           split_part(COALESCE(p.email, ''), '@', 1)
-         ) AS user_username,
-         COALESCE(
-           u.role,
-           (
-             SELECT u2.role
-             FROM public.users u2
-             WHERE p.user_id_int IS NULL
-               AND p.email IS NOT NULL
-               AND LOWER(u2.email) = LOWER(p.email)
-             LIMIT 1
-           ),
-           'Usuário'
-         ) AS user_role,
-         COALESCE(
-           u.status,
-           (
-             SELECT u2.status
-             FROM public.users u2
-             WHERE p.user_id_int IS NULL
-               AND p.email IS NOT NULL
-               AND LOWER(u2.email) = LOWER(p.email)
-             LIMIT 1
-           ),
-           'ativo'
-         ) AS user_status
+         u.id::text AS linked_user_id,
+         COALESCE(u.name, p.email, '') AS user_name,
+         COALESCE(u.email, p.email) AS user_email,
+         COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
+         COALESCE(u.role, 'Usuario') AS user_role,
+         COALESCE(u.status, 'ativo') AS user_status
        FROM professionals p
        LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
-       LEFT JOIN public.users u ON u.id = p.user_id_int
+       LEFT JOIN public.users u
+         ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
        WHERE p.id = $1`,
       [id]
     );
-
     if (existingResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Profissional não encontrado' });
     }
@@ -827,17 +800,7 @@ router.delete('/:id', authorize('profissionais', 'status'), async (req, res) => 
 
     const lockedProfessional = professionalLockResult.rows[0];
 
-    let linkedUserId = lockedProfessional?.linked_user_candidate || null;
-    if (!linkedUserId && lockedProfessional?.email) {
-      const linkedByEmailResult = await client.query(
-        `SELECT id
-         FROM public.users
-         WHERE LOWER(email) = LOWER($1)
-         LIMIT 1`,
-        [lockedProfessional.email]
-      );
-      linkedUserId = linkedByEmailResult.rows[0]?.id || null;
-    }
+    const linkedUserId = lockedProfessional?.linked_user_candidate || null;
 
     const depsResult = await client.query(
       `SELECT
@@ -918,12 +881,84 @@ router.patch('/:id/status', authorize('profissionais', 'status'), async (req, re
   }
 });
 
+router.get('/me', authorize('profissionais', 'view'), async (req, res) => {
+  try {
+    const accessContext = await resolveAgendaAccessContext(req.user, pool);
+
+    if (!accessContext.linkedProfessionalId) {
+      return res.json({
+        success: true,
+        professional_id: null,
+        can_view_all_professionals: false,
+        allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+        professional: null,
+      });
+    }
+
+    const professionalResult = await pool.query(
+      `
+        SELECT
+          p.id,
+          p.status,
+          p.funcao,
+          p.email,
+          p.phone,
+          COALESCE(pr.nome, p.funcao) AS role_nome,
+          u.id::text AS linked_user_id,
+          COALESCE(u.name, p.email, '') AS user_name,
+          COALESCE(u.email, p.email) AS user_email,
+          COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
+          COALESCE(u.role, 'Usuario') AS user_role
+        FROM public.professionals p
+        LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+        LEFT JOIN public.users u
+          ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+        WHERE p.id = $1
+        LIMIT 1
+      `,
+      [accessContext.linkedProfessionalId]
+    );
+
+    return res.json({
+      success: true,
+      professional_id: accessContext.linkedProfessionalId,
+      can_view_all_professionals: accessContext.canViewOtherProfessionals,
+      allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+      professional: professionalResult.rows[0] || null,
+    });
+  } catch (error) {
+    console.error('Erro ao resolver contexto do profissional logado:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao carregar contexto do profissional logado',
+    });
+  }
+});
+
 // Agenda do profissional em um dia
 router.get('/:id/agenda', authorize('profissionais', 'view'), async (req, res) => {
   const { id } = req.params;
   const date = req.query.date || new Date().toISOString().split('T')[0];
 
   try {
+    const accessContext = await resolveAgendaAccessContext(req.user, pool);
+    const isOwnAgenda =
+      accessContext.linkedProfessionalId &&
+      String(accessContext.linkedProfessionalId) === String(id);
+
+    // Protege contra IDOR: profissional não pode consultar agenda arbitraria sem permissão + config.
+    if (
+      accessContext.linkedProfessionalId &&
+      !isOwnAgenda &&
+      !accessContext.canViewOtherProfessionals
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Acesso negado: voce nao pode visualizar agenda de outro profissional.',
+      });
+    }
+
     const query = `
       SELECT
         a.id,
@@ -948,7 +983,12 @@ router.get('/:id/agenda', authorize('profissionais', 'view'), async (req, res) =
 
     res.json({
       success: true,
-      agenda: result.rows
+      agenda: result.rows,
+      scope: {
+        professional_id: accessContext.linkedProfessionalId,
+        can_view_all_professionals: accessContext.canViewOtherProfessionals,
+        allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+      },
     });
   } catch (error) {
     console.error('Erro ao buscar agenda do profissional:', error);
@@ -987,4 +1027,6 @@ router.get('/stats/resumo', authorize('profissionais', 'view'), async (req, res)
 });
 
 module.exports = router;
+
+
 

@@ -33,14 +33,54 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
+async function getProfessionalLinkColumn(client) {
+  const { rows } = await client.query(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'professionals'
+        AND column_name IN ('user_id_int', 'user_id')
+      ORDER BY CASE column_name WHEN 'user_id_int' THEN 0 ELSE 1 END
+      LIMIT 1
+    `
+  );
+
+  return rows[0]?.column_name || null;
+}
+
 // Listar todos os usuários (apenas admin)
 router.get('/', adminMiddleware, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, username, email, name, phone, role, status, must_change_password, created_at
-      FROM users
-      WHERE deleted_at IS NULL
-      ORDER BY created_at DESC
+      SELECT
+        u.id,
+        u.username,
+        u.email,
+        u.name,
+        u.phone,
+        u.role,
+        u.status,
+        u.must_change_password,
+        u.created_at,
+        p.id AS professional_id,
+        COALESCE(p.funcao, p.specialty) AS professional_label
+      FROM users u
+      LEFT JOIN LATERAL (
+        SELECT
+          pr.id,
+          pr.funcao,
+          pr.specialty
+        FROM public.professionals pr
+        WHERE COALESCE(
+          to_jsonb(pr)->>'user_id_int',
+          to_jsonb(pr)->>'user_id'
+        ) = u.id::text
+        ORDER BY pr.updated_at DESC NULLS LAST, pr.created_at DESC NULLS LAST
+        LIMIT 1
+      ) p ON true
+      WHERE u.deleted_at IS NULL
+      ORDER BY u.created_at DESC
     `);
 
     res.json({
@@ -242,12 +282,215 @@ router.delete('/:id', adminMiddleware, async (req, res) => {
   }
 });
 
+router.post('/:id/link-professional', adminMiddleware, async (req, res) => {
+  const { id: userId } = req.params;
+  const professionalId = (req.body?.professional_id || req.body?.professionalId || '')
+    .toString()
+    .trim();
+
+  if (!professionalId) {
+    return res.status(400).json({ message: 'professional_id e obrigatorio' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const linkColumn = await getProfessionalLinkColumn(client);
+    if (!linkColumn) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ message: 'Nao foi possivel identificar coluna de vinculo em professionals' });
+    }
+
+    const userResult = await client.query(
+      `SELECT id, name
+         FROM public.users
+        WHERE id = $1
+          AND deleted_at IS NULL
+        LIMIT 1
+        FOR UPDATE`,
+      [userId]
+    );
+    if (userResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Usuario nao encontrado' });
+    }
+
+    const professionalResult = await client.query(
+      `
+        SELECT
+          p.id,
+          COALESCE(
+            to_jsonb(p)->>'user_id_int',
+            to_jsonb(p)->>'user_id'
+          ) AS linked_user_id
+        FROM public.professionals p
+        WHERE p.id = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [professionalId]
+    );
+    if (professionalResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Profissional nao encontrado' });
+    }
+
+    const currentProfessional = professionalResult.rows[0];
+    if (
+      currentProfessional.linked_user_id &&
+      String(currentProfessional.linked_user_id) !== String(userId)
+    ) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Profissional ja vinculado a outro usuario' });
+    }
+
+    const alreadyLinkedElsewhere = await client.query(
+      `
+        SELECT p.id
+        FROM public.professionals p
+        WHERE p.id <> $2
+          AND COALESCE(
+            to_jsonb(p)->>'user_id_int',
+            to_jsonb(p)->>'user_id'
+          ) = $1
+        LIMIT 1
+      `,
+      [String(userId), professionalId]
+    );
+    if (alreadyLinkedElsewhere.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ message: 'Usuario ja vinculado a outro profissional' });
+    }
+
+    await client.query(
+      `
+        UPDATE public.professionals
+        SET ${linkColumn} = $1,
+            updated_at = NOW()
+        WHERE id = $2
+      `,
+      [userId, professionalId]
+    );
+
+    await client.query('COMMIT');
+    return res.json({
+      message: 'Vinculo atualizado com sucesso',
+      link: {
+        user_id: userId,
+        professional_id: professionalId,
+      },
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao vincular usuario ao profissional:', error);
+    return res.status(500).json({ message: 'Erro interno do servidor' });
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/:id/unlink-professional', adminMiddleware, async (req, res) => {
+  const { id: userId } = req.params;
+  const requestedProfessionalId = (
+    req.body?.professional_id || req.body?.professionalId || ''
+  )
+    .toString()
+    .trim();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const linkColumn = await getProfessionalLinkColumn(client);
+    if (!linkColumn) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ message: 'Nao foi possivel identificar coluna de vinculo em professionals' });
+    }
+
+    const targetResult = await client.query(
+      `
+        SELECT p.id
+        FROM public.professionals p
+        WHERE COALESCE(
+          to_jsonb(p)->>'user_id_int',
+          to_jsonb(p)->>'user_id'
+        ) = $1
+        ${requestedProfessionalId ? 'AND p.id = $2' : ''}
+        ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
+        LIMIT 1
+        FOR UPDATE
+      `,
+      requestedProfessionalId ? [String(userId), requestedProfessionalId] : [String(userId)]
+    );
+
+    if (targetResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Nenhum vinculo profissional encontrado para este usuario' });
+    }
+
+    const targetProfessionalId = targetResult.rows[0].id;
+    await client.query(
+      `
+        UPDATE public.professionals
+        SET ${linkColumn} = NULL,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [targetProfessionalId]
+    );
+
+    await client.query('COMMIT');
+    return res.json({
+      message: 'Vinculo removido com sucesso',
+      professional_id: targetProfessionalId,
+      user_id: userId,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao desvincular usuario do profissional:', error);
+    return res.status(500).json({ message: 'Erro interno do servidor' });
+  } finally {
+    client.release();
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await pool.query(
-      'SELECT id, username, email, name, phone, role, status, must_change_password, created_at FROM users WHERE id = $1 AND deleted_at IS NULL',
+      `
+      SELECT
+        u.id,
+        u.username,
+        u.email,
+        u.name,
+        u.phone,
+        u.role,
+        u.status,
+        u.must_change_password,
+        u.created_at,
+        p.id AS professional_id,
+        COALESCE(p.funcao, p.specialty) AS professional_label
+      FROM users u
+      LEFT JOIN LATERAL (
+        SELECT
+          pr.id,
+          pr.funcao,
+          pr.specialty
+        FROM public.professionals pr
+        WHERE COALESCE(
+          to_jsonb(pr)->>'user_id_int',
+          to_jsonb(pr)->>'user_id'
+        ) = u.id::text
+        ORDER BY pr.updated_at DESC NULLS LAST, pr.created_at DESC NULLS LAST
+        LIMIT 1
+      ) p ON true
+      WHERE u.id = $1
+        AND u.deleted_at IS NULL
+      LIMIT 1
+      `,
       [id]
     );
 

@@ -11,10 +11,12 @@ import { apiService, API_BASE_URL, ManagedUser } from "@/services/api";
 import {
   CheckCircle2,
   KeyRound,
+  Link2,
   Lock,
   Search,
   ShieldAlert,
   Trash2,
+  Unlink2,
   Unlock,
   UserX,
   XCircle,
@@ -22,6 +24,22 @@ import {
 
 type TabValue = "pending" | "all";
 type StatusFilter = "all" | "ativo" | "pendente" | "bloqueado" | "rejeitado";
+
+type ProfessionalOption = {
+  id: string;
+  user_name?: string | null;
+  role_nome?: string | null;
+  funcao?: string | null;
+  linked_user_id?: string | null;
+};
+
+function professionalLabel(professional: ProfessionalOption) {
+  const name =
+    (professional.user_name || professional.role_nome || professional.funcao || "")
+      .toString()
+      .trim() || `Profissional ${professional.id}`;
+  return `${name} (#${professional.id})`;
+}
 
 export function UserManagement() {
   const [allUsers, setAllUsers] = useState<ManagedUser[]>([]);
@@ -38,6 +56,16 @@ export function UserManagement() {
     open: false,
     user: null,
   });
+  const [linkModal, setLinkModal] = useState<{
+    open: boolean;
+    user: ManagedUser | null;
+  }>({
+    open: false,
+    user: null,
+  });
+  const [professionalOptions, setProfessionalOptions] = useState<ProfessionalOption[]>([]);
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>("");
+  const [loadingProfessionalOptions, setLoadingProfessionalOptions] = useState(false);
   const [resetPasswords, setResetPasswords] = useState({ password: "", confirm: "" });
   const { toast } = useToast();
 
@@ -106,9 +134,39 @@ export function UserManagement() {
     }
   }, [toast]);
 
+  const loadProfessionalOptions = useCallback(async () => {
+    try {
+      setLoadingProfessionalOptions(true);
+      const response = await apiService.getProfessionals();
+      const list = Array.isArray(response?.professionals)
+        ? (response.professionals as ProfessionalOption[])
+        : Array.isArray(response)
+          ? (response as ProfessionalOption[])
+          : [];
+      setProfessionalOptions(list);
+    } catch (error) {
+      setProfessionalOptions([]);
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel carregar profissionais para vinculacao",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingProfessionalOptions(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    if (!linkModal.open) return;
+    void loadProfessionalOptions();
+  }, [linkModal.open, loadProfessionalOptions]);
 
   const filteredUsers = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -129,6 +187,20 @@ export function UserManagement() {
   );
 
   const usersToRender = activeTab === "pending" ? pendingUsers : filteredUsers;
+  const linkableProfessionalOptions = useMemo(() => {
+    return professionalOptions.filter((professional) => {
+      if (!professional.linked_user_id) return true;
+      if (!linkModal.user?.id) return false;
+      return String(professional.linked_user_id) === String(linkModal.user.id);
+    });
+  }, [linkModal.user?.id, professionalOptions]);
+
+  useEffect(() => {
+    if (!linkModal.open) return;
+    if (selectedProfessionalId) return;
+    if (linkableProfessionalOptions.length === 0) return;
+    setSelectedProfessionalId(String(linkableProfessionalOptions[0].id));
+  }, [linkModal.open, linkableProfessionalOptions, selectedProfessionalId]);
 
   const runStatusAction = async (
     userId: string | number,
@@ -208,6 +280,73 @@ export function UserManagement() {
           error instanceof Error
             ? error.message
             : "Nao foi possivel excluir o usuario",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const openLinkModal = (user: ManagedUser) => {
+    setSelectedProfessionalId("");
+    setLinkModal({ open: true, user });
+  };
+
+  const handleLinkProfessional = async () => {
+    const target = linkModal.user;
+    if (!target) return;
+    if (!selectedProfessionalId) {
+      toast({
+        title: "Vinculacao",
+        description: "Selecione um profissional para vincular.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setActionLoading(`link:${target.id}`);
+      const result = await apiService.linkUserToProfessional(target.id, selectedProfessionalId);
+      toast({
+        title: "Vinculo atualizado",
+        description: result.message,
+      });
+      setLinkModal({ open: false, user: null });
+      setSelectedProfessionalId("");
+      await fetchUsers();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel vincular usuario ao profissional",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleUnlinkProfessional = async (user: ManagedUser) => {
+    try {
+      setActionLoading(`unlink:${user.id}`);
+      const result = await apiService.unlinkUserFromProfessional(
+        user.id,
+        user.professional_id ? String(user.professional_id) : undefined
+      );
+      toast({
+        title: "Vinculo removido",
+        description: result.message,
+      });
+      await fetchUsers();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel remover vinculo profissional",
         variant: "destructive",
       });
     } finally {
@@ -380,6 +519,9 @@ export function UserManagement() {
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Usuario</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Email</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Funcao</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  Vinculado a Profissional
+                </th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Senha</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Cadastro</th>
@@ -400,6 +542,15 @@ export function UserManagement() {
                     <td className="px-3 py-2 text-muted-foreground">{user.username}</td>
                     <td className="px-3 py-2 text-muted-foreground">{user.email}</td>
                     <td className="px-3 py-2 text-muted-foreground">{user.role}</td>
+                    <td className="px-3 py-2">
+                      {user.professional_id ? (
+                        <Badge variant="outline" className="border-primary/40 text-primary">
+                          {user.professional_label || `Profissional #${user.professional_id}`}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Nao vinculado</Badge>
+                      )}
+                    </td>
                     <td className="px-3 py-2">{getStatusBadge(user.status)}</td>
                     <td className="px-3 py-2">
                       {user.must_change_password ? (
@@ -493,6 +644,30 @@ export function UserManagement() {
                           Forcar senha
                         </Button>
 
+                        {user.professional_id ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            disabled={isRowLoading || !canManage}
+                            onClick={() => handleUnlinkProfessional(user)}
+                          >
+                            <Unlink2 className="mr-1 h-3.5 w-3.5" />
+                            Desvincular
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            disabled={isRowLoading || !canManage}
+                            onClick={() => openLinkModal(user)}
+                          >
+                            <Link2 className="mr-1 h-3.5 w-3.5" />
+                            Vincular
+                          </Button>
+                        )}
+
                         <Button
                           variant="destructive"
                           size="sm"
@@ -512,6 +687,78 @@ export function UserManagement() {
           </table>
         )}
       </div>
+
+      <Dialog
+        open={linkModal.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLinkModal({ open: false, user: null });
+            setSelectedProfessionalId("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Vincular usuario a profissional</DialogTitle>
+            <DialogDescription>
+              Associe {linkModal.user?.name} a um cadastro de profissional existente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="professional-link">Profissional</Label>
+            <Select
+              value={selectedProfessionalId}
+              onValueChange={setSelectedProfessionalId}
+              disabled={loadingProfessionalOptions || linkableProfessionalOptions.length === 0}
+            >
+              <SelectTrigger id="professional-link">
+                <SelectValue
+                  placeholder={
+                    loadingProfessionalOptions
+                      ? "Carregando profissionais..."
+                      : "Selecione o profissional"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {linkableProfessionalOptions.map((professional) => (
+                  <SelectItem key={professional.id} value={String(professional.id)}>
+                    {professionalLabel(professional)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {linkableProfessionalOptions.length === 0 && !loadingProfessionalOptions ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhum profissional disponivel para vinculacao.
+              </p>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLinkModal({ open: false, user: null });
+                setSelectedProfessionalId("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleLinkProfessional}
+              disabled={
+                actionLoading?.startsWith("link:") ||
+                !selectedProfessionalId ||
+                linkableProfessionalOptions.length === 0
+              }
+            >
+              {actionLoading?.startsWith("link:") ? "Vinculando..." : "Confirmar vinculacao"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={resetModal.open}

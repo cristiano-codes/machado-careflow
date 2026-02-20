@@ -30,6 +30,7 @@ export interface Settings {
   auto_updates: boolean;
   debug_mode: boolean;
   allow_public_registration: boolean;
+  allow_professional_view_others: boolean;
   business_hours: BusinessHours;
   professionals_config: ProfessionalsConfig;
 }
@@ -84,6 +85,7 @@ const defaultSettings: Settings = {
   auto_updates: true,
   debug_mode: false,
   allow_public_registration: false,
+  allow_professional_view_others: false,
   business_hours: defaultBusinessHours,
   professionals_config: defaultProfessionalsConfig,
 };
@@ -172,6 +174,7 @@ function toApiSettingsPayload(settings: Settings): SettingsPayload {
     auto_updates: settings.auto_updates,
     debug_mode: settings.debug_mode,
     allow_public_registration: settings.allow_public_registration,
+    allow_professional_view_others: settings.allow_professional_view_others,
     business_hours: settings.business_hours,
     professionals_config: settings.professionals_config,
   };

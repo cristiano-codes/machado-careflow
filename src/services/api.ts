@@ -47,6 +47,10 @@ export type LoginResponse = {
     status?: string;
     first_access?: boolean;
     must_change_password?: boolean;
+    professional_id?: string | number | null;
+    can_view_all_professionals?: boolean;
+    allow_professional_view_others?: boolean;
+    permissions?: string[];
     created_at?: string;
     updated_at?: string;
   };
@@ -61,6 +65,11 @@ export type User = {
   status?: string;
   first_access?: boolean;
   must_change_password?: boolean;
+  professional_id?: string | number | null;
+  professional_label?: string | null;
+  can_view_all_professionals?: boolean;
+  allow_professional_view_others?: boolean;
+  permissions?: string[];
   created_at?: string;
   updated_at?: string;
 };
@@ -89,6 +98,7 @@ export type SettingsPayload = {
   auto_updates: boolean;
   debug_mode: boolean;
   allow_public_registration: boolean;
+  allow_professional_view_others: boolean;
   business_hours: BusinessHours;
   professionals_config: ProfessionalsConfig;
 };
@@ -152,6 +162,23 @@ type SettingsResponse = {
   success: boolean;
   settings?: SettingsPayload;
   data?: SettingsPayload;
+  message?: string;
+};
+
+export type ProfessionalSummary = {
+  id: string;
+  user_name?: string | null;
+  role_nome?: string | null;
+  funcao?: string | null;
+  status?: string;
+};
+
+export type ProfessionalMeResponse = {
+  success: boolean;
+  professional_id: string | null;
+  can_view_all_professionals: boolean;
+  allow_professional_view_others: boolean;
+  professional: ProfessionalSummary | null;
   message?: string;
 };
 
@@ -273,6 +300,40 @@ class ApiService {
     return {
       message: data?.message || "Usuario devera redefinir a senha no proximo login",
     };
+  }
+
+  async linkUserToProfessional(
+    userId: string | number,
+    professionalId: string
+  ): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/link-professional`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ professional_id: professionalId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao vincular usuario ao profissional");
+    }
+    return { message: data?.message || "Vinculo atualizado com sucesso" };
+  }
+
+  async unlinkUserFromProfessional(
+    userId: string | number,
+    professionalId?: string
+  ): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/unlink-professional`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(
+        professionalId ? { professional_id: professionalId } : {}
+      ),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao desvincular usuario do profissional");
+    }
+    return { message: data?.message || "Vinculo removido com sucesso" };
   }
 
   // ---------- SETTINGS ----------
@@ -451,12 +512,22 @@ class ApiService {
   }
 
   // ---------- PROFISSIONAIS ----------
-  async getProfessionals(date?: string) {
-    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+  async getProfessionals(options?: string | { date?: string; forAgenda?: boolean }) {
+    const date = typeof options === "string" ? options : options?.date;
+    const forAgenda =
+      typeof options === "object" && options !== null ? options.forAgenda === true : false;
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    if (forAgenda) params.set("for_agenda", "1");
+    const query = params.toString().length > 0 ? `?${params.toString()}` : "";
     const response = await fetch(`${API_BASE_URL}/profissionais${query}`, {
       headers: this.getAuthHeaders(),
     });
-    return response.json();
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao carregar profissionais");
+    }
+    return data;
   }
 
   async createProfessional(payload: ProfessionalPayload) {
@@ -499,7 +570,32 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/profissionais/${id}/agenda${query}`, {
       headers: this.getAuthHeaders(),
     });
-    return response.json();
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao carregar agenda do profissional");
+    }
+    return data;
+  }
+
+  async getProfessionalMe(): Promise<ProfessionalMeResponse> {
+    const response = await fetch(`${API_BASE_URL}/profissionais/me`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.message || "Falha ao carregar contexto profissional");
+    }
+    return {
+      success: data?.success === true,
+      professional_id:
+        data?.professional_id === null || data?.professional_id === undefined
+          ? null
+          : String(data.professional_id),
+      can_view_all_professionals: data?.can_view_all_professionals === true,
+      allow_professional_view_others: data?.allow_professional_view_others === true,
+      professional: data?.professional || null,
+      message: data?.message,
+    };
   }
 
   async getProfessionalsStats(date?: string) {

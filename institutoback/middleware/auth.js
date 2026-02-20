@@ -24,6 +24,8 @@ const authMiddleware = (req, res, next) => {
       username: decoded.username,
       name: decoded.name,
       role: decoded.role,
+      professional_id: decoded.professional_id || null,
+      can_view_all_professionals: decoded.can_view_all_professionals === true,
       permissions: Array.isArray(decoded.permissions)
         ? decoded.permissions
             .map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : ''))

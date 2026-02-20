@@ -63,6 +63,7 @@ const DEFAULT_SETTINGS = {
   auto_updates: true,
   debug_mode: false,
   allow_public_registration: false,
+  allow_professional_view_others: false,
   business_hours: DEFAULT_BUSINESS_HOURS,
   professionals_config: DEFAULT_PROFESSIONALS_CONFIG,
 };
@@ -86,6 +87,7 @@ const SETTINGS_EDITABLE_FIELDS = [
   'auto_updates',
   'debug_mode',
   'allow_public_registration',
+  'allow_professional_view_others',
   'business_hours',
   'professionals_config',
 ];
@@ -136,7 +138,8 @@ async function ensureSystemSettingsSchema() {
           ADD COLUMN IF NOT EXISTS instituicao_logo_updated_at timestamptz DEFAULT now(),
           ADD COLUMN IF NOT EXISTS business_hours jsonb,
           ADD COLUMN IF NOT EXISTS professionals_config jsonb,
-          ADD COLUMN IF NOT EXISTS allow_public_registration boolean
+          ADD COLUMN IF NOT EXISTS allow_public_registration boolean,
+          ADD COLUMN IF NOT EXISTS allow_professional_view_others boolean
       `);
 
       await pool.query(
@@ -144,7 +147,8 @@ async function ensureSystemSettingsSchema() {
           UPDATE public.system_settings
           SET business_hours = COALESCE(business_hours, $1::jsonb),
               professionals_config = COALESCE(professionals_config, $2::jsonb),
-              allow_public_registration = COALESCE(allow_public_registration, false)
+              allow_public_registration = COALESCE(allow_public_registration, false),
+              allow_professional_view_others = COALESCE(allow_professional_view_others, false)
         `,
         [
           JSON.stringify(DEFAULT_BUSINESS_HOURS),
@@ -155,7 +159,9 @@ async function ensureSystemSettingsSchema() {
       await pool.query(`
         ALTER TABLE public.system_settings
           ALTER COLUMN allow_public_registration SET DEFAULT false,
-          ALTER COLUMN allow_public_registration SET NOT NULL
+          ALTER COLUMN allow_public_registration SET NOT NULL,
+          ALTER COLUMN allow_professional_view_others SET DEFAULT false,
+          ALTER COLUMN allow_professional_view_others SET NOT NULL
       `);
 
       settingsColumnsCache = null;
@@ -530,6 +536,7 @@ async function createSingletonSettings(seed = {}) {
     normalizedSeed.auto_updates,
     normalizedSeed.debug_mode,
     normalizedSeed.allow_public_registration,
+    normalizedSeed.allow_professional_view_others,
     JSON.stringify(normalizedSeed.business_hours),
     JSON.stringify(normalizedSeed.professionals_config),
   ];
@@ -557,6 +564,7 @@ async function createSingletonSettings(seed = {}) {
           auto_updates,
           debug_mode,
           allow_public_registration,
+          allow_professional_view_others,
           business_hours,
           professionals_config
         ) VALUES (
@@ -579,8 +587,9 @@ async function createSingletonSettings(seed = {}) {
           $16,
           $17,
           $18,
-          $19::jsonb,
-          $20::jsonb
+          $19,
+          $20::jsonb,
+          $21::jsonb
         )
         RETURNING *
       `,
@@ -614,6 +623,7 @@ async function createSingletonSettings(seed = {}) {
           auto_updates,
           debug_mode,
           allow_public_registration,
+          allow_professional_view_others,
           business_hours,
           professionals_config
         ) VALUES (
@@ -636,8 +646,9 @@ async function createSingletonSettings(seed = {}) {
           $17,
           $18,
           $19,
-          $20::jsonb,
-          $21::jsonb
+          $20,
+          $21::jsonb,
+          $22::jsonb
         )
         RETURNING *
       `,
@@ -964,6 +975,16 @@ async function saveSettingsHandler(req, res) {
       return res.status(400).json({
         success: false,
         message: 'allow_public_registration deve ser booleano.',
+      });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(payload, 'allow_professional_view_others') &&
+      typeof payload.allow_professional_view_others !== 'boolean'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'allow_professional_view_others deve ser booleano.',
       });
     }
 

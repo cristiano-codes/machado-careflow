@@ -19,19 +19,26 @@ export default function SystemSettingsSection({ canEdit = true }: SystemSettings
   const [allowPublicRegistration, setAllowPublicRegistration] = useState(
     settings.allow_public_registration
   );
+  const [allowProfessionalViewOthers, setAllowProfessionalViewOthers] = useState(
+    settings.allow_professional_view_others
+  );
 
   useEffect(() => {
     setAllowPublicRegistration(settings.allow_public_registration);
-  }, [settings.allow_public_registration]);
+    setAllowProfessionalViewOthers(settings.allow_professional_view_others);
+  }, [settings.allow_public_registration, settings.allow_professional_view_others]);
 
   async function handleSave() {
     try {
       setSaving(true);
-      await saveSettings({ allow_public_registration: allowPublicRegistration });
+      await saveSettings({
+        allow_public_registration: allowPublicRegistration,
+        allow_professional_view_others: allowProfessionalViewOthers,
+      });
 
       toast({
         title: "Configuracoes salvas",
-        description: "Politica de cadastro publico atualizada.",
+        description: "Politicas de acesso publico e agenda foram atualizadas.",
       });
 
       setIsEditing(false);
@@ -72,6 +79,23 @@ export default function SystemSettingsSection({ canEdit = true }: SystemSettings
           />
         </div>
 
+        <div className="flex items-center justify-between rounded-md border p-3">
+          <div className="space-y-1">
+            <Label htmlFor="allow_professional_view_others" className="text-sm">
+              Permitir profissional ver agenda de outros
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Quando ligado, profissionais com permissao "agenda:view_all_professionals" podem alternar agenda.
+            </p>
+          </div>
+          <Switch
+            id="allow_professional_view_others"
+            checked={allowProfessionalViewOthers}
+            onCheckedChange={setAllowProfessionalViewOthers}
+            disabled={!canEdit || !isEditing || saving}
+          />
+        </div>
+
         <div className="flex items-center justify-between gap-3 border-t pt-2">
           {!canEdit ? (
             <p className="text-xs text-muted-foreground">Somente leitura</p>
@@ -84,6 +108,7 @@ export default function SystemSettingsSection({ canEdit = true }: SystemSettings
                 disabled={saving}
                 onClick={() => {
                   setAllowPublicRegistration(settings.allow_public_registration);
+                  setAllowProfessionalViewOthers(settings.allow_professional_view_others);
                   setIsEditing(false);
                 }}
               >
