@@ -102,6 +102,21 @@ type UserPermissionDetail = {
 type ModuleAccessFilter = "all" | "with_access" | "without_access";
 
 const CRUD_PERMISSION_NAMES = ["view", "create", "edit", "delete"] as const;
+const MUTATION_CHUNK_SIZE = 15;
+const MUTATION_RETRY_LIMIT = 1;
+
+type PermissionMutationType = "grant" | "revoke";
+
+type PermissionMutationOperation = {
+  key: string;
+  type: PermissionMutationType;
+  moduleId: string;
+  permissionId: string;
+};
+
+type PermissionMutationFailure = PermissionMutationOperation & {
+  message: string;
+};
 
 function normalizeText(value: string | null | undefined) {
   return (value || "")
@@ -309,6 +324,22 @@ export function PermissionManager() {
     return map;
   }, [permissions]);
 
+  const modulesById = useMemo(() => {
+    const map = new Map<string, Module>();
+    for (const moduleItem of modules) {
+      map.set(String(moduleItem.id), moduleItem);
+    }
+    return map;
+  }, [modules]);
+
+  const permissionsById = useMemo(() => {
+    const map = new Map<string, Permission>();
+    for (const permissionItem of permissions) {
+      map.set(String(permissionItem.id), permissionItem);
+    }
+    return map;
+  }, [permissions]);
+
   const viewPermissionId = permissionsByName.get("view")?.id || null;
   const createPermissionId = permissionsByName.get("create")?.id || null;
   const editPermissionId = permissionsByName.get("edit")?.id || null;
@@ -501,34 +532,125 @@ export function PermissionManager() {
     }
   }
 
+  function chunkArray<T>(items: T[], chunkSize: number) {
+    const safeSize = Number.isFinite(chunkSize) && chunkSize > 0 ? Math.floor(chunkSize) : 1;
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += safeSize) {
+      chunks.push(items.slice(index, index + safeSize));
+    }
+    return chunks;
+  }
+
+  function formatOperationLabel(operation: PermissionMutationOperation) {
+    const moduleLabel =
+      modulesById.get(operation.moduleId)?.display_name ||
+      modulesById.get(operation.moduleId)?.name ||
+      operation.moduleId;
+    const permissionLabel =
+      permissionsById.get(operation.permissionId)?.display_name ||
+      permissionsById.get(operation.permissionId)?.name ||
+      operation.permissionId;
+    const actionLabel = operation.type === "grant" ? "Conceder" : "Revogar";
+
+    return `${actionLabel} ${moduleLabel} > ${permissionLabel}`;
+  }
+
+  async function runMutationOperation(operation: PermissionMutationOperation) {
+    const endpoint = operation.type === "grant" ? "grant" : "revoke";
+    const fallbackMessage =
+      operation.type === "grant" ? "Erro ao conceder permissao" : "Erro ao revogar permissao";
+
+    const response = await fetch(
+      `${API_BASE_URL}/permissions/users/${selectedUserId}/${endpoint}`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({
+          moduleId: operation.moduleId,
+          permissionId: operation.permissionId,
+        }),
+      }
+    );
+
+    await parseJson(response, fallbackMessage);
+  }
+
+  async function runMutationWithRetry(
+    operation: PermissionMutationOperation,
+    retryLimit: number
+  ) {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
+      try {
+        await runMutationOperation(operation);
+        return;
+      } catch (error) {
+        lastError =
+          error instanceof Error ? error : new Error("Falha desconhecida ao salvar permissao");
+        if (attempt < retryLimit) {
+          await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+        }
+      }
+    }
+
+    throw lastError || new Error("Falha ao salvar permissao");
+  }
+
   async function saveChanges() {
     if (!selectedUserId || !hasPendingChanges) return;
 
-    const grantKeys = draftPermissionKeys.filter((key) => !baselinePermissionSet.has(key));
-    const revokeKeys = baselinePermissionKeys.filter((key) => !draftPermissionSet.has(key));
+    const grantOperations: PermissionMutationOperation[] = draftPermissionKeys
+      .filter((key) => !baselinePermissionSet.has(key))
+      .map((key) => {
+        const { moduleId, permissionId } = parsePermissionKey(key);
+        return { key, type: "grant", moduleId, permissionId };
+      });
+
+    const revokeOperations: PermissionMutationOperation[] = baselinePermissionKeys
+      .filter((key) => !draftPermissionSet.has(key))
+      .map((key) => {
+        const { moduleId, permissionId } = parsePermissionKey(key);
+        return { key, type: "revoke", moduleId, permissionId };
+      });
+
+    const operations = [...grantOperations, ...revokeOperations];
+    if (operations.length === 0) return;
 
     setSaving(true);
     try {
-      for (const key of grantKeys) {
-        const { moduleId, permissionId } = parsePermissionKey(key);
-        const response = await fetch(`${API_BASE_URL}/permissions/users/${selectedUserId}/grant`, {
-          method: "POST",
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({ moduleId, permissionId }),
-        });
+      const failures: PermissionMutationFailure[] = [];
 
-        await parseJson(response, "Erro ao conceder permissao");
+      for (const chunk of chunkArray(operations, MUTATION_CHUNK_SIZE)) {
+        const chunkResults = await Promise.allSettled(
+          chunk.map((operation) => runMutationWithRetry(operation, MUTATION_RETRY_LIMIT))
+        );
+
+        chunkResults.forEach((result, index) => {
+          if (result.status === "fulfilled") return;
+          const failedOperation = chunk[index];
+          const message =
+            result.reason instanceof Error
+              ? result.reason.message
+              : "Falha desconhecida ao aplicar alteracao";
+          failures.push({ ...failedOperation, message });
+        });
       }
 
-      for (const key of revokeKeys) {
-        const { moduleId, permissionId } = parsePermissionKey(key);
-        const response = await fetch(`${API_BASE_URL}/permissions/users/${selectedUserId}/revoke`, {
-          method: "POST",
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({ moduleId, permissionId }),
+      if (failures.length > 0) {
+        const details = failures
+          .slice(0, 5)
+          .map((failure) => `${formatOperationLabel(failure)} (${failure.message})`)
+          .join("; ");
+
+        toast({
+          title: `Falha ao aplicar ${failures.length} alteracao(oes)`,
+          description: details || "Algumas permissoes nao foram atualizadas.",
+          variant: "destructive",
         });
 
-        await parseJson(response, "Erro ao revogar permissao");
+        await loadSelectedUserPermissions(selectedUserId);
+        return;
       }
 
       setBaselinePermissionKeys([...draftPermissionKeys]);
@@ -691,7 +813,7 @@ export function PermissionManager() {
                               <p className="truncate text-sm font-medium">{user.name}</p>
                               <p className="truncate text-xs text-muted-foreground">
                                 {user.email}
-                                {user.username ? ` • ${user.username}` : ""}
+                                {user.username ? ` ï¿½ ${user.username}` : ""}
                               </p>
                             </div>
                             <div className="flex items-center gap-1">

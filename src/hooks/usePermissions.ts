@@ -1,9 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo } from "react";
+import {
+  ADMIN_MACRO_PERMISSION_NAMES,
+  isStandardPermissionAction,
+  normalizePermissionToken,
+  parseScope,
+  resolveModuleAliases,
+} from "@/permissions/permissionMap";
 
 type RawPerm =
   | string
-  | { module?: string; permission?: string }
-  | { name?: string; module?: string; action?: string };
+  | { module?: string; modulo?: string; permission?: string; name?: string; action?: string };
 
 type NormalizedPerm = { module: string; permission: string };
 
@@ -12,17 +18,11 @@ type StoredUser = {
   permissions?: RawPerm[];
 };
 
-function normalizeText(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-    .replace(/[\s-]+/g, '_');
-}
+const ADMIN_ROLES = new Set(["admin", "adm", "administrador", "coordenador_geral"]);
+const READONLY_ROLES = new Set(["usuario", "consulta"]);
 
 function readStoredUser(): StoredUser | null {
-  const raw = sessionStorage.getItem('user') ?? localStorage.getItem('user');
+  const raw = sessionStorage.getItem("user") ?? localStorage.getItem("user");
   if (!raw) return null;
 
   try {
@@ -33,156 +33,133 @@ function readStoredUser(): StoredUser | null {
 }
 
 function normalize(raw: RawPerm): NormalizedPerm[] {
-  if (typeof raw === 'string') {
-    const value = normalizeText(raw);
-    if (!value.includes(':')) return [];
-
-    const parts = value.split(':').map((s) => s.trim()).filter(Boolean);
-    if (parts.length !== 2) return [];
-
-    const [module, permission] = parts;
-    return [{ module, permission }];
+  if (typeof raw === "string") {
+    const parsed = parseScope(raw);
+    return parsed ? [parsed] : [];
   }
 
   const entry = raw as Record<string, unknown>;
-  const module = normalizeText(
-    (typeof entry.module === 'string' ? entry.module : '') ||
-      (typeof entry.modulo === 'string' ? entry.modulo : '')
+  const module = normalizePermissionToken(
+    (typeof entry.module === "string" ? entry.module : "") ||
+      (typeof entry.modulo === "string" ? entry.modulo : "")
   );
-
-  const permission = normalizeText(
-    (typeof entry.permission === 'string' ? entry.permission : '') ||
-      (typeof entry.action === 'string' ? entry.action : '') ||
-      (typeof entry.name === 'string' ? entry.name : '')
+  const permission = normalizePermissionToken(
+    (typeof entry.permission === "string" ? entry.permission : "") ||
+      (typeof entry.action === "string" ? entry.action : "") ||
+      (typeof entry.name === "string" ? entry.name : "")
   );
 
   if (!module || !permission) return [];
   return [{ module, permission }];
 }
 
-function resolveModuleAliases(moduleName: string): string[] {
-  const mod = normalizeText(moduleName);
-  const aliases: Record<string, string[]> = {
-    configuracoes: ['configuracoes', 'settings'],
-    settings: ['settings', 'configuracoes'],
-    usuarios: ['usuarios', 'users'],
-    users: ['users', 'usuarios'],
-    agenda: ['agenda', 'agendas', 'profissionais'],
-    pre_agendamento: ['pre_agendamento', 'preagendamento'],
-    pre_cadastro: ['pre_cadastro', 'precadastro'],
-    avaliacoes: ['avaliacoes', 'avaliacao'],
-    analise_vagas: ['analise_vagas', 'vagas'],
-    vagas: ['vagas', 'analise_vagas'],
-  };
-
-  return aliases[mod] ?? [mod];
-}
-
-function normalizeScope(scope: string): string | null {
-  const value = normalizeText(scope || '');
-  if (!value.includes(':')) return null;
-  const [module, permission, extra] = value.split(':').map((part) => part.trim());
-  if (!module || !permission || extra) return null;
-  return `${module}:${permission}`;
+function checkAdminMacro(permissions: NormalizedPerm[]) {
+  return permissions.some(
+    (item) =>
+      ADMIN_MACRO_PERMISSION_NAMES.has(item.permission) ||
+      (item.module === "admin" && (item.permission === "access" || item.permission === "all"))
+  );
 }
 
 export function usePermissions() {
   const user = useMemo(() => readStoredUser(), []);
-  const role = normalizeText(user?.role?.toString() || '');
+  const role = normalizePermissionToken(user?.role?.toString() || "");
 
   const normalizedPermissions = useMemo<NormalizedPerm[]>(() => {
     const raw = user?.permissions;
     if (!raw || !Array.isArray(raw)) return [];
 
     const list: NormalizedPerm[] = [];
-    for (const item of raw) list.push(...normalize(item));
+    for (const item of raw) {
+      list.push(...normalize(item));
+    }
+
     return list;
   }, [user]);
 
+  const hasAdminMacro = useMemo(
+    () => checkAdminMacro(normalizedPermissions),
+    [normalizedPermissions]
+  );
+
   function hasPermission(module: string, permission: string) {
-    const adminRoles = ['admin', 'adm', 'administrador', 'coordenador_geral'];
-    const readonlyRoles = ['usuario', 'consulta'];
+    const targetModule = normalizePermissionToken(module || "");
+    const targetPermission = normalizePermissionToken(permission || "");
 
-    if (adminRoles.includes(role)) return true;
+    if (!targetModule || !targetPermission) return false;
+    if (ADMIN_ROLES.has(role)) return true;
 
-    const mod = normalizeText(module || '');
-    const perm = normalizeText(permission || '');
-    const modulesToMatch = resolveModuleAliases(mod);
+    const modulesToMatch = resolveModuleAliases(targetModule);
 
     if (
-      readonlyRoles.includes(role) &&
-      perm === 'view' &&
-      (modulesToMatch.includes('profissionais') || modulesToMatch.includes('configuracoes'))
+      READONLY_ROLES.has(role) &&
+      targetPermission === "view" &&
+      (modulesToMatch.includes("profissionais") || modulesToMatch.includes("configuracoes"))
     ) {
       return true;
     }
 
-    const matchPair = normalizedPermissions.some((p) =>
+    const explicitMatch = normalizedPermissions.some((item) =>
       modulesToMatch.some(
-        (targetModule) =>
-          (p.module === targetModule || p.module === '*') &&
-          (p.permission === perm || p.permission === '*')
+        (candidate) =>
+          (item.module === candidate || item.module === "*") &&
+          (item.permission === targetPermission || item.permission === "*")
       )
     );
-    if (matchPair) return true;
+    if (explicitMatch) return true;
 
-    const hasAdminMacro = normalizedPermissions.some(
-      (p) =>
-        p.permission === 'admin_panel_access' ||
-        p.permission === 'adminpanelaccess' ||
-        p.permission === 'admin_access'
-    );
-    if (hasAdminMacro) return true;
+    if (hasAdminMacro && isStandardPermissionAction(targetPermission)) {
+      return true;
+    }
 
     return false;
   }
 
   function getModulePermissions(module: string) {
-    const mod = normalizeText(module || '');
-    const modulesToMatch = resolveModuleAliases(mod);
-    const perms = new Set<string>();
-    const adminRoles = ['admin', 'adm', 'administrador', 'coordenador_geral'];
-    const readonlyRoles = ['usuario', 'consulta'];
+    const targetModule = normalizePermissionToken(module || "");
+    const modulesToMatch = resolveModuleAliases(targetModule);
+    const permissions = new Set<string>();
 
-    if (adminRoles.includes(role)) {
-      return new Set<string>(['view', 'create', 'edit', 'delete', 'access', '*']);
+    if (ADMIN_ROLES.has(role)) {
+      return new Set<string>(["view", "create", "edit", "delete", "access"]);
     }
 
     if (
-      readonlyRoles.includes(role) &&
-      (modulesToMatch.includes('profissionais') || modulesToMatch.includes('configuracoes'))
+      READONLY_ROLES.has(role) &&
+      (modulesToMatch.includes("profissionais") || modulesToMatch.includes("configuracoes"))
     ) {
-      perms.add('view');
+      permissions.add("view");
     }
 
-    for (const p of normalizedPermissions) {
-      if (modulesToMatch.includes(p.module) || p.module === '*') perms.add(p.permission);
+    for (const item of normalizedPermissions) {
+      if (modulesToMatch.includes(item.module) || item.module === "*") {
+        if (item.permission === "*") {
+          permissions.add("view");
+          permissions.add("create");
+          permissions.add("edit");
+          permissions.add("delete");
+          permissions.add("access");
+        } else {
+          permissions.add(item.permission);
+        }
+      }
     }
 
-    const hasAdminMacro = normalizedPermissions.some(
-      (p) =>
-        p.permission === 'admin_panel_access' ||
-        p.permission === 'adminpanelaccess' ||
-        p.permission === 'admin_access'
-    );
     if (hasAdminMacro) {
-      perms.add('view');
-      perms.add('create');
-      perms.add('edit');
-      perms.add('delete');
-      perms.add('access');
-      perms.add('*');
+      permissions.add("view");
+      permissions.add("create");
+      permissions.add("edit");
+      permissions.add("delete");
+      permissions.add("access");
     }
 
-    return perms;
+    return permissions;
   }
 
   function hasScope(scope: string) {
-    const normalized = normalizeScope(scope);
-    if (!normalized) return false;
-
-    const [module, permission] = normalized.split(':');
-    return hasPermission(module, permission);
+    const parsed = parseScope(scope);
+    if (!parsed) return false;
+    return hasPermission(parsed.module, parsed.permission);
   }
 
   function hasAnyScope(scopes: string[]) {
@@ -198,10 +175,10 @@ export function usePermissions() {
 export function useModulePermissions(module: string) {
   const { hasPermission, getModulePermissions } = usePermissions();
   return {
-    canView: hasPermission(module, 'view'),
-    canCreate: hasPermission(module, 'create'),
-    canEdit: hasPermission(module, 'edit'),
-    canDelete: hasPermission(module, 'delete'),
+    canView: hasPermission(module, "view"),
+    canCreate: hasPermission(module, "create"),
+    canEdit: hasPermission(module, "edit"),
+    canDelete: hasPermission(module, "delete"),
     permissions: getModulePermissions(module),
   };
 }

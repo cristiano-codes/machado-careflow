@@ -1,21 +1,5 @@
-import type { ComponentType } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import {
-  Calendar,
-  Users,
-  UserPlus,
-  MessageSquare,
-  ClipboardList,
-  BarChart3,
-  FileText,
-  DollarSign,
-  Settings,
-  Building,
-  UserCheck,
-  BookOpen,
-  User,
-  Shield,
-} from "lucide-react";
+import { NavLink } from "react-router-dom";
+import { User } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -28,118 +12,18 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
-
-type SidebarItem = {
-  title: string;
-  url: string;
-  icon: ComponentType<{ className?: string }>;
-  requiredAnyScopes: string[];
-};
-
-const MAIN_ITEMS: SidebarItem[] = [
-  { title: "Dashboard", url: "/dashboard", icon: BarChart3, requiredAnyScopes: ["dashboard:view"] },
-  {
-    title: "Pre-Agendamento",
-    url: "/pre-agendamento",
-    icon: MessageSquare,
-    requiredAnyScopes: ["pre_agendamento:view"],
-  },
-  {
-    title: "Agenda",
-    url: "/agenda",
-    icon: Calendar,
-    requiredAnyScopes: ["agenda:view", "profissionais:view"],
-  },
-  {
-    title: "Pre-Cadastro",
-    url: "/pre-cadastro",
-    icon: UserPlus,
-    requiredAnyScopes: ["pre_cadastro:view"],
-  },
-  { title: "Entrevistas", url: "/entrevistas", icon: Users, requiredAnyScopes: ["entrevistas:view"] },
-  { title: "Avaliacoes", url: "/avaliacoes", icon: ClipboardList, requiredAnyScopes: ["avaliacoes:view"] },
-  {
-    title: "Analise de Vagas",
-    url: "/analise-vagas",
-    icon: UserCheck,
-    requiredAnyScopes: ["analise_vagas:view", "vagas:view"],
-  },
-];
-
-const MANAGEMENT_ITEMS: SidebarItem[] = [
-  {
-    title: "Gerenciar Usuarios",
-    url: "/gerenciar-usuarios",
-    icon: Users,
-    requiredAnyScopes: ["usuarios:view", "users:view", "admin:access"],
-  },
-  {
-    title: "Gerenciar Permissoes",
-    url: "/gerenciar-permissoes",
-    icon: Shield,
-    requiredAnyScopes: [
-      "permissions:view",
-      "permissions:edit",
-      "permissions:manage",
-      "usuarios:view",
-      "users:view",
-      "admin:access",
-    ],
-  },
-  { title: "Frequencia", url: "/frequencia", icon: BookOpen, requiredAnyScopes: ["frequencia:view"] },
-  { title: "Financeiro", url: "/financeiro", icon: DollarSign, requiredAnyScopes: ["financeiro:view"] },
-  {
-    title: "Profissionais",
-    url: "/profissionais",
-    icon: Building,
-    requiredAnyScopes: ["profissionais:view"],
-  },
-  { title: "Relatorios", url: "/relatorios", icon: FileText, requiredAnyScopes: ["relatorios:view"] },
-];
-
-const SETTINGS_ITEM: SidebarItem = {
-  title: "Configuracoes",
-  url: "/configuracoes",
-  icon: Settings,
-  requiredAnyScopes: ["configuracoes:view", "settings:view", "admin:access"],
-};
-
-const MODULE_VIEW_SCOPES = [
-  "dashboard:view",
-  "pre_agendamento:view",
-  "agenda:view",
-  "pre_cadastro:view",
-  "entrevistas:view",
-  "avaliacoes:view",
-  "analise_vagas:view",
-  "vagas:view",
-  "usuarios:view",
-  "users:view",
-  "permissions:view",
-  "profissionais:view",
-  "financeiro:view",
-  "frequencia:view",
-  "relatorios:view",
-  "configuracoes:view",
-  "settings:view",
-  "admin:access",
-];
+import {
+  SETTINGS_MENU_ITEM,
+  buildSidebarVisibility,
+} from "@/permissions/permissionMap";
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const { hasAnyScope } = usePermissions();
-  const location = useLocation();
-  const currentPath = location.pathname;
   const isCollapsed = state === "collapsed";
 
-  const hasAnyModuleView = hasAnyScope(MODULE_VIEW_SCOPES);
-  const visibleMainItems = hasAnyModuleView
-    ? MAIN_ITEMS.filter((item) => hasAnyScope(item.requiredAnyScopes))
-    : [];
-  const visibleManagementItems = hasAnyModuleView
-    ? MANAGEMENT_ITEMS.filter((item) => hasAnyScope(item.requiredAnyScopes))
-    : [];
-  const canSeeSettings = hasAnyModuleView && hasAnyScope(SETTINGS_ITEM.requiredAnyScopes);
+  const { visibleMainItems, visibleManagementItems, canViewSettings } =
+    buildSidebarVisibility(hasAnyScope);
 
   const getNavClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -160,7 +44,7 @@ export function AppSidebar() {
             <SidebarGroupContent className="px-2">
               <SidebarMenu>
                 {visibleMainItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild className="h-10">
                       <NavLink
                         to={item.url}
@@ -190,7 +74,7 @@ export function AppSidebar() {
             <SidebarGroupContent className="px-2">
               <SidebarMenu>
                 {visibleManagementItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild className="h-10">
                       <NavLink
                         to={item.url}
@@ -230,11 +114,11 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          {canSeeSettings && (
+          {canViewSettings && (
             <SidebarMenuItem>
               <SidebarMenuButton asChild className="h-10">
                 <NavLink
-                  to="/configuracoes"
+                  to={SETTINGS_MENU_ITEM.url}
                   end
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
@@ -242,8 +126,8 @@ export function AppSidebar() {
                     )}`
                   }
                 >
-                  <Settings className="w-4 h-4 flex-shrink-0" />
-                  {!isCollapsed && <span className="text-sm">Configuracoes</span>}
+                  <SETTINGS_MENU_ITEM.icon className="w-4 h-4 flex-shrink-0" />
+                  {!isCollapsed && <span className="text-sm">{SETTINGS_MENU_ITEM.title}</span>}
                 </NavLink>
               </SidebarMenuButton>
             </SidebarMenuItem>
