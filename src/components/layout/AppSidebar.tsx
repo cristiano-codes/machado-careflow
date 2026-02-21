@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Calendar,
@@ -26,35 +27,119 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { usePermissions } from "@/hooks/usePermissions";
 
-const mainItems = [
-  { title: "Dashboard", url: "/dashboard", icon: BarChart3 },
-  { title: "Pré-Agendamento", url: "/pre-agendamento", icon: MessageSquare },
-  { title: "Agenda", url: "/agenda", icon: Calendar },
-  { title: "Pré-Cadastro", url: "/pre-cadastro", icon: UserPlus },
-  { title: "Entrevistas", url: "/entrevistas", icon: Users },
-  { title: "Avaliações", url: "/avaliacoes", icon: ClipboardList },
-  { title: "Análise de Vagas", url: "/analise-vagas", icon: UserCheck },
+type SidebarItem = {
+  title: string;
+  url: string;
+  icon: ComponentType<{ className?: string }>;
+  requiredAnyScopes: string[];
+};
+
+const MAIN_ITEMS: SidebarItem[] = [
+  { title: "Dashboard", url: "/dashboard", icon: BarChart3, requiredAnyScopes: ["dashboard:view"] },
+  {
+    title: "Pre-Agendamento",
+    url: "/pre-agendamento",
+    icon: MessageSquare,
+    requiredAnyScopes: ["pre_agendamento:view"],
+  },
+  {
+    title: "Agenda",
+    url: "/agenda",
+    icon: Calendar,
+    requiredAnyScopes: ["agenda:view", "profissionais:view"],
+  },
+  {
+    title: "Pre-Cadastro",
+    url: "/pre-cadastro",
+    icon: UserPlus,
+    requiredAnyScopes: ["pre_cadastro:view"],
+  },
+  { title: "Entrevistas", url: "/entrevistas", icon: Users, requiredAnyScopes: ["entrevistas:view"] },
+  { title: "Avaliacoes", url: "/avaliacoes", icon: ClipboardList, requiredAnyScopes: ["avaliacoes:view"] },
+  {
+    title: "Analise de Vagas",
+    url: "/analise-vagas",
+    icon: UserCheck,
+    requiredAnyScopes: ["analise_vagas:view", "vagas:view"],
+  },
 ];
 
-const managementItems = [
-  { title: "Gerenciar Usuários", url: "/gerenciar-usuarios", icon: Users },
-  { title: "Gerenciar Permissões", url: "/gerenciar-permissoes", icon: Shield },
-  { title: "Frequência", url: "/frequencia", icon: BookOpen },
-  { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-  { title: "Profissionais", url: "/profissionais", icon: Building },
-  { title: "Relatórios", url: "/relatorios", icon: FileText },
+const MANAGEMENT_ITEMS: SidebarItem[] = [
+  {
+    title: "Gerenciar Usuarios",
+    url: "/gerenciar-usuarios",
+    icon: Users,
+    requiredAnyScopes: ["usuarios:view", "users:view", "admin:access"],
+  },
+  {
+    title: "Gerenciar Permissoes",
+    url: "/gerenciar-permissoes",
+    icon: Shield,
+    requiredAnyScopes: [
+      "permissions:view",
+      "permissions:edit",
+      "permissions:manage",
+      "usuarios:view",
+      "users:view",
+      "admin:access",
+    ],
+  },
+  { title: "Frequencia", url: "/frequencia", icon: BookOpen, requiredAnyScopes: ["frequencia:view"] },
+  { title: "Financeiro", url: "/financeiro", icon: DollarSign, requiredAnyScopes: ["financeiro:view"] },
+  {
+    title: "Profissionais",
+    url: "/profissionais",
+    icon: Building,
+    requiredAnyScopes: ["profissionais:view"],
+  },
+  { title: "Relatorios", url: "/relatorios", icon: FileText, requiredAnyScopes: ["relatorios:view"] },
+];
+
+const SETTINGS_ITEM: SidebarItem = {
+  title: "Configuracoes",
+  url: "/configuracoes",
+  icon: Settings,
+  requiredAnyScopes: ["configuracoes:view", "settings:view", "admin:access"],
+};
+
+const MODULE_VIEW_SCOPES = [
+  "dashboard:view",
+  "pre_agendamento:view",
+  "agenda:view",
+  "pre_cadastro:view",
+  "entrevistas:view",
+  "avaliacoes:view",
+  "analise_vagas:view",
+  "vagas:view",
+  "usuarios:view",
+  "users:view",
+  "permissions:view",
+  "profissionais:view",
+  "financeiro:view",
+  "frequencia:view",
+  "relatorios:view",
+  "configuracoes:view",
+  "settings:view",
+  "admin:access",
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { hasAnyScope } = usePermissions();
   const location = useLocation();
   const currentPath = location.pathname;
   const isCollapsed = state === "collapsed";
 
-  const isActive = (path: string) => currentPath === path;
-  const isMainExpanded = mainItems.some((item) => isActive(item.url));
-  const isManagementExpanded = managementItems.some((item) => isActive(item.url));
+  const hasAnyModuleView = hasAnyScope(MODULE_VIEW_SCOPES);
+  const visibleMainItems = hasAnyModuleView
+    ? MAIN_ITEMS.filter((item) => hasAnyScope(item.requiredAnyScopes))
+    : [];
+  const visibleManagementItems = hasAnyModuleView
+    ? MANAGEMENT_ITEMS.filter((item) => hasAnyScope(item.requiredAnyScopes))
+    : [];
+  const canSeeSettings = hasAnyModuleView && hasAnyScope(SETTINGS_ITEM.requiredAnyScopes);
 
   const getNavClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -67,65 +152,66 @@ export function AppSidebar() {
       collapsible="icon"
     >
       <SidebarContent className="p-0">
-        {/* Main Modules */}
-        <SidebarGroup className="px-0">
-          <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {!isCollapsed && "Módulos Principais"}
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="px-2">
-            <SidebarMenu>
-              {mainItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-10">
-                    <NavLink
-                      to={item.url}
-                      end
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
-                          { isActive }
-                        )}`
-                      }
-                    >
-                      <item.icon className="w-4 h-4 flex-shrink-0" />
-                      {!isCollapsed && <span className="text-sm">{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {visibleMainItems.length > 0 && (
+          <SidebarGroup className="px-0">
+            <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {!isCollapsed && "Modulos Principais"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="px-2">
+              <SidebarMenu>
+                {visibleMainItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild className="h-10">
+                      <NavLink
+                        to={item.url}
+                        end
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
+                            { isActive }
+                          )}`
+                        }
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        {!isCollapsed && <span className="text-sm">{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        {/* Management Modules */}
-        <SidebarGroup className="px-0">
-          <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {!isCollapsed && "Gestão"}
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="px-2">
-            <SidebarMenu>
-              {managementItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-10">
-                    <NavLink
-                      to={item.url}
-                      end
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
-                          { isActive }
-                        )}`
-                      }
-                    >
-                      <item.icon className="w-4 h-4 flex-shrink-0" />
-                      {!isCollapsed && <span className="text-sm">{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {visibleManagementItems.length > 0 && (
+          <SidebarGroup className="px-0">
+            <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {!isCollapsed && "Gestao"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="px-2">
+              <SidebarMenu>
+                {visibleManagementItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild className="h-10">
+                      <NavLink
+                        to={item.url}
+                        end
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
+                            { isActive }
+                          )}`
+                        }
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        {!isCollapsed && <span className="text-sm">{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        {/* Settings */}
         <div className="mt-auto p-2 space-y-1">
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="h-10">
@@ -143,22 +229,25 @@ export function AppSidebar() {
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild className="h-10">
-              <NavLink
-                to="/configuracoes"
-                end
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
-                    { isActive }
-                  )}`
-                }
-              >
-                <Settings className="w-4 h-4 flex-shrink-0" />
-                {!isCollapsed && <span className="text-sm">Configurações</span>}
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+
+          {canSeeSettings && (
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild className="h-10">
+                <NavLink
+                  to="/configuracoes"
+                  end
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
+                      { isActive }
+                    )}`
+                  }
+                >
+                  <Settings className="w-4 h-4 flex-shrink-0" />
+                  {!isCollapsed && <span className="text-sm">Configuracoes</span>}
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </div>
       </SidebarContent>
     </Sidebar>

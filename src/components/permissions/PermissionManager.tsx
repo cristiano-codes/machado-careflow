@@ -1,93 +1,228 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Shield, Search, Users, Eye, Edit, Plus, Trash2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import {
+  BookOpen,
+  Building2,
+  Calendar,
+  Check,
+  ChevronsUpDown,
+  ClipboardList,
+  Filter,
+  FolderCog,
+  Loader2,
+  Search,
+  Settings2,
+  Shield,
+  UserCheck,
+  UserPlus,
+  Users,
+} from "lucide-react";
 
-interface User {
+type User = {
   id: string;
   name: string;
   email: string;
+  username?: string | null;
   role: string;
   status: string;
-}
+  last_login_at?: string | null;
+};
 
-interface Module {
+type Module = {
   id: string;
   name: string;
   display_name: string;
   description: string | null;
-}
+};
 
-interface Permission {
+type Permission = {
   id: string;
   name: string;
   display_name: string;
   description: string | null;
-}
+};
 
-interface UserPermissionDetail {
+type UserPermissionDetail = {
   id?: string;
   user_id: string;
   module_id: string;
   permission_id: string;
-  module: Module;
-  permission: Permission;
+};
+
+type ModuleAccessFilter = "all" | "with_access" | "without_access";
+
+const CRUD_PERMISSION_NAMES = ["view", "create", "edit", "delete"] as const;
+
+function normalizeText(value: string | null | undefined) {
+  return (value || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_");
 }
 
-interface PermissionOverview {
-  user_id: string;
-  user: {
-    name: string;
-    email: string;
-    role: string;
-  };
-  module: Module;
-  permission: Permission;
+function toPermissionKey(moduleId: string, permissionId: string) {
+  return `${moduleId}:${permissionId}`;
+}
+
+function parsePermissionKey(key: string) {
+  const [moduleId, permissionId] = key.split(":");
+  return { moduleId, permissionId };
+}
+
+function buildSetFromDetails(details: UserPermissionDetail[]) {
+  return details.map((item) => toPermissionKey(item.module_id, item.permission_id));
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "Sem registro";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Sem registro";
+  return parsed.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function areSetArraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const leftSet = new Set(left);
+  for (const item of right) {
+    if (!leftSet.has(item)) return false;
+  }
+  return true;
+}
+
+function getModuleIcon(moduleName: string) {
+  const normalized = normalizeText(moduleName);
+  if (normalized.includes("agenda")) return Calendar;
+  if (normalized.includes("pre_agendamento")) return BookOpen;
+  if (normalized.includes("pre_cadastro")) return UserPlus;
+  if (normalized.includes("entrevista")) return Users;
+  if (normalized.includes("avaliacao")) return ClipboardList;
+  if (normalized.includes("vaga")) return UserCheck;
+  if (normalized.includes("profissional")) return Building2;
+  if (normalized.includes("configuracao") || normalized.includes("setting")) return Settings2;
+  return FolderCog;
+}
+
+function getStatusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
+  const normalized = normalizeText(status);
+  if (normalized === "ativo") return "default";
+  if (normalized === "pendente") return "secondary";
+  if (normalized === "bloqueado" || normalized === "rejeitado") return "destructive";
+  return "outline";
+}
+
+function getRoleBadgeVariant(role: string): "default" | "secondary" | "outline" {
+  const normalized = normalizeText(role);
+  if (["admin", "administrador", "coordenador_geral"].includes(normalized)) return "default";
+  if (["usuario", "users", "user"].includes(normalized)) return "secondary";
+  return "outline";
 }
 
 export function PermissionManager() {
   const [users, setUsers] = useState<User[]>([]);
-  const [allModules, setAllModules] = useState<Module[]>([]);
-  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string>('');
-  const [selectedUserPermissions, setSelectedUserPermissions] = useState<UserPermissionDetail[]>([]);
-  const [overviewPermissions, setOverviewPermissions] = useState<PermissionOverview[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [modules, setModules] = useState<Module[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+
   const [pageLoading, setPageLoading] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [selectedUserLoading, setSelectedUserLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [draftPermissionKeys, setDraftPermissionKeys] = useState<string[]>([]);
+  const [baselinePermissionKeys, setBaselinePermissionKeys] = useState<string[]>([]);
+
+  const [moduleSearchTerm, setModuleSearchTerm] = useState("");
+  const [moduleAccessFilter, setModuleAccessFilter] = useState<ModuleAccessFilter>("all");
+
+  const [userComboOpen, setUserComboOpen] = useState(false);
+  const [confirmClearAccessOpen, setConfirmClearAccessOpen] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  const [pendingUserSelection, setPendingUserSelection] = useState<string | null>(null);
+
   const { toast } = useToast();
 
   const API_BASE_URL = useMemo(() => {
     const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-    const fallback = 'http://localhost:3000';
+    const fallback = "http://localhost:3000";
 
     let base = envBase && envBase.length > 0 ? envBase : fallback;
 
-    if (!envBase && typeof window !== 'undefined' && window.location?.origin) {
+    if (!envBase && typeof window !== "undefined" && window.location?.origin) {
       try {
         const originUrl = new URL(window.location.origin);
         if (
-          originUrl.hostname === 'localhost' &&
-          ['5000', '5173', '4173'].includes(originUrl.port || '')
+          originUrl.hostname === "localhost" &&
+          ["5000", "5173", "4173"].includes(originUrl.port || "")
         ) {
-          originUrl.port = '3000';
+          originUrl.port = "3000";
           base = originUrl.toString();
         } else {
           base = window.location.origin;
         }
-      } catch (error) {
+      } catch {
         base = fallback;
       }
     }
 
-    const normalizedBase = base.replace(/\/+$/, '');
+    const normalizedBase = base.replace(/\/+$/, "");
     if (/\/api$/i.test(normalizedBase)) {
       return normalizedBase;
     }
@@ -96,23 +231,23 @@ export function PermissionManager() {
   }, []);
 
   function getAuthHeaders(withJson = false) {
-    const raw = sessionStorage.getItem('token') || localStorage.getItem('token');
-    let token = '';
+    const raw = sessionStorage.getItem("token") || localStorage.getItem("token");
+    let token = "";
 
     if (raw) {
       try {
         token = JSON.parse(raw);
-      } catch (error) {
+      } catch {
         token = raw;
       }
     }
 
     const headers: Record<string, string> = {
-      Accept: 'application/json',
+      Accept: "application/json",
     };
 
     if (withJson) {
-      headers['Content-Type'] = 'application/json';
+      headers["Content-Type"] = "application/json";
     }
 
     if (token) {
@@ -123,12 +258,12 @@ export function PermissionManager() {
   }
 
   async function parseJson<T>(res: Response, fallbackMessage: string): Promise<T> {
-    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    const contentType = (res.headers.get("content-type") || "").toLowerCase();
 
     if (!res.ok) {
       let message = fallbackMessage;
       try {
-        if (contentType.includes('application/json')) {
+        if (contentType.includes("application/json")) {
           const payload = await res.json();
           if (payload?.message) {
             message = payload.message;
@@ -139,658 +274,792 @@ export function PermissionManager() {
             message = `${fallbackMessage} (HTTP ${res.status})`;
           }
         }
-      } catch (error) {
-        // Ignore JSON parse errors for error payloads
+      } catch {
+        // ignore parse errors
       }
       throw new Error(message);
     }
 
-    if (!contentType.includes('application/json')) {
+    if (!contentType.includes("application/json")) {
       throw new Error(`${fallbackMessage}: resposta invalida do servidor`);
     }
 
     try {
       return (await res.json()) as T;
-    } catch (error) {
+    } catch {
       throw new Error(`${fallbackMessage}: resposta JSON invalida`);
     }
   }
 
-  const loadUsers = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/permissions/users`, {
-        headers: getAuthHeaders(),
-      });
+  const selectedUser = useMemo(
+    () => users.find((user) => String(user.id) === String(selectedUserId)) || null,
+    [selectedUserId, users]
+  );
 
-      const payload = await parseJson<any>(res, 'Erro ao carregar usuários');
-      const data: User[] = Array.isArray(payload)
-        ? payload
-        : payload?.users ?? payload?.data ?? [];
+  const pendingTargetUser = useMemo(() => {
+    if (!pendingUserSelection) return null;
+    return users.find((user) => String(user.id) === String(pendingUserSelection)) || null;
+  }, [pendingUserSelection, users]);
 
-      const activeUsers = data.filter((user) => user.status === 'ativo');
-      setUsers(activeUsers);
-    } catch (error) {
-      console.error('Erro ao carregar usuários:', error);
-      setUsers([]);
-      toast({
-        title: 'Erro',
-        description:
-          error instanceof Error ? error.message : 'Erro ao carregar usuários',
-        variant: 'destructive',
-      });
+  const permissionsByName = useMemo(() => {
+    const map = new Map<string, Permission>();
+    for (const permission of permissions) {
+      map.set(normalizeText(permission.name), permission);
     }
-  };
+    return map;
+  }, [permissions]);
 
-  const loadModules = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/permissions/modules`, {
-        headers: getAuthHeaders(),
-      });
+  const viewPermissionId = permissionsByName.get("view")?.id || null;
+  const createPermissionId = permissionsByName.get("create")?.id || null;
+  const editPermissionId = permissionsByName.get("edit")?.id || null;
+  const deletePermissionId = permissionsByName.get("delete")?.id || null;
 
-      const payload = await parseJson<any>(res, 'Erro ao carregar módulos');
-      const data: Module[] = Array.isArray(payload)
-        ? payload
-        : payload?.modules ?? [];
+  const extraPermissions = useMemo(() => {
+    const crudNames = new Set<string>(CRUD_PERMISSION_NAMES);
+    return permissions.filter((permission) => !crudNames.has(normalizeText(permission.name)));
+  }, [permissions]);
 
-      setAllModules(data);
-    } catch (error) {
-      console.error('Erro ao carregar módulos:', error);
-      setAllModules([]);
-      toast({
-        title: 'Erro',
-        description:
-          error instanceof Error ? error.message : 'Erro ao carregar módulos',
-        variant: 'destructive',
-      });
-    }
-  };
+  const draftPermissionSet = useMemo(() => new Set(draftPermissionKeys), [draftPermissionKeys]);
+  const baselinePermissionSet = useMemo(
+    () => new Set(baselinePermissionKeys),
+    [baselinePermissionKeys]
+  );
 
-  const loadPermissionsList = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/permissions/permissions`, {
-        headers: getAuthHeaders(),
-      });
+  const hasPendingChanges = useMemo(
+    () => !areSetArraysEqual(draftPermissionKeys, baselinePermissionKeys),
+    [baselinePermissionKeys, draftPermissionKeys]
+  );
 
-      const payload = await parseJson<any>(res, 'Erro ao carregar permissões');
-      const data: Permission[] = Array.isArray(payload)
-        ? payload
-        : payload?.permissions ?? [];
+  const pendingChangesCount = useMemo(() => {
+    const grantCount = draftPermissionKeys.filter((key) => !baselinePermissionSet.has(key)).length;
+    const revokeCount = baselinePermissionKeys.filter((key) => !draftPermissionSet.has(key)).length;
+    return grantCount + revokeCount;
+  }, [baselinePermissionKeys, baselinePermissionSet, draftPermissionKeys, draftPermissionSet]);
 
-      setAllPermissions(data);
-    } catch (error) {
-      console.error('Erro ao carregar permissões:', error);
-      setAllPermissions([]);
-      toast({
-        title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Erro ao carregar permissões',
-        variant: 'destructive',
-      });
-    }
-  };
+  const filteredModules = useMemo(() => {
+    const term = normalizeText(moduleSearchTerm);
 
-  const loadOverviewPermissions = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/permissions/overview`, {
-        headers: getAuthHeaders(),
-      });
+    return modules.filter((moduleItem) => {
+      const searchable = `${moduleItem.display_name || ""} ${moduleItem.name || ""} ${
+        moduleItem.description || ""
+      }`;
+      const matchesSearch = !term || normalizeText(searchable).includes(term);
 
-      const payload = await parseJson<any>(res, 'Erro ao carregar visão geral');
-      const data: PermissionOverview[] = Array.isArray(payload)
-        ? payload
-        : payload?.permissions ?? [];
+      if (!matchesSearch) return false;
 
-      setOverviewPermissions(data);
-    } catch (error) {
-      console.error('Erro ao carregar visão geral de permissões:', error);
-      setOverviewPermissions([]);
-      toast({
-        title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Erro ao carregar visão geral de permissões',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const loadSelectedUserPermissions = async (userId: string) => {
-    if (!userId) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/permissions/users/${userId}/permissions`,
-        {
-          headers: getAuthHeaders(),
-        }
+      const moduleHasAnyPermission = permissions.some((permission) =>
+        draftPermissionSet.has(toPermissionKey(moduleItem.id, permission.id))
       );
 
-      const payload = await parseJson<any>(
-        res,
-        'Erro ao carregar permissões do usuário'
-      );
-      const data: UserPermissionDetail[] = Array.isArray(payload)
-        ? payload
-        : payload?.permissions ?? [];
+      if (moduleAccessFilter === "with_access") return moduleHasAnyPermission;
+      if (moduleAccessFilter === "without_access") return !moduleHasAnyPermission;
+      return true;
+    });
+  }, [draftPermissionSet, moduleAccessFilter, moduleSearchTerm, modules, permissions]);
 
-      setSelectedUserPermissions(data);
+  function hasDraftPermission(moduleId: string, permissionId: string | null | undefined) {
+    if (!permissionId) return false;
+    return draftPermissionSet.has(toPermissionKey(moduleId, permissionId));
+  }
+
+  function applyDraftSet(nextSet: Set<string>) {
+    setDraftPermissionKeys(Array.from(nextSet));
+  }
+
+  function handlePermissionToggle(moduleId: string, permissionId: string, enabled: boolean) {
+    const nextSet = new Set(draftPermissionSet);
+    const targetKey = toPermissionKey(moduleId, permissionId);
+
+    if (enabled) {
+      nextSet.add(targetKey);
+
+      if ([createPermissionId, editPermissionId, deletePermissionId].includes(permissionId) && viewPermissionId) {
+        nextSet.add(toPermissionKey(moduleId, viewPermissionId));
+      }
+    } else {
+      nextSet.delete(targetKey);
+
+      if (viewPermissionId && permissionId === viewPermissionId) {
+        if (createPermissionId) nextSet.delete(toPermissionKey(moduleId, createPermissionId));
+        if (editPermissionId) nextSet.delete(toPermissionKey(moduleId, editPermissionId));
+        if (deletePermissionId) nextSet.delete(toPermissionKey(moduleId, deletePermissionId));
+      }
+    }
+
+    applyDraftSet(nextSet);
+  }
+
+  function grantBasicDraft() {
+    if (!selectedUserId || !viewPermissionId) return;
+    const nextSet = new Set(draftPermissionSet);
+
+    for (const moduleItem of modules) {
+      nextSet.add(toPermissionKey(moduleItem.id, viewPermissionId));
+    }
+
+    applyDraftSet(nextSet);
+  }
+
+  function grantAllDraft() {
+    if (!selectedUserId) return;
+    const nextSet = new Set(draftPermissionSet);
+
+    for (const moduleItem of modules) {
+      for (const permission of permissions) {
+        nextSet.add(toPermissionKey(moduleItem.id, permission.id));
+      }
+    }
+
+    applyDraftSet(nextSet);
+  }
+
+  function clearAllDraft() {
+    if (!selectedUserId) return;
+    setConfirmClearAccessOpen(false);
+    applyDraftSet(new Set());
+  }
+
+  async function loadUsers() {
+    const response = await fetch(`${API_BASE_URL}/permissions/users`, {
+      headers: getAuthHeaders(),
+    });
+
+    const payload = await parseJson<{ users?: User[] }>(response, "Erro ao carregar usuarios");
+    const list = Array.isArray(payload?.users) ? payload.users : [];
+
+    setUsers(
+      list
+        .filter((user) => normalizeText(user.status) !== "rejeitado")
+        .map((user) => ({ ...user, id: String(user.id) }))
+    );
+  }
+
+  async function loadModules() {
+    const response = await fetch(`${API_BASE_URL}/permissions/modules`, {
+      headers: getAuthHeaders(),
+    });
+
+    const payload = await parseJson<{ modules?: Module[] }>(response, "Erro ao carregar modulos");
+    const list = Array.isArray(payload?.modules) ? payload.modules : [];
+
+    setModules(list.map((item) => ({ ...item, id: String(item.id) })));
+  }
+
+  async function loadPermissionsList() {
+    const response = await fetch(`${API_BASE_URL}/permissions/permissions`, {
+      headers: getAuthHeaders(),
+    });
+
+    const payload = await parseJson<{ permissions?: Permission[] }>(
+      response,
+      "Erro ao carregar permissoes"
+    );
+    const list = Array.isArray(payload?.permissions) ? payload.permissions : [];
+
+    setPermissions(list.map((item) => ({ ...item, id: String(item.id) })));
+  }
+
+  async function loadSelectedUserPermissions(userId: string) {
+    if (!userId) {
+      setBaselinePermissionKeys([]);
+      setDraftPermissionKeys([]);
+      return;
+    }
+
+    setSelectedUserLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/permissions/users/${userId}/permissions`, {
+        headers: getAuthHeaders(),
+      });
+
+      const payload = await parseJson<{ permissions?: UserPermissionDetail[] }>(
+        response,
+        "Erro ao carregar permissoes do usuario"
+      );
+
+      const details = Array.isArray(payload?.permissions) ? payload.permissions : [];
+      const permissionKeys = buildSetFromDetails(
+        details.map((detail) => ({
+          ...detail,
+          module_id: String(detail.module_id),
+          permission_id: String(detail.permission_id),
+        }))
+      );
+
+      setBaselinePermissionKeys(permissionKeys);
+      setDraftPermissionKeys(permissionKeys);
     } catch (error) {
-      console.error('Erro ao carregar permissões do usuário:', error);
-      setSelectedUserPermissions([]);
+      setBaselinePermissionKeys([]);
+      setDraftPermissionKeys([]);
       toast({
-        title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Erro ao carregar permissões do usuário',
-        variant: 'destructive',
+        title: "Permissoes",
+        description: error instanceof Error ? error.message : "Falha ao carregar permissoes",
+        variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setSelectedUserLoading(false);
     }
-  };
+  }
 
-  const refreshPermissionsData = async (userId: string) => {
-    await Promise.all([
-      loadSelectedUserPermissions(userId),
-      loadOverviewPermissions(),
-    ]);
-  };
+  async function saveChanges() {
+    if (!selectedUserId || !hasPendingChanges) return;
 
-  const userHasPermission = (moduleId: string, permissionId: string): boolean => {
-    return selectedUserPermissions.some(
-      (permission) =>
-        permission.module_id === moduleId &&
-        permission.permission_id === permissionId
-    );
-  };
+    const grantKeys = draftPermissionKeys.filter((key) => !baselinePermissionSet.has(key));
+    const revokeKeys = baselinePermissionKeys.filter((key) => !draftPermissionSet.has(key));
 
-  const togglePermission = async (
-    moduleId: string,
-    permissionId: string,
-    hasPermission: boolean
-  ) => {
-    if (!selectedUser) return;
-
-    setLoading(true);
+    setSaving(true);
     try {
-      const endpoint = hasPermission ? 'revoke' : 'grant';
-      const res = await fetch(
-        `${API_BASE_URL}/permissions/users/${selectedUser}/${endpoint}`,
-        {
-          method: 'POST',
+      for (const key of grantKeys) {
+        const { moduleId, permissionId } = parsePermissionKey(key);
+        const response = await fetch(`${API_BASE_URL}/permissions/users/${selectedUserId}/grant`, {
+          method: "POST",
           headers: getAuthHeaders(true),
           body: JSON.stringify({ moduleId, permissionId }),
-        }
-      );
+        });
 
-      const payload = await parseJson<any>(
-        res,
-        hasPermission
-          ? 'Erro ao revogar permissão'
-          : 'Erro ao conceder permissão'
-      );
+        await parseJson(response, "Erro ao conceder permissao");
+      }
 
-      toast({
-        title: 'Sucesso',
-        description:
-          payload?.message ||
-          `${hasPermission ? 'Permissão revogada' : 'Permissão concedida'} com sucesso`,
-      });
-
-      await refreshPermissionsData(selectedUser);
-    } catch (error) {
-      console.error('Erro na ação de permissão:', error);
-      toast({
-        title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Erro ao processar a permissão',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const grantBasicPermissions = async (userId: string) => {
-    if (!userId) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/permissions/users/${userId}/grant-basic`,
-        {
-          method: 'POST',
+      for (const key of revokeKeys) {
+        const { moduleId, permissionId } = parsePermissionKey(key);
+        const response = await fetch(`${API_BASE_URL}/permissions/users/${selectedUserId}/revoke`, {
+          method: "POST",
           headers: getAuthHeaders(true),
-          body: JSON.stringify({}),
-        }
-      );
+          body: JSON.stringify({ moduleId, permissionId }),
+        });
 
-      const payload = await parseJson<any>(
-        res,
-        'Erro ao conceder permissões básicas'
-      );
+        await parseJson(response, "Erro ao revogar permissao");
+      }
 
+      setBaselinePermissionKeys([...draftPermissionKeys]);
       toast({
-        title: 'Sucesso',
-        description:
-          payload?.message || 'Permissões básicas concedidas com sucesso',
+        title: "Permissoes atualizadas",
+        description: "As alteracoes foram salvas com sucesso.",
       });
-
-      await refreshPermissionsData(userId);
     } catch (error) {
-      console.error('Erro ao conceder permissões básicas:', error);
       toast({
-        title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Erro ao conceder permissões básicas',
-        variant: 'destructive',
+        title: "Erro ao salvar",
+        description: error instanceof Error ? error.message : "Falha ao salvar alteracoes",
+        variant: "destructive",
       });
+      await loadSelectedUserPermissions(selectedUserId);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  };
+  }
 
-  const grantAllPermissions = async (userId: string) => {
-    if (!userId) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/permissions/users/${userId}/grant-all`,
-        {
-          method: 'POST',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({}),
-        }
-      );
-
-      const payload = await parseJson<any>(
-        res,
-        'Erro ao conceder todas as permissões'
-      );
-
-      toast({
-        title: 'Sucesso',
-        description:
-          payload?.message || 'Acesso total concedido com sucesso',
-      });
-
-      await refreshPermissionsData(userId);
-    } catch (error) {
-      console.error('Erro ao conceder todas as permissões:', error);
-      toast({
-        title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Erro ao conceder todas as permissões',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
+  function requestUserSelection(nextUserId: string) {
+    if (nextUserId === selectedUserId) {
+      setUserComboOpen(false);
+      return;
     }
-  };
 
-  const revokeAllModulePermissions = async (moduleId: string) => {
-    if (!selectedUser) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/permissions/users/${selectedUser}/revoke-module`,
-        {
-          method: 'POST',
-          headers: getAuthHeaders(true),
-          body: JSON.stringify({ moduleId }),
-        }
-      );
-
-      const payload = await parseJson<any>(
-        res,
-        'Erro ao revogar permissões do módulo'
-      );
-
-      toast({
-        title: 'Sucesso',
-        description:
-          payload?.message || 'Todas as permissões do módulo foram revogadas',
-      });
-
-      await refreshPermissionsData(selectedUser);
-    } catch (error) {
-      console.error('Erro ao revogar permissões do módulo:', error);
-      toast({
-        title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Erro ao revogar permissões do módulo',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
+    if (hasPendingChanges && selectedUserId) {
+      setPendingUserSelection(nextUserId);
+      setConfirmDiscardOpen(true);
+      return;
     }
-  };
 
-  const getPermissionIcon = (permissionName: string) => {
-    switch (permissionName) {
-      case 'view':
-        return <Eye className="w-4 h-4" />;
-      case 'create':
-        return <Plus className="w-4 h-4" />;
-      case 'edit':
-        return <Edit className="w-4 h-4" />;
-      case 'delete':
-        return <Trash2 className="w-4 h-4" />;
-      default:
-        return <Shield className="w-4 h-4" />;
+    setSelectedUserId(nextUserId);
+    setUserComboOpen(false);
+  }
+
+  function confirmDiscardAndSwitch() {
+    if (!pendingUserSelection) {
+      setConfirmDiscardOpen(false);
+      return;
     }
-  };
 
-  const getPermissionColor = (permissionName: string) => {
-    switch (permissionName) {
-      case 'view':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'create':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'edit':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'delete':
-        return 'bg-red-100 text-red-800 border-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+    setSelectedUserId(pendingUserSelection);
+    setPendingUserSelection(null);
+    setConfirmDiscardOpen(false);
+    setUserComboOpen(false);
+  }
 
-  const filteredUsers = users.filter((user) => {
-    const name = user.name?.toLowerCase?.() ?? '';
-    const email = user.email?.toLowerCase?.() ?? '';
-    const term = searchTerm.toLowerCase();
-
-    return name.includes(term) || email.includes(term);
-  });
+  function keepCurrentUserSelection() {
+    setPendingUserSelection(null);
+    setConfirmDiscardOpen(false);
+  }
 
   useEffect(() => {
     const initialize = async () => {
       setPageLoading(true);
-      await Promise.all([
-        loadModules(),
-        loadPermissionsList(),
-        loadUsers(),
-        loadOverviewPermissions(),
-      ]);
-      setPageLoading(false);
+      try {
+        await Promise.all([loadUsers(), loadModules(), loadPermissionsList()]);
+      } catch (error) {
+        toast({
+          title: "Permissoes",
+          description: error instanceof Error ? error.message : "Falha ao carregar dados iniciais",
+          variant: "destructive",
+        });
+      } finally {
+        setPageLoading(false);
+      }
     };
 
-    initialize();
+    void initialize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (selectedUser) {
-      loadSelectedUserPermissions(selectedUser);
-    } else {
-      setSelectedUserPermissions([]);
-    }
+    void loadSelectedUserPermissions(selectedUserId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUser]);
+  }, [selectedUserId]);
 
   if (pageLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-[420px] w-full" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Gerenciar Permissões</h1>
-          <p className="text-muted-foreground">
-            Configure permissões de acesso dos usuários aos módulos do sistema
-          </p>
+    <div className="mx-auto max-w-7xl space-y-4 pb-6">
+      <div className="space-y-2">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link to="/dashboard">Administracao</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Gerenciar Permissoes</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Gerenciar Permissoes</h1>
+            <p className="text-sm text-muted-foreground">
+              Console de acesso por modulo com regras de consistencia entre Visualizar e CRUD.
+            </p>
+          </div>
+          <Badge variant="outline" className="w-fit text-xs">
+            <Shield className="mr-1 h-3.5 w-3.5" />
+            {users.length} usuarios disponiveis
+          </Badge>
         </div>
-        <Badge variant="outline" className="text-sm">
-          <Users className="w-4 h-4 mr-1" />
-          {users.length} usuários ativos
-        </Badge>
       </div>
 
-      <Tabs defaultValue="permissions" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="permissions" className="flex items-center gap-2">
-            <Shield className="w-4 h-4" />
-            Configurar Permissões
-          </TabsTrigger>
-          <TabsTrigger value="overview" className="flex items-center gap-2">
-            <Eye className="w-4 h-4" />
-            Visão Geral
-          </TabsTrigger>
-        </TabsList>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Selecionar Usuario</CardTitle>
+          <CardDescription>
+            Busque por nome, email ou username para carregar e editar permissoes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Popover open={userComboOpen} onOpenChange={setUserComboOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={userComboOpen}
+                className="h-10 w-full justify-between"
+              >
+                <span className="truncate text-left">
+                  {selectedUser
+                    ? `${selectedUser.name} (${selectedUser.email})`
+                    : "Selecione um usuario"}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+              <Command>
+                <CommandInput placeholder="Buscar por nome, email ou username..." />
+                <CommandList>
+                  <CommandEmpty>Nenhum usuario encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    {users.map((user) => {
+                      const isSelected = String(user.id) === String(selectedUserId);
 
-        <TabsContent value="permissions" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Selecionar Usuário</CardTitle>
-              <CardDescription>
-                Escolha um usuário para configurar suas permissões
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar usuário..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <Select value={selectedUser} onValueChange={setSelectedUser}>
-                  <SelectTrigger className="w-80">
-                    <SelectValue placeholder="Selecione um usuário" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredUsers.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">
-                        Nenhum usuário encontrado
-                      </div>
-                    ) : (
-                      filteredUsers.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{user.name}</span>
-                            <span className="text-sm text-muted-foreground">
-                              ({user.email})
-                            </span>
+                      return (
+                        <CommandItem
+                          key={user.id}
+                          value={`${user.name} ${user.email} ${user.username || ""} ${user.role}`}
+                          onSelect={() => requestUserSelection(String(user.id))}
+                        >
+                          <div className="flex w-full items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{user.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {user.email}
+                                {user.username ? ` � ${user.username}` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Badge variant={getRoleBadgeVariant(user.role)} className="text-[10px]">
+                                {user.role}
+                              </Badge>
+                              <Badge variant={getStatusVariant(user.status)} className="text-[10px]">
+                                {user.status}
+                              </Badge>
+                              {isSelected && <Check className="h-4 w-4 text-primary" />}
+                            </div>
                           </div>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedUser && (
-                <div className="flex gap-2 mt-4">
-                  <Button
-                    onClick={() => grantBasicPermissions(selectedUser)}
-                    disabled={loading}
-                    variant="outline"
-                  >
-                    Liberar Acesso Básico
-                  </Button>
-                  <Button
-                    onClick={() => grantAllPermissions(selectedUser)}
-                    disabled={loading}
-                    variant="default"
-                  >
-                    Liberar Acesso Total
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
           {selectedUser && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Configurar Permissões</CardTitle>
-                <CardDescription>
-                  Gerencie as permissões de acesso aos módulos do sistema
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {allModules.length === 0 || allPermissions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    Nenhum módulo ou permissão cadastrado. Configure-os antes de gerenciar usuários.
-                  </p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Módulo</TableHead>
-                        {allPermissions.map((permission) => (
-                          <TableHead key={permission.id} className="text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              {getPermissionIcon(permission.name)}
-                              {permission.display_name}
-                            </div>
-                          </TableHead>
-                        ))}
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {allModules.map((module) => (
-                        <TableRow key={module.id}>
-                          <TableCell className="font-medium">
-                            <div>
-                              <div className="font-medium">{module.display_name}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {module.description ?? 'Sem descrição'}
-                              </div>
-                            </div>
-                          </TableCell>
-                          {allPermissions.map((permission) => {
-                            const hasPermission = userHasPermission(
-                              module.id,
-                              permission.id
-                            );
-                            return (
-                              <TableCell key={permission.id} className="text-center">
-                                <Checkbox
-                                  checked={hasPermission}
-                                  onCheckedChange={() =>
-                                    togglePermission(
-                                      module.id,
-                                      permission.id,
-                                      hasPermission
-                                    )
-                                  }
-                                  disabled={loading}
-                                />
-                              </TableCell>
-                            );
-                          })}
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => grantAllPermissions(selectedUser)}
-                                disabled={loading}
-                              >
-                                <Plus className="w-3 h-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => revokeAllModulePermissions(module.id)}
-                                disabled={loading}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
+            <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 md:grid-cols-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Nome</p>
+                <p className="text-sm font-medium">{selectedUser.name}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Email</p>
+                <p className="text-sm font-medium">{selectedUser.email}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Role</p>
+                <p className="text-sm font-medium">{selectedUser.role}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Status</p>
+                <Badge variant={getStatusVariant(selectedUser.status)}>{selectedUser.status}</Badge>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Ultimo login</p>
+                <p className="text-sm">{formatDateTime(selectedUser.last_login_at)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Permissoes ativas</p>
+                <p className="text-sm font-semibold">{draftPermissionKeys.length}</p>
+              </div>
+            </div>
           )}
-        </TabsContent>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Resumo de Permissões</CardTitle>
-              <CardDescription>
-                Visão geral das permissões configuradas por usuário
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {users.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    Nenhum usuário ativo encontrado.
-                  </p>
+      {selectedUserId && (
+        <Card className="sticky top-[72px] z-20 border-primary/20 shadow-sm">
+          <CardContent className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={grantBasicDraft}
+                disabled={!selectedUserId || saving || selectedUserLoading || !viewPermissionId}
+              >
+                Acesso Basico
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={grantAllDraft}
+                disabled={!selectedUserId || saving || selectedUserLoading}
+              >
+                Acesso Total
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmClearAccessOpen(true)}
+                disabled={!selectedUserId || saving || selectedUserLoading || draftPermissionKeys.length === 0}
+              >
+                Remover Acessos
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={hasPendingChanges ? "secondary" : "outline"}>
+                {pendingChangesCount} alteracoes pendentes
+              </Badge>
+              <Button onClick={() => void saveChanges()} disabled={!hasPendingChanges || saving || selectedUserLoading}>
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
                 ) : (
-                  users.map((user) => {
-                    const userPermissions = overviewPermissions.filter(
-                      (permission) => permission.user_id === user.id
-                    );
+                  "Salvar Alteracoes"
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="text-base">Permissoes por Modulo</CardTitle>
+              <CardDescription>
+                Marque as permissoes necessarias por modulo. Regras de consistencia sao aplicadas automaticamente.
+              </CardDescription>
+            </div>
+            <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+              <div className="relative md:w-72">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={moduleSearchTerm}
+                  onChange={(event) => setModuleSearchTerm(event.target.value)}
+                  placeholder="Buscar modulo"
+                  className="pl-9"
+                />
+              </div>
+              <Select
+                value={moduleAccessFilter}
+                onValueChange={(value) => setModuleAccessFilter(value as ModuleAccessFilter)}
+              >
+                <SelectTrigger className="md:w-[220px]">
+                  <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os modulos</SelectItem>
+                  <SelectItem value="with_access">Somente com acesso</SelectItem>
+                  <SelectItem value="without_access">Somente sem acesso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!selectedUserId ? (
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Selecione um usuario para visualizar e editar permissoes.
+            </div>
+          ) : selectedUserLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <Skeleton key={idx} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : modules.length === 0 || permissions.length === 0 ? (
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Nao ha modulos/permissoes cadastrados para configuracao.
+            </div>
+          ) : filteredModules.length === 0 ? (
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Nenhum modulo encontrado com os filtros atuais.
+            </div>
+          ) : (
+            <div className="max-h-[560px] overflow-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+                    <TableHead className="min-w-[280px]">Modulo</TableHead>
+                    <TableHead className="w-[130px] text-center">Visualizar</TableHead>
+                    <TableHead className="w-[110px] text-center">Criar</TableHead>
+                    <TableHead className="w-[110px] text-center">Editar</TableHead>
+                    <TableHead className="w-[110px] text-center">Excluir</TableHead>
+                    {extraPermissions.length > 0 && (
+                      <TableHead className="min-w-[220px]">Permissoes especiais</TableHead>
+                    )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredModules.map((moduleItem) => {
+                    const ModuleIcon = getModuleIcon(moduleItem.name);
 
                     return (
-                      <div key={user.id} className="p-4 border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <div className="font-medium">{user.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {user.email}
+                      <TableRow key={moduleItem.id}>
+                        <TableCell>
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-md border bg-muted p-1.5">
+                              <ModuleIcon className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{moduleItem.display_name || moduleItem.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {moduleItem.description || "Sem descricao"}
+                              </p>
                             </div>
                           </div>
-                          <Badge variant="secondary">{user.role}</Badge>
-                        </div>
-                        {userPermissions.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            Nenhuma permissão concedida.
-                          </p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {userPermissions.map((permission) => (
-                              <Badge
-                                key={`${permission.user_id}-${permission.module.id}-${permission.permission.id}`}
-                                variant="outline"
-                                className={`text-xs ${getPermissionColor(permission.permission.name)}`}
-                              >
-                                {permission.module.display_name}: {permission.permission.display_name}
-                              </Badge>
-                            ))}
-                          </div>
+                        </TableCell>
+
+                        <TableCell className="text-center">
+                          {viewPermissionId ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="inline-flex">
+                                  <Checkbox
+                                    checked={hasDraftPermission(moduleItem.id, viewPermissionId)}
+                                    onCheckedChange={(checked) =>
+                                      handlePermissionToggle(
+                                        moduleItem.id,
+                                        viewPermissionId,
+                                        checked === true
+                                      )
+                                    }
+                                    aria-label={`Visualizar ${moduleItem.display_name}`}
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Sem visualizar, as permissoes CRUD do modulo sao removidas.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        <TableCell className="text-center">
+                          {createPermissionId ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="inline-flex">
+                                  <Checkbox
+                                    checked={hasDraftPermission(moduleItem.id, createPermissionId)}
+                                    onCheckedChange={(checked) =>
+                                      handlePermissionToggle(
+                                        moduleItem.id,
+                                        createPermissionId,
+                                        checked === true
+                                      )
+                                    }
+                                    aria-label={`Criar ${moduleItem.display_name}`}
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Ao marcar Criar, Visualizar e marcado automaticamente.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        <TableCell className="text-center">
+                          {editPermissionId ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="inline-flex">
+                                  <Checkbox
+                                    checked={hasDraftPermission(moduleItem.id, editPermissionId)}
+                                    onCheckedChange={(checked) =>
+                                      handlePermissionToggle(
+                                        moduleItem.id,
+                                        editPermissionId,
+                                        checked === true
+                                      )
+                                    }
+                                    aria-label={`Editar ${moduleItem.display_name}`}
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Ao marcar Editar, Visualizar e marcado automaticamente.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        <TableCell className="text-center">
+                          {deletePermissionId ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="inline-flex">
+                                  <Checkbox
+                                    checked={hasDraftPermission(moduleItem.id, deletePermissionId)}
+                                    onCheckedChange={(checked) =>
+                                      handlePermissionToggle(
+                                        moduleItem.id,
+                                        deletePermissionId,
+                                        checked === true
+                                      )
+                                    }
+                                    aria-label={`Excluir ${moduleItem.display_name}`}
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Ao marcar Excluir, Visualizar e marcado automaticamente.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        {extraPermissions.length > 0 && (
+                          <TableCell>
+                            <div className="flex flex-wrap gap-2">
+                              {extraPermissions.map((permission) => {
+                                const permissionChecked = hasDraftPermission(moduleItem.id, permission.id);
+                                return (
+                                  <label
+                                    key={`${moduleItem.id}:${permission.id}`}
+                                    className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs"
+                                  >
+                                    <Checkbox
+                                      checked={permissionChecked}
+                                      onCheckedChange={(checked) =>
+                                        handlePermissionToggle(
+                                          moduleItem.id,
+                                          permission.id,
+                                          checked === true
+                                        )
+                                      }
+                                      aria-label={`${permission.display_name} ${moduleItem.display_name}`}
+                                    />
+                                    <span>{permission.display_name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </TableCell>
                         )}
-                      </div>
+                      </TableRow>
                     );
-                  })
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={confirmClearAccessOpen} onOpenChange={setConfirmClearAccessOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover todos os acessos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os checkboxes serao desmarcados para o usuario selecionado. A alteracao so sera
+              aplicada apos clicar em "Salvar Alteracoes".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={clearAllDraft}>Remover acessos</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDiscardOpen} onOpenChange={setConfirmDiscardOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Descartar alteracoes pendentes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Existem alteracoes nao salvas para {selectedUser?.name || "o usuario atual"}. Deseja
+              descartar e trocar para {pendingTargetUser?.name || "outro usuario"}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={keepCurrentUserSelection}>Manter usuario atual</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDiscardAndSwitch}>Descartar e trocar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
