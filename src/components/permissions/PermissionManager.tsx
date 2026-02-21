@@ -50,6 +50,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { API_BASE_URL } from "@/services/api";
 import {
   BookOpen,
   Building2,
@@ -213,37 +214,6 @@ export function PermissionManager() {
   const [pendingUserSelection, setPendingUserSelection] = useState<string | null>(null);
 
   const { toast } = useToast();
-
-  const API_BASE_URL = useMemo(() => {
-    const envBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-    const fallback = "http://localhost:3000";
-
-    let base = envBase && envBase.length > 0 ? envBase : fallback;
-
-    if (!envBase && typeof window !== "undefined" && window.location?.origin) {
-      try {
-        const originUrl = new URL(window.location.origin);
-        if (
-          originUrl.hostname === "localhost" &&
-          ["5000", "5173", "4173"].includes(originUrl.port || "")
-        ) {
-          originUrl.port = "3000";
-          base = originUrl.toString();
-        } else {
-          base = window.location.origin;
-        }
-      } catch {
-        base = fallback;
-      }
-    }
-
-    const normalizedBase = base.replace(/\/+$/, "");
-    if (/\/api$/i.test(normalizedBase)) {
-      return normalizedBase;
-    }
-
-    return `${normalizedBase}/api`;
-  }, []);
 
   function getAuthHeaders(withJson = false) {
     const raw = sessionStorage.getItem("token") || localStorage.getItem("token");

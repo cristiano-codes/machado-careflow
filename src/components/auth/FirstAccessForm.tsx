@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { API_BASE_URL } from "@/services/api";
 
 interface FirstAccessFormProps {
   username?: string;
@@ -52,8 +53,7 @@ export function FirstAccessForm({ onSuccess, username }: FirstAccessFormProps) {
     setIsLoading(true);
 
     try {
-      const base = `http://${window.location.hostname}:3000`;
-      const response = await fetch(`${base}/api/auth/setup-password`, {
+      const response = await fetch(`${API_BASE_URL}/auth/setup-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

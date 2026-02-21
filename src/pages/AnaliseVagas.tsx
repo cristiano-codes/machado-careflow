@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserCheck, Briefcase, Users, TrendingUp, Plus, Eye } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
 import { useState, useEffect } from "react";
-import { apiService } from "@/services/api";
+import { API_BASE_URL } from "@/services/api";
 
 interface Vaga {
   id: string;
@@ -44,7 +44,7 @@ export default function AnaliseVagas() {
 
   const loadVagas = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/job-vacancies');
+      const response = await fetch(`${API_BASE_URL}/job-vacancies`);
       const data = await response.json();
       
       if (data.success) {
@@ -57,7 +57,7 @@ export default function AnaliseVagas() {
 
   const loadCandidatos = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/job-candidates');
+      const response = await fetch(`${API_BASE_URL}/job-candidates`);
       const data = await response.json();
       
       if (data.success) {
