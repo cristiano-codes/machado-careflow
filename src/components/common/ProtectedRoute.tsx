@@ -1,9 +1,77 @@
 import { ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { Navigate, matchPath, useLocation } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle } from "lucide-react";
-import { buildScope, getRouteRequiredScopes } from "@/permissions/permissionMap";
+import {
+  buildScope,
+  ROUTE_PERMISSION_MAP,
+  type RoutePermissionConfig,
+} from "@/permissions/permissionMap";
+
+const PUBLIC_ROUTE_WHITELIST = new Set([
+  "/",
+  "/dashboard",
+  "/trocar-senha-obrigatoria",
+]);
+
+const UNAUTHORIZED_REDIRECT_PATH = "/";
+
+function normalizePathname(rawPathname: string) {
+  const withoutHash = (rawPathname || "").split("#")[0] || "";
+  const withoutQuery = withoutHash.split("?")[0] || "";
+  const normalized = withoutQuery.trim();
+
+  if (!normalized || normalized === "/") return "/";
+
+  const withLeadingSlash = normalized.startsWith("/") ? normalized : `/${normalized}`;
+  return withLeadingSlash.replace(/\/+$/, "");
+}
+
+function isPublicRoute(pathname: string) {
+  return PUBLIC_ROUTE_WHITELIST.has(normalizePathname(pathname));
+}
+
+function routeMatchesPath(routeConfig: RoutePermissionConfig, pathname: string) {
+  const routePath = normalizePathname(routeConfig.path);
+
+  if (routeConfig.match === "prefix") {
+    if (pathname === routePath) {
+      return true;
+    }
+
+    const prefixPattern = routePath === "/" ? "/*" : `${routePath}/*`;
+    return Boolean(
+      matchPath(
+        {
+          path: prefixPattern,
+          end: false,
+        },
+        pathname
+      )
+    );
+  }
+
+  return Boolean(
+    matchPath(
+      {
+        path: routePath,
+        end: true,
+      },
+      pathname
+    )
+  );
+}
+
+function findMappedRoute(pathname: string) {
+  for (const routeConfig of ROUTE_PERMISSION_MAP) {
+    if (routeMatchesPath(routeConfig, pathname)) {
+      return routeConfig;
+    }
+  }
+
+  return null;
+}
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -22,18 +90,25 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const location = useLocation();
   const { hasAnyScope, loading } = usePermissions();
+  const normalizedPathname = normalizePathname(
+    `${location.pathname}${location.search}${location.hash}`
+  );
+  const isPublic = isPublicRoute(normalizedPathname);
+  const mappedRoute = isPublic ? null : findMappedRoute(normalizedPathname);
+  const mappedScopes = mappedRoute?.requiredAnyScopes ?? [];
+  const hasMappedScopes = mappedScopes.length > 0;
+  const hasMappedPermission = hasMappedScopes && hasAnyScope(mappedScopes);
+  const passedCentralGuard =
+    isPublic || (Boolean(mappedRoute) && hasMappedScopes && hasMappedPermission);
 
-  const mappedScopes = getRouteRequiredScopes(location.pathname);
   const explicitScopes =
     Array.isArray(requiredAnyScopes) && requiredAnyScopes.length > 0
       ? requiredAnyScopes
       : module && permission
         ? [buildScope(module, permission)]
         : [];
-
-  const scopesToCheck = mappedScopes.length > 0 ? mappedScopes : explicitScopes;
-  const canAccess =
-    scopesToCheck.length === 0 ? true : hasAnyScope(scopesToCheck);
+  const passedComponentGuard =
+    explicitScopes.length === 0 || hasAnyScope(explicitScopes);
 
   if (loading) {
     return (
@@ -43,7 +118,11 @@ export function ProtectedRoute({
     );
   }
 
-  if (!canAccess) {
+  if (!passedCentralGuard) {
+    return <Navigate to={UNAUTHORIZED_REDIRECT_PATH} replace />;
+  }
+
+  if (!passedComponentGuard) {
     if (fallback) {
       return <>{fallback}</>;
     }

@@ -13,17 +13,55 @@ import {
 } from "@/components/ui/sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
+  ALLOW_MANAGEMENT_WITHOUT_MAIN_MODULE,
+  MAIN_MENU_ITEMS,
+  MANAGEMENT_MENU_ITEMS,
+  ROUTE_PERMISSION_MAP,
   SETTINGS_MENU_ITEM,
-  buildSidebarVisibility,
+  type SidebarItemConfig,
 } from "@/permissions/permissionMap";
+
+function normalizePath(pathname: string) {
+  const normalized = (pathname || "").trim();
+  if (!normalized || normalized === "/") return "/";
+  return normalized.replace(/\/+$/, "");
+}
+
+const MAPPED_ROUTE_PATHS = new Set(
+  ROUTE_PERMISSION_MAP.map((routeConfig) => normalizePath(routeConfig.path))
+);
+
+function isMappedSidebarUrl(url: string) {
+  return MAPPED_ROUTE_PATHS.has(normalizePath(url));
+}
+
+function isPublicSidebarItem(item: SidebarItemConfig) {
+  return !Array.isArray(item.requiredAnyScopes) || item.requiredAnyScopes.length === 0;
+}
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const { hasAnyScope } = usePermissions();
   const isCollapsed = state === "collapsed";
 
-  const { visibleMainItems, visibleManagementItems, canViewSettings } =
-    buildSidebarVisibility(hasAnyScope);
+  const getVisibleItems = (items: SidebarItemConfig[]) =>
+    items.filter((item) => {
+      const publicItem = isPublicSidebarItem(item);
+      const eligibleByRouteMap = isMappedSidebarUrl(item.url) || publicItem;
+      const hasAccess = publicItem || hasAnyScope(item.requiredAnyScopes);
+      return eligibleByRouteMap && hasAccess;
+    });
+
+  const visibleMainItems = getVisibleItems(MAIN_MENU_ITEMS);
+  const hasVisibleMainModules = visibleMainItems.length > 0;
+  const visibleManagementItems =
+    ALLOW_MANAGEMENT_WITHOUT_MAIN_MODULE || hasVisibleMainModules
+      ? getVisibleItems(MANAGEMENT_MENU_ITEMS)
+      : [];
+  const settingsPublicItem = isPublicSidebarItem(SETTINGS_MENU_ITEM);
+  const canViewSettings =
+    (isMappedSidebarUrl(SETTINGS_MENU_ITEM.url) || settingsPublicItem) &&
+    (settingsPublicItem || hasAnyScope(SETTINGS_MENU_ITEM.requiredAnyScopes));
 
   const getNavClass = ({ isActive }: { isActive: boolean }) =>
     isActive
