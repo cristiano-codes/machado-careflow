@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User, Settings } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
 import { InstitutionLogo } from "@/components/branding/InstitutionLogo";
@@ -67,10 +67,6 @@ export function Header({ user, onLogout }: HeaderProps) {
                 <DropdownMenuItem onClick={() => navigate("/perfil")}>
                   <User className="mr-2 h-4 w-4" />
                   <span>Perfil</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/configuracoes")}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Configuracoes</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

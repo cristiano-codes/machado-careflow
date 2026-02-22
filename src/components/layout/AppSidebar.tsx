@@ -1,5 +1,4 @@
 import { NavLink } from "react-router-dom";
-import { User } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -135,23 +134,6 @@ export function AppSidebar() {
         )}
 
         <div className="mt-auto p-2 space-y-1">
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild className="h-10">
-              <NavLink
-                to="/perfil"
-                end
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
-                    { isActive }
-                  )}`
-                }
-              >
-                <User className="w-4 h-4 flex-shrink-0" />
-                {!isCollapsed && <span className="text-sm">Meu Perfil</span>}
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
           {canViewSettings && (
             <SidebarMenuItem>
               <SidebarMenuButton asChild className="h-10">
