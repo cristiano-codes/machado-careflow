@@ -20,6 +20,10 @@ type StoredUser = {
 
 const ADMIN_ROLES = new Set(["admin", "adm", "administrador", "coordenador_geral"]);
 const READONLY_ROLES = new Set(["usuario", "consulta"]);
+const ENABLE_READONLY_ROLE_IMPLICIT_VIEW_BYPASS =
+  String(import.meta.env?.VITE_ENABLE_READONLY_ROLE_IMPLICIT_VIEW_BYPASS || "false")
+    .trim()
+    .toLowerCase() === "true";
 
 function readStoredUser(): StoredUser | null {
   const raw = sessionStorage.getItem("user") ?? localStorage.getItem("user");
@@ -92,6 +96,7 @@ export function usePermissions() {
     const modulesToMatch = resolveModuleAliases(targetModule);
 
     if (
+      ENABLE_READONLY_ROLE_IMPLICIT_VIEW_BYPASS &&
       READONLY_ROLES.has(role) &&
       targetPermission === "view" &&
       (modulesToMatch.includes("profissionais") || modulesToMatch.includes("configuracoes"))
@@ -125,6 +130,7 @@ export function usePermissions() {
     }
 
     if (
+      ENABLE_READONLY_ROLE_IMPLICIT_VIEW_BYPASS &&
       READONLY_ROLES.has(role) &&
       (modulesToMatch.includes("profissionais") || modulesToMatch.includes("configuracoes"))
     ) {

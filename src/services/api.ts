@@ -225,6 +225,50 @@ class ApiService {
     };
   }
 
+  private async parseJsonSafe(response: Response): Promise<unknown> {
+    try {
+      return await response.json();
+    } catch {
+      return {};
+    }
+  }
+
+  private resolveHttpErrorMessage(
+    response: Response,
+    payload: unknown,
+    fallbackMessage: string
+  ): string {
+    if (response.status === 401) {
+      return "Token invalido ou expirado";
+    }
+
+    if (response.status === 403) {
+      return "Acesso negado para esta operacao";
+    }
+
+    if (
+      payload &&
+      typeof payload === "object" &&
+      typeof (payload as Record<string, unknown>).message === "string"
+    ) {
+      const message = ((payload as Record<string, unknown>).message as string).trim();
+      if (message.length > 0) return message;
+    }
+
+    return fallbackMessage;
+  }
+
+  private async parseResponseOrThrow<T = any>(
+    response: Response,
+    fallbackMessage: string
+  ): Promise<T> {
+    const payload = await this.parseJsonSafe(response);
+    if (!response.ok) {
+      throw new Error(this.resolveHttpErrorMessage(response, payload, fallbackMessage));
+    }
+    return payload as T;
+  }
+
   // ---------- AUTH ----------
   async login(username: string, password: string): Promise<LoginResponse> {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -373,12 +417,10 @@ class ApiService {
         headers: this.getAuthHeaders(),
       }
     );
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(
-        data?.message || "Falha ao carregar usuarios elegiveis para vinculo"
-      );
-    }
+    const data = await this.parseResponseOrThrow<{ users?: unknown[] }>(
+      response,
+      "Falha ao carregar usuarios elegiveis para vinculo"
+    );
     const users = Array.isArray(data?.users) ? data.users : [];
     return users.map((item: any) => ({
       id: String(item?.id ?? ""),
@@ -630,10 +672,11 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/settings/professional-roles${suffix}`, {
       headers: this.getAuthHeaders(),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.message || "Falha ao carregar funcoes profissionais");
-    }
+    const data = await this.parseResponseOrThrow<{
+      success?: boolean;
+      roles?: ProfessionalRole[];
+      message?: string;
+    }>(response, "Falha ao carregar funcoes profissionais");
     return {
       success: Boolean(data?.success),
       roles: Array.isArray(data?.roles) ? data.roles : [],
@@ -651,11 +694,11 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ nome }),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.message || "Falha ao criar funcao profissional");
-    }
-    return data;
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      role?: ProfessionalRole;
+      message?: string;
+    }>(response, "Falha ao criar funcao profissional");
   }
 
   async updateProfessionalRole(id: number, nome: string): Promise<{
@@ -668,11 +711,11 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ nome }),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.message || "Falha ao editar funcao profissional");
-    }
-    return data;
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      role?: ProfessionalRole;
+      message?: string;
+    }>(response, "Falha ao editar funcao profissional");
   }
 
   async setProfessionalRoleActive(id: number, ativo: boolean): Promise<{
@@ -685,11 +728,14 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ ativo }),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.message || "Falha ao atualizar status da funcao profissional");
-    }
-    return data;
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      role?: ProfessionalRole;
+      message?: string;
+    }>(
+      response,
+      "Falha ao atualizar status da funcao profissional"
+    );
   }
 
   // ---------- PROFISSIONAIS ----------
@@ -704,11 +750,7 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/profissionais${query}`, {
       headers: this.getAuthHeaders(),
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data?.message || "Falha ao carregar profissionais");
-    }
-    return data;
+    return this.parseResponseOrThrow(response, "Falha ao carregar profissionais");
   }
 
   async createProfessional(payload: ProfessionalPayload) {
@@ -751,21 +793,25 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/profissionais/${id}/agenda${query}`, {
       headers: this.getAuthHeaders(),
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data?.message || "Falha ao carregar agenda do profissional");
-    }
-    return data;
+    return this.parseResponseOrThrow(
+      response,
+      "Falha ao carregar agenda do profissional"
+    );
   }
 
   async getProfessionalMe(): Promise<ProfessionalMeResponse> {
     const response = await fetch(`${API_BASE_URL}/profissionais/me`, {
       headers: this.getAuthHeaders(),
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data?.message || "Falha ao carregar contexto profissional");
-    }
+    const data = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar contexto profissional"
+    );
+    const message = typeof data?.message === "string" ? data.message : undefined;
+    const professional =
+      data?.professional === null || data?.professional === undefined
+        ? null
+        : (data.professional as ProfessionalSummary);
     return {
       success: data?.success === true,
       professional_id:
@@ -774,8 +820,8 @@ class ApiService {
           : String(data.professional_id),
       can_view_all_professionals: data?.can_view_all_professionals === true,
       allow_professional_view_others: data?.allow_professional_view_others === true,
-      professional: data?.professional || null,
-      message: data?.message,
+      professional,
+      message,
     };
   }
 

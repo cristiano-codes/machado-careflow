@@ -257,7 +257,7 @@ export default function Profissionais() {
   const { toast } = useToast();
   const { settings } = useSettings();
   const { userProfile } = useAuth();
-  const { canCreate, canEdit, permissions } = useModulePermissions("profissionais");
+  const { canView, canCreate, canEdit, permissions } = useModulePermissions("profissionais");
 
   const [professionals, setProfessionals] = useState<ProfessionalRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -317,6 +317,13 @@ export default function Profissionais() {
     !userProfile?.professional_id;
 
   const loadProfessionals = useCallback(async () => {
+    if (!canView) {
+      setLoading(false);
+      setError(null);
+      setProfessionals([]);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -345,9 +352,15 @@ export default function Profissionais() {
     } finally {
       setLoading(false);
     }
-  }, [defaultScale, today]);
+  }, [canView, defaultScale, today]);
 
   const loadRoles = useCallback(async () => {
+    if (!canView) {
+      setRolesLoading(false);
+      setRoles([]);
+      return;
+    }
+
     try {
       setRolesLoading(true);
       const response = await apiService.getProfessionalRoles(true);
@@ -361,7 +374,7 @@ export default function Profissionais() {
     } finally {
       setRolesLoading(false);
     }
-  }, [toast]);
+  }, [canView, toast]);
 
   const loadLinkableUsers = useCallback(
     async (professionalId: string) => {
@@ -388,12 +401,14 @@ export default function Profissionais() {
   );
 
   useEffect(() => {
+    if (!canView) return;
     void loadProfessionals();
-  }, [loadProfessionals]);
+  }, [canView, loadProfessionals]);
 
   useEffect(() => {
+    if (!canView) return;
     void loadRoles();
-  }, [loadRoles]);
+  }, [canView, loadRoles]);
 
   useEffect(() => {
     if (!editTarget) return;

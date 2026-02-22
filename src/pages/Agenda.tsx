@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProtectedRoute as ModuleProtectedRoute } from "@/components/common/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { apiService } from "@/services/api";
 import { ChevronLeft, ChevronRight, Clock, User } from "lucide-react";
@@ -84,6 +85,7 @@ function professionalName(item: ProfessionalOption) {
 export default function Agenda() {
   const { userProfile } = useAuth();
   const { settings } = useSettings();
+  const { hasPermission } = usePermissions();
   const { toast } = useToast();
 
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -98,6 +100,7 @@ export default function Agenda() {
   });
 
   const dateParam = useMemo(() => toIsoDate(currentDate), [currentDate]);
+  const canViewAgenda = hasPermission("profissionais", "view");
 
   const canViewOtherProfessionals = useMemo(() => {
     if (!accessContext.professionalId) return true;
@@ -123,6 +126,14 @@ export default function Agenda() {
   }, [agenda]);
 
   const refreshAccessContext = useCallback(async () => {
+    if (!canViewAgenda) {
+      setAccessContext({
+        professionalId: null,
+        canViewAllProfessionals: false,
+      });
+      return;
+    }
+
     try {
       const me = await apiService.getProfessionalMe();
       setAccessContext({
@@ -139,9 +150,16 @@ export default function Agenda() {
         canViewAllProfessionals: userProfile?.can_view_all_professionals === true,
       });
     }
-  }, [userProfile?.can_view_all_professionals, userProfile?.professional_id]);
+  }, [canViewAgenda, userProfile?.can_view_all_professionals, userProfile?.professional_id]);
 
   const refreshProfessionals = useCallback(async () => {
+    if (!canViewAgenda) {
+      setLoadingProfessionals(false);
+      setProfessionals([]);
+      setSelectedProfessionalId("");
+      return;
+    }
+
     try {
       setLoadingProfessionals(true);
       const response = await apiService.getProfessionals({
@@ -186,9 +204,15 @@ export default function Agenda() {
     } finally {
       setLoadingProfessionals(false);
     }
-  }, [accessContext.professionalId, dateParam, shouldForceOwnAgenda, toast]);
+  }, [accessContext.professionalId, canViewAgenda, dateParam, shouldForceOwnAgenda, toast]);
 
   const refreshAgenda = useCallback(async () => {
+    if (!canViewAgenda) {
+      setLoadingAgenda(false);
+      setAgenda([]);
+      return;
+    }
+
     if (!selectedProfessionalId) {
       setAgenda([]);
       return;
@@ -209,19 +233,22 @@ export default function Agenda() {
     } finally {
       setLoadingAgenda(false);
     }
-  }, [dateParam, selectedProfessionalId, toast]);
+  }, [canViewAgenda, dateParam, selectedProfessionalId, toast]);
 
   useEffect(() => {
+    if (!canViewAgenda) return;
     void refreshAccessContext();
-  }, [refreshAccessContext]);
+  }, [canViewAgenda, refreshAccessContext]);
 
   useEffect(() => {
+    if (!canViewAgenda) return;
     void refreshProfessionals();
-  }, [refreshProfessionals]);
+  }, [canViewAgenda, refreshProfessionals]);
 
   useEffect(() => {
+    if (!canViewAgenda) return;
     void refreshAgenda();
-  }, [refreshAgenda]);
+  }, [canViewAgenda, refreshAgenda]);
 
   useEffect(() => {
     if (shouldForceOwnAgenda && accessContext.professionalId) {

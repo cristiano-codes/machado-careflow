@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
+import { ProtectedRoute as PermissionProtectedRoute } from "@/components/common/ProtectedRoute";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -61,7 +62,16 @@ const AppContent = () => {
         <Route path="/trocar-senha-obrigatoria" element={<TrocarSenhaObrigatoria />} />
         <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/pre-agendamento" element={<ProtectedRoute><PreAgendamento /></ProtectedRoute>} />
-        <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
+        <Route
+          path="/agenda"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute module="profissionais" permission="view">
+                <Agenda />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
         <Route path="/pre-cadastro" element={<ProtectedRoute><PreCadastro /></ProtectedRoute>} />
         <Route path="/entrevistas" element={<ProtectedRoute><Entrevistas /></ProtectedRoute>} />
         <Route path="/avaliacoes" element={<ProtectedRoute><Avaliacoes /></ProtectedRoute>} />
@@ -69,8 +79,26 @@ const AppContent = () => {
         <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
         <Route path="/gerenciar-usuarios" element={<ProtectedRoute><GerenciarUsuarios /></ProtectedRoute>} />
         <Route path="/gerenciar-permissoes" element={<ProtectedRoute><PermissionManager /></ProtectedRoute>} />
-        <Route path="/profissionais" element={<ProtectedRoute><Profissionais /></ProtectedRoute>} />
-        <Route path="/profissionais/novo" element={<ProtectedRoute><NovoProfissional /></ProtectedRoute>} />
+        <Route
+          path="/profissionais"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute module="profissionais" permission="view">
+                <Profissionais />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profissionais/novo"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute module="profissionais" permission="view">
+                <NovoProfissional />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
