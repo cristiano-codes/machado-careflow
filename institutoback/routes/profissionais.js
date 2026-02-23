@@ -4,13 +4,31 @@ const router = express.Router();
 const pool = require('../config/pg');
 const bcrypt = require('bcryptjs');
 const authMiddleware = require('../middleware/auth');
-const { authorize } = require('../middleware/authorize');
+const { authorize, authorizeAny } = require('../middleware/authorize');
 const {
   DEFAULT_ACCESS_SETTINGS,
   readAccessSettings,
 } = require('../lib/accessSettings');
 
 router.use(authMiddleware);
+
+const authorizeProfessionalsView = authorize('profissionais', 'view');
+const authorizeAgendaOrProfessionalsView = authorizeAny([
+  { module: 'agenda', action: 'view' },
+  { module: 'profissionais', action: 'view' },
+]);
+
+function authorizeProfessionalsListView(req, res, next) {
+  const forAgenda = ['1', 'true', 'sim', 'yes'].includes(
+    (req.query.for_agenda || '').toString().trim().toLowerCase()
+  );
+
+  if (forAgenda) {
+    return authorizeAgendaOrProfessionalsView(req, res, next);
+  }
+
+  return authorizeProfessionalsView(req, res, next);
+}
 
 const DEFAULT_CONTRACT_TYPES = ['CLT', 'PJ', 'VoluntÃ¡rio', 'EstÃ¡gio', 'TemporÃ¡rio'];
 const SCALE_KEYS = ['seg', 'ter', 'qua', 'qui', 'sex'];
@@ -726,7 +744,7 @@ router.post('/', authorize('profissionais', 'create'), async (req, res) => {
 });
 
 // Lista profissionais + dados do usuÃ¡rio vinculado e carga do dia
-router.get('/', authorize('profissionais', 'view'), async (req, res) => {
+router.get('/', authorizeProfessionalsListView, async (req, res) => {
   const date = req.query.date || new Date().toISOString().split('T')[0];
   const forAgenda =
     ['1', 'true', 'sim', 'yes'].includes(
@@ -785,6 +803,16 @@ router.get('/', authorize('profissionais', 'view'), async (req, res) => {
       professionals = professionals.filter(
         (item) => String(item.id) === String(accessContext.linkedProfessionalId)
       );
+    }
+
+    if (forAgenda) {
+      professionals = professionals.map((item) => ({
+        id: item.id,
+        user_name: item.user_name,
+        role_nome: item.role_nome,
+        funcao: item.funcao,
+        status: item.status,
+      }));
     }
 
     res.json({
@@ -2055,7 +2083,7 @@ router.patch('/link-requests/:id/reject', authorize('profissionais', 'edit'), as
   }
 });
 
-router.get('/me', authorize('profissionais', 'view'), async (req, res) => {
+router.get('/me', authorizeAgendaOrProfessionalsView, async (req, res) => {
   try {
     const accessContext = await resolveAgendaAccessContext(req.user, pool);
 
@@ -2110,7 +2138,7 @@ router.get('/me', authorize('profissionais', 'view'), async (req, res) => {
 });
 
 // Agenda do profissional em um dia
-router.get('/:id/agenda', authorize('profissionais', 'view'), async (req, res) => {
+router.get('/:id/agenda', authorizeAgendaOrProfessionalsView, async (req, res) => {
   const { id } = req.params;
   const date = req.query.date || new Date().toISOString().split('T')[0];
 

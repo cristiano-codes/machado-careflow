@@ -66,7 +66,9 @@ const AppContent = () => {
           path="/agenda"
           element={
             <ProtectedRoute>
-              <PermissionProtectedRoute module="profissionais" permission="view">
+              <PermissionProtectedRoute
+                requiredAnyScopes={["agenda:view", "profissionais:view"]}
+              >
                 <Agenda />
               </PermissionProtectedRoute>
             </ProtectedRoute>

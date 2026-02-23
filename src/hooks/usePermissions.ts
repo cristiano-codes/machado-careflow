@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ADMIN_MACRO_PERMISSION_NAMES,
   isStandardPermissionAction,
@@ -66,7 +67,12 @@ function checkAdminMacro(permissions: NormalizedPerm[]) {
 }
 
 export function usePermissions() {
-  const user = useMemo(() => readStoredUser(), []);
+  const { userProfile } = useAuth();
+  const storedUser = useMemo(
+    () => (userProfile ? null : readStoredUser()),
+    [userProfile]
+  );
+  const user = userProfile ?? storedUser;
   const role = normalizePermissionToken(user?.role?.toString() || "");
 
   const normalizedPermissions = useMemo<NormalizedPerm[]>(() => {

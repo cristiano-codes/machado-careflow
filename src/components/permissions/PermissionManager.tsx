@@ -50,6 +50,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE_URL } from "@/services/api";
 import {
   BookOpen,
@@ -193,6 +194,7 @@ function getRoleBadgeVariant(role: string): "default" | "secondary" | "outline" 
 }
 
 export function PermissionManager() {
+  const { userProfile, refreshSession } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -624,9 +626,22 @@ export function PermissionManager() {
       }
 
       setBaselinePermissionKeys([...draftPermissionKeys]);
+      const isEditingCurrentSessionUser =
+        userProfile && String(userProfile.id) === String(selectedUserId);
+
+      if (isEditingCurrentSessionUser) {
+        try {
+          await refreshSession();
+        } catch (refreshError) {
+          console.warn("Falha ao atualizar sessao apos salvar permissoes:", refreshError);
+        }
+      }
+
       toast({
         title: "Permissoes atualizadas",
-        description: "As alteracoes foram salvas com sucesso.",
+        description: isEditingCurrentSessionUser
+          ? "As alteracoes foram salvas e a sessao atual foi atualizada."
+          : "As alteracoes foram salvas com sucesso.",
       });
     } catch (error) {
       toast({

@@ -85,7 +85,7 @@ function professionalName(item: ProfessionalOption) {
 export default function Agenda() {
   const { userProfile } = useAuth();
   const { settings } = useSettings();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, hasAnyScope } = usePermissions();
   const { toast } = useToast();
 
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -100,7 +100,10 @@ export default function Agenda() {
   });
 
   const dateParam = useMemo(() => toIsoDate(currentDate), [currentDate]);
-  const canViewAgenda = hasPermission("profissionais", "view");
+  const canViewAgenda =
+    hasAnyScope(["agenda:view", "profissionais:view"]) ||
+    hasPermission("agenda", "view") ||
+    hasPermission("profissionais", "view");
 
   const canViewOtherProfessionals = useMemo(() => {
     if (!accessContext.professionalId) return true;
@@ -261,7 +264,7 @@ export default function Agenda() {
   );
 
   return (
-    <ModuleProtectedRoute module="profissionais" permission="view">
+    <ModuleProtectedRoute requiredAnyScopes={["agenda:view", "profissionais:view"]}>
       <div className="mx-auto max-w-7xl space-y-4">
         <div className="flex items-center justify-between">
           <div>
