@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +15,8 @@ interface RegisterFormProps {
 }
 
 export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -26,6 +29,7 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
+  const isManagementRegistration = new URLSearchParams(location.search).get('register') === '1';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +66,16 @@ export function RegisterForm({ onSuccess, onBackToLogin }: RegisterFormProps) {
       const data = await response.json();
 
       if (response.ok) {
+        if (isManagementRegistration) {
+          toast({
+            title: 'Usuário criado',
+            description: 'Usuário criado. Agora aprove e conceda permissões.',
+            duration: 5000,
+          });
+          navigate('/gerenciar-usuarios');
+          return;
+        }
+
         const createdStatus = (data?.status || '').toString().trim().toLowerCase();
         const isActiveByDefault = createdStatus === 'ativo';
 
