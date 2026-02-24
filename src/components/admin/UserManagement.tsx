@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -6,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { apiService, API_BASE_URL, ManagedUser } from "@/services/api";
 import {
@@ -13,6 +15,7 @@ import {
   KeyRound,
   Link2,
   Lock,
+  Plus,
   Search,
   ShieldAlert,
   Trash2,
@@ -42,6 +45,8 @@ function professionalLabel(professional: ProfessionalOption) {
 }
 
 export function UserManagement() {
+  const navigate = useNavigate();
+  const { hasAnyScope } = usePermissions();
   const [allUsers, setAllUsers] = useState<ManagedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabValue>("pending");
@@ -83,6 +88,8 @@ export function UserManagement() {
   const currentUserRole = (currentUser?.role || "").toString().trim().toLowerCase();
   const managerRoles = ["admin", "gestao", "gestão", "gestor", "coordenador geral", "administrador"];
   const canManageUsers = managerRoles.includes(currentUserRole);
+  const canAccessUserManagement = hasAnyScope(["usuarios:view", "users:view", "admin:access"]);
+  const canShowNewUserButton = canManageUsers && canAccessUserManagement;
 
   const getAuthHeaders = (withJson = false) => {
     const raw = sessionStorage.getItem("token") || localStorage.getItem("token");
@@ -453,11 +460,23 @@ export function UserManagement() {
     <div className="h-full min-h-0 flex flex-col overflow-hidden rounded-lg border bg-card">
       <div className="sticky top-0 z-20 border-b bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/85">
         <div className="space-y-3">
-          <div className="space-y-1">
-            <h1 className="text-lg font-semibold leading-tight">Gerenciar Usuarios</h1>
-            <p className="text-xs text-muted-foreground">
-              Controle de aprovacoes, bloqueios e politicas de acesso.
-            </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <h1 className="text-lg font-semibold leading-tight">Gerenciar Usuarios</h1>
+              <p className="text-xs text-muted-foreground">
+                Controle de aprovacoes, bloqueios e politicas de acesso.
+              </p>
+            </div>
+            {canShowNewUserButton && (
+              <Button
+                type="button"
+                className="bg-primary text-white px-4 py-2 rounded-md flex items-center gap-2"
+                onClick={() => navigate("/")}
+              >
+                <Plus className="h-4 w-4" />
+                Novo Usuario
+              </Button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_180px]">
