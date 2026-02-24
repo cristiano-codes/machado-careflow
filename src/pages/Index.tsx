@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 import { Layout } from "@/components/layout/Layout";
@@ -12,12 +12,15 @@ import { apiService } from "@/services/api";
 
 const Index = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [showRegister, setShowRegister] = useState(false);
   const [showFirstAccess, setShowFirstAccess] = useState(false);
   const [firstAccessUsername, setFirstAccessUsername] = useState<string | undefined>(undefined);
   const { user, userProfile, loading, signIn, signOut, mustChangePassword } = useAuth();
   const { settings } = useSettings();
   const { toast } = useToast();
+  const isManagementRegistration =
+    new URLSearchParams(location.search).get("register") === "1";
   const canShowPublicSignup =
     settings.registration_mode === "PUBLIC_SIGNUP" || settings.allow_public_registration;
 
@@ -38,17 +41,16 @@ const Index = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!canShowPublicSignup && showRegister) {
+    if (!canShowPublicSignup && showRegister && !isManagementRegistration) {
       setShowRegister(false);
     }
-  }, [canShowPublicSignup, showRegister]);
+  }, [canShowPublicSignup, showRegister, isManagementRegistration]);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get("register") === "1") {
+    if (isManagementRegistration) {
       setShowRegister(true);
     }
-  }, [location.search]);
+  }, [isManagementRegistration]);
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
@@ -89,8 +91,16 @@ const Index = () => {
     );
   }
 
-  if (showRegister && canShowPublicSignup) {
-    return <RegisterForm onSuccess={handleRegisterSuccess} onBackToLogin={() => setShowRegister(false)} />;
+  if (showRegister && (canShowPublicSignup || isManagementRegistration)) {
+    return (
+      <RegisterForm
+        onSuccess={handleRegisterSuccess}
+        onBackToLogin={() => {
+          setShowRegister(false);
+          navigate("/");
+        }}
+      />
+    );
   }
 
   if (!user) {
