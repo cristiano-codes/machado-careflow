@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 import { Layout } from "@/components/layout/Layout";
@@ -11,6 +11,7 @@ import { FirstAccessForm } from "@/components/auth/FirstAccessForm";
 import { apiService } from "@/services/api";
 
 const Index = () => {
+  const location = useLocation();
   const [showRegister, setShowRegister] = useState(false);
   const [showFirstAccess, setShowFirstAccess] = useState(false);
   const [firstAccessUsername, setFirstAccessUsername] = useState<string | undefined>(undefined);
@@ -41,6 +42,13 @@ const Index = () => {
       setShowRegister(false);
     }
   }, [canShowPublicSignup, showRegister]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("register") === "1") {
+      setShowRegister(true);
+    }
+  }, [location.search]);
 
   const handleLogin = async (credentials: { email: string; password: string }) => {
     try {
