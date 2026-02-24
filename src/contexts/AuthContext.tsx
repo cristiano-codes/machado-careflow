@@ -1,6 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { apiService, API_BASE_URL, User } from "@/services/api";
+import {
+  apiService,
+  API_BASE_URL,
+  AUTH_UNAUTHORIZED_EVENT,
+  User,
+} from "@/services/api";
 
 type AuthUser = User & {
   avatar_url?: string | null;
@@ -51,21 +56,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const userStr = localStorage.getItem("user");
+    let active = true;
 
-    if (token && userStr) {
+    async function bootstrapSession() {
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+
+      if (!token) {
+        if (active) setLoading(false);
+        return;
+      }
+
+      if (!localStorage.getItem("token") && sessionStorage.getItem("token")) {
+        localStorage.setItem("token", token);
+      }
+
       try {
-        const parsedUser = JSON.parse(userStr) as AuthUser;
-        setUser(parsedUser);
-        setUserProfile(parsedUser);
-      } catch {
-        localStorage.removeItem("token");
+        const verification = await apiService.verifyToken();
+        if (!active) return;
+
+        if (!verification.valid || !verification.user) {
+          setUser(null);
+          setUserProfile(null);
+          persistUser(null);
+          return;
+        }
+
+        const nextUser = verification.user as AuthUser;
+        setUser(nextUser);
+        setUserProfile(nextUser);
+        persistUser(nextUser);
+      } catch (error) {
+        if (!active) return;
+        console.error("Falha ao validar sessao inicial:", error);
+        setUser(null);
+        setUserProfile(null);
         persistUser(null);
+      } finally {
+        if (active) setLoading(false);
       }
     }
 
-    setLoading(false);
+    void bootstrapSession();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleUnauthorized = () => {
+      setUser(null);
+      setUserProfile(null);
+      persistUser(null);
+    };
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => {
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    };
   }, []);
 
   const mustChangePassword = useMemo(

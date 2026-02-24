@@ -28,8 +28,16 @@ const queryClient = new QueryClient();
 
 // Componente para rotas protegidas que precisam do Layout
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { userProfile, signOut, mustChangePassword } = useAuth();
+  const { userProfile, loading, signOut, mustChangePassword } = useAuth();
   const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   if (!userProfile) {
     return <Navigate to="/" replace />;

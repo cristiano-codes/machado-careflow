@@ -17,6 +17,31 @@ function resolveApiBase(): string {
 }
 
 const API_BASE_URL = resolveApiBase();
+export const AUTH_UNAUTHORIZED_EVENT = "auth:unauthorized";
+
+function normalizeStoredToken(raw: string | null): string | null {
+  if (typeof raw !== "string") return null;
+  let value = raw.trim();
+  if (!value) return null;
+
+  if (value.startsWith("\"") && value.endsWith("\"")) {
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === "string") {
+        value = parsed.trim();
+      }
+    } catch {
+      // Mantem valor original quando nao for JSON valido.
+    }
+  }
+
+  const lower = value.toLowerCase();
+  if (!value || lower === "null" || lower === "undefined") {
+    return null;
+  }
+
+  return value;
+}
 
 export type LoginResponse = {
   success: boolean;
@@ -217,8 +242,41 @@ type PublicSettingsResponse = {
 };
 
 class ApiService {
+  private getStoredToken(): string | null {
+    const fromLocal = normalizeStoredToken(localStorage.getItem("token"));
+    if (fromLocal) return fromLocal;
+    return normalizeStoredToken(sessionStorage.getItem("token"));
+  }
+
+  private clearStoredSession() {
+    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
+    localStorage.removeItem("user");
+    sessionStorage.removeItem("user");
+  }
+
+  private notifyUnauthorized() {
+    this.clearStoredSession();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+    }
+  }
+
+  private extractPayloadMessage(payload: unknown): string | null {
+    if (
+      payload &&
+      typeof payload === "object" &&
+      typeof (payload as Record<string, unknown>).message === "string"
+    ) {
+      const message = ((payload as Record<string, unknown>).message as string).trim();
+      if (message.length > 0) return message;
+    }
+
+    return null;
+  }
+
   private getAuthHeaders() {
-    const token = localStorage.getItem("token");
+    const token = this.getStoredToken();
     return {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -239,21 +297,19 @@ class ApiService {
     fallbackMessage: string
   ): string {
     if (response.status === 401) {
+      const payloadMessage = this.extractPayloadMessage(payload);
+      if (payloadMessage) return payloadMessage;
       return "Token invalido ou expirado";
     }
 
     if (response.status === 403) {
+      const payloadMessage = this.extractPayloadMessage(payload);
+      if (payloadMessage) return payloadMessage;
       return "Acesso negado para esta operacao";
     }
 
-    if (
-      payload &&
-      typeof payload === "object" &&
-      typeof (payload as Record<string, unknown>).message === "string"
-    ) {
-      const message = ((payload as Record<string, unknown>).message as string).trim();
-      if (message.length > 0) return message;
-    }
+    const payloadMessage = this.extractPayloadMessage(payload);
+    if (payloadMessage) return payloadMessage;
 
     return fallbackMessage;
   }
@@ -264,6 +320,9 @@ class ApiService {
   ): Promise<T> {
     const payload = await this.parseJsonSafe(response);
     if (!response.ok) {
+      if (response.status === 401) {
+        this.notifyUnauthorized();
+      }
       throw new Error(this.resolveHttpErrorMessage(response, payload, fallbackMessage));
     }
     return payload as T;
@@ -288,27 +347,25 @@ class ApiService {
   }
 
   async verifyToken(): Promise<{ valid: boolean; user?: User }> {
-    const token = localStorage.getItem("token");
+    const token = this.getStoredToken();
     if (!token) return { valid: false };
 
     const response = await fetch(`${API_BASE_URL}/auth/verify`, {
       headers: this.getAuthHeaders(),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (data?.success) {
       return { valid: true, user: data.user as User };
     } else {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      this.clearStoredSession();
       return { valid: false };
     }
   }
 
   logout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    this.clearStoredSession();
   }
 
   async checkFirstAccess(): Promise<{ firstAccess: boolean }> {
