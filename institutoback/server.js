@@ -40,6 +40,8 @@ const preAppointmentsRoutes = require('./routes/preAppointments');
 const jobVacanciesRoutes = require('./routes/jobVacancies');
 const jobCandidatesRoutes = require('./routes/jobCandidates');
 const profissionaisRoutes = require('./routes/profissionais');
+const socialInterviewsRoutes = require('./routes/socialInterviews');
+const vagaDecisionsRoutes = require('./routes/vagaDecisions');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -53,6 +55,8 @@ app.use('/api/pre-appointments', preAppointmentsRoutes);
 app.use('/api/job-vacancies', jobVacanciesRoutes);
 app.use('/api/job-candidates', jobCandidatesRoutes);
 app.use('/api/profissionais', profissionaisRoutes);
+app.use('/api/social-interviews', socialInterviewsRoutes);
+app.use('/api/vaga-decisions', vagaDecisionsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({
