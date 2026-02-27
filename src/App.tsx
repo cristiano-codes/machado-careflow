@@ -12,6 +12,7 @@ import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import PreAgendamento from "./pages/PreAgendamento";
+import ConsultarSolicitacao from "./pages/ConsultarSolicitacao";
 import Agenda from "./pages/Agenda";
 import PreCadastro from "./pages/PreCadastro";
 import Entrevistas from "./pages/Entrevistas";
@@ -70,6 +71,14 @@ const AppContent = () => {
         <Route path="/trocar-senha-obrigatoria" element={<TrocarSenhaObrigatoria />} />
         <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/pre-agendamento" element={<ProtectedRoute><PreAgendamento /></ProtectedRoute>} />
+        <Route
+          path="/consultar-solicitacao"
+          element={
+            <ProtectedRoute>
+              <ConsultarSolicitacao />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/agenda"
           element={
