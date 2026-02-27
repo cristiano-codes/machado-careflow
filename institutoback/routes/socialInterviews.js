@@ -16,17 +16,13 @@ function normalizeDate(value) {
 }
 
 function toInterviewDto(row) {
-  const payload =
-    row && row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
-      ? row.payload
-      : {};
-
   return {
-    ...payload,
     id: row.id,
     patient_id: row.patient_id,
+    assistente_social_id: row.assistente_social_id,
     interview_date: row.interview_date,
-    assistente_social: row.assistente_social,
+    interview_time: row.interview_time,
+    parecer_social: row.parecer_social,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -49,9 +45,10 @@ router.get('/', async (req, res) => {
         SELECT
           id,
           patient_id,
+          assistente_social_id,
           interview_date,
-          assistente_social,
-          payload,
+          interview_time,
+          parecer_social,
           created_by,
           created_at,
           updated_at
