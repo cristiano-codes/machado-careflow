@@ -242,7 +242,7 @@ export default function PreAgendamento() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-4">
+    <div className="mx-auto w-full max-w-[1400px] space-y-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Solicitação de Atendimento</h1>
           <p className="text-sm text-muted-foreground">
@@ -251,30 +251,50 @@ export default function PreAgendamento() {
         </div>
 
         <div className="grid items-start gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="space-y-4 xl:sticky xl:top-4">
+          <aside className="space-y-4 xl:sticky xl:top-6">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Etapas do Atendimento</CardTitle>
               </CardHeader>
-              <CardContent>
-                <ol className="space-y-2 text-sm text-muted-foreground">
-                  <li>1. Dados do Usuario</li>
-                  <li>2. Dados do Responsavel</li>
-                  <li>3. Servicos desejados</li>
-                  <li>4. Revisao e Envio</li>
+              <CardContent className="space-y-2">
+                <ol className="space-y-2">
+                  <li className="flex items-center gap-2 text-sm">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
+                      1
+                    </span>
+                    <span className="text-muted-foreground">Dados do Usuário</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
+                      2
+                    </span>
+                    <span className="text-muted-foreground">Dados do Responsável</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
+                      3
+                    </span>
+                    <span className="text-muted-foreground">Serviços desejados</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
+                      4
+                    </span>
+                    <span className="text-muted-foreground">Revisão e Envio</span>
+                  </li>
                 </ol>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Orientacoes</CardTitle>
+                <CardTitle className="text-base">Orientações</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>Campos com * sao obrigatorios.</li>
-                  <li>Apos o envio, a solicitacao entra em fila de avaliacao.</li>
-                  <li>Os canais informados serao usados para contato.</li>
+                  <li>Campos com * são obrigatórios.</li>
+                  <li>Após o envio, a solicitação entra em fila de avaliação.</li>
+                  <li>Os canais informados serão usados para contato.</li>
                 </ul>
               </CardContent>
             </Card>
@@ -283,9 +303,9 @@ export default function PreAgendamento() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Resumo Institucional</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  O pre-agendamento organiza a entrada na jornada de atendimento e facilita a triagem
+                  O pré-agendamento organiza a entrada na jornada de atendimento e facilita a triagem
                   inicial da equipe.
                 </p>
               </CardContent>
