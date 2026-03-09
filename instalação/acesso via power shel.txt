@@ -1,0 +1,21 @@
+$env:PGPASSWORD="SihhREkhOdXQlGjHIrgOkXvcJcMtVKaZ"
+
+
+psql `
+  -h crossover.proxy.rlwy.net `
+  -U postgres `
+  -p 21640 `
+  -d railway
+
+
+------------------------------------------------------
+
+
+Ver tabelas
+\dt
+
+Ver schemas
+\dn
+
+Ver estrutura de uma tabela
+\d public.professionals

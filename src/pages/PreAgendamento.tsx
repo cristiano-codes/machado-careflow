@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -242,14 +241,8 @@ export default function PreAgendamento() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    window.location.href = "/";
-  };
-
   return (
-    <Layout onLogout={handleLogout}>
-      <div className="mx-auto max-w-7xl space-y-4">
+    <div className="mx-auto w-full max-w-[1500px] space-y-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Solicitação de Atendimento</h1>
           <p className="text-sm text-muted-foreground">
@@ -257,7 +250,50 @@ export default function PreAgendamento() {
           </p>
         </div>
 
-        <Alert>
+        <div className="grid items-start gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="space-y-4 xl:sticky xl:top-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Etapas do Atendimento</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="space-y-2 text-sm text-muted-foreground">
+                  <li>1. Dados do Usuario</li>
+                  <li>2. Dados do Responsavel</li>
+                  <li>3. Servicos desejados</li>
+                  <li>4. Revisao e Envio</li>
+                </ol>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Orientacoes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li>Campos com * sao obrigatorios.</li>
+                  <li>Apos o envio, a solicitacao entra em fila de avaliacao.</li>
+                  <li>Os canais informados serao usados para contato.</li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Resumo Institucional</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  O pre-agendamento organiza a entrada na jornada de atendimento e facilita a triagem
+                  inicial da equipe.
+                </p>
+              </CardContent>
+            </Card>
+          </aside>
+
+          <div className="space-y-4">
+            <Alert>
           <Info className="h-4 w-4" />
           <AlertTitle>Informação Institucional</AlertTitle>
           <AlertDescription>
@@ -567,8 +603,9 @@ export default function PreAgendamento() {
               </div>
             </form>
           </CardContent>
-        </Card>
+          </Card>
+        </div>
       </div>
-    </Layout>
+    </div>
   );
 }
