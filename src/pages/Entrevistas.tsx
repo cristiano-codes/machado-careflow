@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
-import { Layout } from "@/components/layout/Layout";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileText, Plus, Printer, Save } from "lucide-react";
-import { apiService } from "@/services/api";
+import { useModulePermissions } from "@/hooks/usePermissions";
+import { useToast } from "@/hooks/use-toast";
+import { AlertTriangle, FileText, Loader2, Plus, Printer, Save } from "lucide-react";
+import { apiService, type SocialInterviewMutationResponse } from "@/services/api";
 
 type FamilyMember = {
   id: string;
@@ -97,7 +98,7 @@ type SocialInterviewDraft = {
   dataResultadoTerapeutas: string;
 };
 
-type SocialInterviewRecord = SocialInterviewDraft & { id: string };
+type SocialInterviewRecord = SocialInterviewDraft & { id: string; isDraft: boolean };
 
 type Paciente = {
   id: string;
@@ -118,6 +119,8 @@ type Paciente = {
   referencia: string;
   telefones: string;
   cpf?: string;
+  status?: string;
+  statusJornada?: string;
 };
 
 const pacientesMock: Paciente[] = [
@@ -173,9 +176,28 @@ const tiposMoradia = ["Propria", "Alugada", "Cedida", "Compartilhada", "Outro"];
 
 const gerarId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`);
 
+const ENABLE_MOCK_FALLBACK =
+  import.meta.env.DEV &&
+  String(import.meta.env.VITE_ENABLE_ENTREVISTAS_MOCK_FALLBACK || "")
+    .trim()
+    .toLowerCase() === "true";
+
+const JOURNEY_STATUS_LABELS: Record<string, string> = {
+  em_fila_espera: "Em fila de espera",
+  entrevista_realizada: "Entrevista realizada",
+  em_avaliacao: "Em avaliacao multidisciplinar",
+  em_analise_vaga: "Em analise de vaga",
+  aprovado: "Aprovado",
+  encaminhado: "Encaminhado",
+  matriculado: "Matriculado",
+  ativo: "Ativo",
+  inativo_assistencial: "Inativo assistencial",
+  desligado: "Desligado",
+};
+
 const createEmptyDraft = (paciente?: Paciente): SocialInterviewDraft => ({
   dataEntrevista: new Date().toISOString().slice(0, 10),
-  assistenteSocial: "Assistente Social",
+  assistenteSocial: "",
   atendidoId: paciente?.id ?? "",
   atendidoNome: paciente?.nome || paciente?.name || "",
   dataNascimento: paciente?.dataNascimento ?? "",
@@ -192,56 +214,56 @@ const createEmptyDraft = (paciente?: Paciente): SocialInterviewDraft => ({
   cep: paciente?.cep ?? "",
   referencia: paciente?.referencia ?? "",
   telefones: paciente?.telefones ?? "",
-  possuiWhatsApp: true,
-  possuiLaudo: true,
-  cids: "F84.0, G40.0",
-  rg: "183.586.157 10",
+  possuiWhatsApp: false,
+  possuiLaudo: false,
+  cids: "",
+  rg: "",
   cpf: paciente?.cpf ?? "",
-  certidaoNascimento: "0931380155 2013 1 00103 052 0030652 91",
-  possuiCarteiraVacinacao: true,
-  encaminhadaPor: "Pediatra",
-  motivoEncaminhamento: "CID: F84.0, G40.0",
-  postoSaude: "Clinica da Familia Amelia",
-  enderecoPosto: "R. Pompilio de Albuquerque, 386 - Encantado, RJ",
-  dataUltimaConsulta: "2025-10-01",
-  especialidadeUltimaConsulta: "Clinico",
-  terapias: ["Fonoaudiologia", "Psicologia", "Psicopedagogia"],
-  idadeInicioEscola: "2",
-  adaptacao: "Dificil",
-  escolaAtual: "EM Brigadeiro Faria Lima",
-  serie: "6",
-  turno: "Manha",
-  horario: "07:30 as 14:30",
-  repeticao: "Nao",
-  rendimento: "Regular",
+  certidaoNascimento: "",
+  possuiCarteiraVacinacao: false,
+  encaminhadaPor: "",
+  motivoEncaminhamento: "",
+  postoSaude: "",
+  enderecoPosto: "",
+  dataUltimaConsulta: "",
+  especialidadeUltimaConsulta: "",
+  terapias: [],
+  idadeInicioEscola: "",
+  adaptacao: "",
+  escolaAtual: "",
+  serie: "",
+  turno: "",
+  horario: "",
+  repeticao: "",
+  rendimento: "",
   membrosFamilia: [],
-  statusPais: "Casados",
-  relacionamentoCasa: "Tranquilo",
-  ocupacaoMae: "Do lar / diarista",
-  rendaMae: "500",
+  statusPais: "",
+  relacionamentoCasa: "",
+  ocupacaoMae: "",
+  rendaMae: "",
   localTrabalhoMae: "",
-  ocupacaoPai: "Aposentado",
-  rendaPai: "2000",
+  ocupacaoPai: "",
+  rendaPai: "",
   localTrabalhoPai: "",
   ocupacaoResponsavel: "",
   rendaResponsavel: "",
   localTrabalhoResponsavel: "",
-  crasReferencia: "Sobral Pinto",
-  bolsaFamilia: true,
-  valorBolsaFamilia: "650",
+  crasReferencia: "",
+  bolsaFamilia: false,
+  valorBolsaFamilia: "",
   bpc: false,
   valorBpc: "",
-  quemCuida: "Mae",
+  quemCuida: "",
   terapiaOutraInstituicao: false,
   qualTerapiaOutra: "",
-  tipoMoradia: "Propria",
-  observacoesMoradia: "Pagando prestacao do imovel",
+  tipoMoradia: "",
+  observacoesMoradia: "",
   valorMoradia: "",
-  numeroComodos: "5",
-  tratamentoAgua: "Filtrada",
-  tipoIluminacao: "Relogio proprio",
-  escoamentoSanitario: "Rede publica",
-  destinoLixo: "Coleta regular",
+  numeroComodos: "",
+  tratamentoAgua: "",
+  tipoIluminacao: "",
+  escoamentoSanitario: "",
+  destinoLixo: "",
   observacoesGerais: "",
   parecerSocial: "",
   resultadoTerapeutas: "",
@@ -266,243 +288,632 @@ const InfoLine = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const mapFromApi = (dto: any): SocialInterviewRecord => ({
-  id: dto.id,
-  dataEntrevista: dto.interview_date || "",
-  assistenteSocial: dto.assistente_social || dto.assistente_social_id || "",
-  atendidoId: dto.patient_id || "",
-  atendidoNome: dto.atendido_nome || "",
-  dataNascimento: dto.data_nascimento || "",
-  sexo: dto.sexo || "",
-  corRaca: dto.cor_raca || "",
-  mae: dto.mae || "",
-  corMae: dto.cor_mae || "",
-  pai: dto.pai || "",
-  corPai: dto.cor_pai || "",
-  responsavel: dto.responsavel || "",
-  cpfResponsavel: dto.cpf_responsavel || "",
-  endereco: dto.endereco || "",
-  bairro: dto.bairro || "",
-  cep: dto.cep || "",
-  referencia: dto.referencia || "",
-  telefones: dto.telefones || "",
-  possuiWhatsApp: Boolean(dto.possui_whatsapp),
-  possuiLaudo: Boolean(dto.possui_laudo),
-  cids: dto.cids || "",
-  rg: dto.rg || "",
-  cpf: dto.cpf || "",
-  certidaoNascimento: dto.certidao_nascimento || "",
-  possuiCarteiraVacinacao: Boolean(dto.possui_carteira_vacinacao),
-  encaminhadaPor: dto.encaminhada_por || "",
-  motivoEncaminhamento: dto.motivo_encaminhamento || "",
-  postoSaude: dto.posto_saude || "",
-  enderecoPosto: dto.endereco_posto || "",
-  dataUltimaConsulta: dto.data_ultima_consulta || "",
-  especialidadeUltimaConsulta: dto.especialidade_ultima_consulta || "",
-  terapias: dto.terapias || [],
-  idadeInicioEscola: dto.idade_inicio_escola != null ? String(dto.idade_inicio_escola) : "",
-  adaptacao: dto.adaptacao || "",
-  escolaAtual: dto.escola_atual || "",
-  serie: dto.serie || "",
-  turno: dto.turno || "",
-  horario: dto.horario || "",
-  repeticao: dto.repeticao || "",
-  rendimento: dto.rendimento || "",
-  membrosFamilia: dto.membros_familia || [],
-  statusPais: dto.status_pais || "",
-  relacionamentoCasa: dto.relacionamento_casa || "",
-  ocupacaoMae: dto.ocupacao_mae || "",
-  rendaMae: dto.renda_mae != null ? String(dto.renda_mae) : "",
-  localTrabalhoMae: dto.local_trabalho_mae || "",
-  ocupacaoPai: dto.ocupacao_pai || "",
-  rendaPai: dto.renda_pai != null ? String(dto.renda_pai) : "",
-  localTrabalhoPai: dto.local_trabalho_pai || "",
-  ocupacaoResponsavel: dto.ocupacao_responsavel || "",
-  rendaResponsavel: dto.renda_responsavel != null ? String(dto.renda_responsavel) : "",
-  localTrabalhoResponsavel: dto.local_trabalho_responsavel || "",
-  crasReferencia: dto.cras_referencia || "",
-  bolsaFamilia: Boolean(dto.bolsa_familia),
-  valorBolsaFamilia: dto.valor_bolsa_familia != null ? String(dto.valor_bolsa_familia) : "",
-  bpc: Boolean(dto.bpc),
-  valorBpc: dto.valor_bpc != null ? String(dto.valor_bpc) : "",
-  quemCuida: dto.quem_cuida || "",
-  terapiaOutraInstituicao: Boolean(dto.terapia_outra_instituicao),
-  qualTerapiaOutra: dto.qual_terapia_outra || "",
-  tipoMoradia: dto.tipo_moradia || "",
-  observacoesMoradia: dto.observacoes_moradia || "",
-  valorMoradia: dto.valor_moradia != null ? String(dto.valor_moradia) : "",
-  numeroComodos: dto.numero_comodos != null ? String(dto.numero_comodos) : "",
-  tratamentoAgua: dto.tratamento_agua || "",
-  tipoIluminacao: dto.tipo_iluminacao || "",
-  escoamentoSanitario: dto.escoamento_sanitario || "",
-  destinoLixo: dto.destino_lixo || "",
-  observacoesGerais: dto.observacoes_gerais || "",
-  parecerSocial: dto.parecer_social || "",
-  resultadoTerapeutas: dto.resultado_terapeutas || "",
-  dataResultadoTerapeutas: dto.data_resultado_terapeutas || "",
-});
+type JsonRecord = Record<string, unknown>;
+type SocialInterviewApiDto = JsonRecord;
+type PatientApiDto = JsonRecord;
 
-const mapToApi = (draft: SocialInterviewDraft, patientId?: string) => ({
-  patient_id: patientId || draft.atendidoId,
-  assistente_social: draft.assistenteSocial,
-  interview_date: draft.dataEntrevista,
-  interview_time: null,
-  atendido_nome: draft.atendidoNome,
-  data_nascimento: draft.dataNascimento,
-  sexo: draft.sexo,
-  cor_raca: draft.corRaca,
-  mae: draft.mae,
-  cor_mae: draft.corMae,
-  pai: draft.pai,
-  cor_pai: draft.corPai,
-  responsavel: draft.responsavel,
-  cpf_responsavel: draft.cpfResponsavel,
-  endereco: draft.endereco,
-  bairro: draft.bairro,
-  cep: draft.cep,
-  referencia: draft.referencia,
-  telefones: draft.telefones,
-  possui_whatsapp: draft.possuiWhatsApp,
-  possui_laudo: draft.possuiLaudo,
-  cids: draft.cids,
-  rg: draft.rg,
-  cpf: draft.cpf,
-  certidao_nascimento: draft.certidaoNascimento,
-  possui_carteira_vacinacao: draft.possuiCarteiraVacinacao,
-  encaminhada_por: draft.encaminhadaPor,
-  motivo_encaminhamento: draft.motivoEncaminhamento,
-  posto_saude: draft.postoSaude,
-  endereco_posto: draft.enderecoPosto,
-  data_ultima_consulta: draft.dataUltimaConsulta,
-  especialidade_ultima_consulta: draft.especialidadeUltimaConsulta,
-  terapias: draft.terapias,
-  idade_inicio_escola: draft.idadeInicioEscola ? Number(draft.idadeInicioEscola) : null,
-  adaptacao: draft.adaptacao,
-  escola_atual: draft.escolaAtual,
-  serie: draft.serie,
-  turno: draft.turno,
-  horario: draft.horario,
-  repeticao: draft.repeticao,
-  rendimento: draft.rendimento,
-  membros_familia: draft.membrosFamilia,
-  status_pais: draft.statusPais,
-  relacionamento_casa: draft.relacionamentoCasa,
-  ocupacao_mae: draft.ocupacaoMae,
-  renda_mae: draft.rendaMae ? Number(draft.rendaMae) : null,
-  local_trabalho_mae: draft.localTrabalhoMae,
-  ocupacao_pai: draft.ocupacaoPai,
-  renda_pai: draft.rendaPai ? Number(draft.rendaPai) : null,
-  local_trabalho_pai: draft.localTrabalhoPai,
-  ocupacao_responsavel: draft.ocupacaoResponsavel,
-  renda_responsavel: draft.rendaResponsavel ? Number(draft.rendaResponsavel) : null,
-  local_trabalho_responsavel: draft.localTrabalhoResponsavel,
-  cras_referencia: draft.crasReferencia,
-  bolsa_familia: draft.bolsaFamilia,
-  valor_bolsa_familia: draft.valorBolsaFamilia ? Number(draft.valorBolsaFamilia) : null,
-  bpc: draft.bpc,
-  valor_bpc: draft.valorBpc ? Number(draft.valorBpc) : null,
-  quem_cuida: draft.quemCuida,
-  terapia_outra_instituicao: draft.terapiaOutraInstituicao,
-  qual_terapia_outra: draft.qualTerapiaOutra,
-  tipo_moradia: draft.tipoMoradia,
-  observacoes_moradia: draft.observacoesMoradia,
-  valor_moradia: draft.valorMoradia ? Number(draft.valorMoradia) : null,
-  numero_comodos: draft.numeroComodos ? Number(draft.numeroComodos) : null,
-  tratamento_agua: draft.tratamentoAgua,
-  tipo_iluminacao: draft.tipoIluminacao,
-  escoamento_sanitario: draft.escoamentoSanitario,
-  destino_lixo: draft.destinoLixo,
-  observacoes_gerais: draft.observacoesGerais,
-  parecer_social: draft.parecerSocial,
-  resultado_terapeutas: draft.resultadoTerapeutas,
-  data_resultado_terapeutas: draft.dataResultadoTerapeutas || null,
-});
+const isRecord = (value: unknown): value is JsonRecord =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const parseRecord = (value: unknown): JsonRecord => {
+  if (isRecord(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+    try {
+      const parsed = JSON.parse(trimmed);
+      return isRecord(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+};
+
+const coerceString = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  return "";
+};
+
+const coerceBoolean = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "sim", "yes", "t"].includes(normalized)) return true;
+    if (["false", "0", "nao", "não", "no", "f"].includes(normalized)) return false;
+  }
+  return false;
+};
+
+const coerceStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => coerceString(item))
+      .filter((item) => item.length > 0);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => coerceString(item))
+          .filter((item) => item.length > 0);
+      }
+    } catch {
+      // Segue como lista CSV.
+    }
+    return trimmed
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+  return [];
+};
+
+const coerceFamilyMembers = (value: unknown): FamilyMember[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item, index) => {
+      if (!isRecord(item)) return null;
+      return {
+        id: coerceString(item.id) || `membro-${index + 1}`,
+        nome: coerceString(item.nome),
+        parentesco: coerceString(item.parentesco),
+        sexo: coerceString(item.sexo),
+        estadoCivil: coerceString(item.estadoCivil ?? item.estado_civil),
+        idade: coerceString(item.idade),
+        escolaridade: coerceString(item.escolaridade),
+        profissao: coerceString(item.profissao),
+      };
+    })
+    .filter((member): member is FamilyMember => member !== null);
+};
+
+const pickFieldValue = (sources: JsonRecord[], ...keys: string[]): unknown => {
+  for (const key of keys) {
+    for (const source of sources) {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+      const value = source[key];
+      if (value === undefined || value === null) continue;
+      if (typeof value === "string" && value.trim() === "") continue;
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const stringField = (sources: JsonRecord[], ...keys: string[]) =>
+  coerceString(pickFieldValue(sources, ...keys));
+
+const numberStringField = (sources: JsonRecord[], ...keys: string[]) => {
+  const value = pickFieldValue(sources, ...keys);
+  if (value === undefined) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  return coerceString(value);
+};
+
+const booleanField = (sources: JsonRecord[], ...keys: string[]) =>
+  coerceBoolean(pickFieldValue(sources, ...keys));
+
+const formatJourneyStatus = (rawStatus: string | undefined) => {
+  const normalized = (rawStatus || "").trim().toLowerCase();
+  if (!normalized) return "Nao informado";
+  if (JOURNEY_STATUS_LABELS[normalized]) return JOURNEY_STATUS_LABELS[normalized];
+  return normalized
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
+const normalizePatientFromApi = (dto: PatientApiDto): Paciente | null => {
+  const source = parseRecord(dto);
+  const id = stringField([source], "id");
+  if (!id) return null;
+  return {
+    id,
+    nome: stringField([source], "nome", "name"),
+    name: stringField([source], "name"),
+    dataNascimento: stringField([source], "dataNascimento", "date_of_birth"),
+    sexo: stringField([source], "sexo", "gender"),
+    corRaca: stringField([source], "corRaca", "race"),
+    mae: stringField([source], "mae"),
+    corMae: stringField([source], "corMae"),
+    pai: stringField([source], "pai"),
+    corPai: stringField([source], "corPai"),
+    responsavel: stringField([source], "responsavel"),
+    cpfResponsavel: stringField([source], "cpfResponsavel", "cpf_responsavel"),
+    endereco: stringField([source], "endereco", "address"),
+    bairro: stringField([source], "bairro", "neighborhood"),
+    cep: stringField([source], "cep", "zip_code"),
+    referencia: stringField([source], "referencia"),
+    telefones: stringField([source], "telefones", "telefone", "phone", "mobile"),
+    cpf: stringField([source], "cpf"),
+    status: stringField([source], "status"),
+    statusJornada: stringField([source], "status_jornada", "statusJornada"),
+  };
+};
+
+const extractInterviewList = (raw: unknown): SocialInterviewApiDto[] => {
+  if (Array.isArray(raw)) {
+    return raw.filter(isRecord);
+  }
+  if (!isRecord(raw)) return [];
+
+  if (Array.isArray(raw.interviews)) {
+    return raw.interviews.filter(isRecord);
+  }
+  if (Array.isArray(raw.entrevistas)) {
+    return raw.entrevistas.filter(isRecord);
+  }
+  if (isRecord(raw.interview)) {
+    return [raw.interview];
+  }
+
+  return [];
+};
+
+const mapFromApi = (dto: SocialInterviewApiDto): SocialInterviewRecord => {
+  const root = parseRecord(dto);
+  const payload = parseRecord(root.payload);
+  const sources = [payload, root];
+  const parecerSocial = stringField(sources, "parecer_social", "parecerSocial");
+  const draftFlagRaw = pickFieldValue(sources, "is_draft", "isDraft");
+  const isDraft = draftFlagRaw === undefined ? parecerSocial.trim().length === 0 : coerceBoolean(draftFlagRaw);
+
+  return {
+    id: stringField([root], "id") || gerarId(),
+    isDraft,
+    dataEntrevista: stringField(sources, "interview_date", "data_entrevista", "dataEntrevista"),
+    assistenteSocial: stringField(
+      sources,
+      "assistente_social",
+      "assistente_social_id",
+      "assistenteSocial"
+    ),
+    atendidoId: stringField(sources, "patient_id", "atendido_id", "atendidoId"),
+    atendidoNome: stringField(sources, "atendido_nome", "atendidoNome", "nome"),
+    dataNascimento: stringField(sources, "data_nascimento", "dataNascimento", "date_of_birth"),
+    sexo: stringField(sources, "sexo"),
+    corRaca: stringField(sources, "cor_raca", "corRaca", "raca"),
+    mae: stringField(sources, "mae"),
+    corMae: stringField(sources, "cor_mae", "corMae"),
+    pai: stringField(sources, "pai"),
+    corPai: stringField(sources, "cor_pai", "corPai"),
+    responsavel: stringField(sources, "responsavel"),
+    cpfResponsavel: stringField(sources, "cpf_responsavel", "cpfResponsavel"),
+    endereco: stringField(sources, "endereco", "address"),
+    bairro: stringField(sources, "bairro", "neighborhood"),
+    cep: stringField(sources, "cep", "zip_code"),
+    referencia: stringField(sources, "referencia"),
+    telefones: stringField(sources, "telefones", "telefone", "phone", "mobile"),
+    possuiWhatsApp: booleanField(sources, "possui_whatsapp", "possuiWhatsApp"),
+    possuiLaudo: booleanField(sources, "possui_laudo", "possuiLaudo"),
+    cids: stringField(sources, "cids", "cid"),
+    rg: stringField(sources, "rg"),
+    cpf: stringField(sources, "cpf"),
+    certidaoNascimento: stringField(
+      sources,
+      "certidao_nascimento",
+      "certidaoNascimento"
+    ),
+    possuiCarteiraVacinacao: booleanField(
+      sources,
+      "possui_carteira_vacinacao",
+      "possuiCarteiraVacinacao"
+    ),
+    encaminhadaPor: stringField(sources, "encaminhada_por", "encaminhadaPor"),
+    motivoEncaminhamento: stringField(
+      sources,
+      "motivo_encaminhamento",
+      "motivoEncaminhamento"
+    ),
+    postoSaude: stringField(sources, "posto_saude", "postoSaude"),
+    enderecoPosto: stringField(sources, "endereco_posto", "enderecoPosto"),
+    dataUltimaConsulta: stringField(
+      sources,
+      "data_ultima_consulta",
+      "dataUltimaConsulta"
+    ),
+    especialidadeUltimaConsulta: stringField(
+      sources,
+      "especialidade_ultima_consulta",
+      "especialidadeUltimaConsulta"
+    ),
+    terapias: coerceStringArray(pickFieldValue(sources, "terapias")),
+    idadeInicioEscola: numberStringField(
+      sources,
+      "idade_inicio_escola",
+      "idadeInicioEscola"
+    ),
+    adaptacao: stringField(sources, "adaptacao"),
+    escolaAtual: stringField(sources, "escola_atual", "escolaAtual"),
+    serie: stringField(sources, "serie"),
+    turno: stringField(sources, "turno"),
+    horario: stringField(sources, "horario"),
+    repeticao: stringField(sources, "repeticao"),
+    rendimento: stringField(sources, "rendimento"),
+    membrosFamilia: coerceFamilyMembers(
+      pickFieldValue(sources, "membros_familia", "membrosFamilia")
+    ),
+    statusPais: stringField(sources, "status_pais", "statusPais"),
+    relacionamentoCasa: stringField(
+      sources,
+      "relacionamento_casa",
+      "relacionamentoCasa"
+    ),
+    ocupacaoMae: stringField(sources, "ocupacao_mae", "ocupacaoMae"),
+    rendaMae: numberStringField(sources, "renda_mae", "rendaMae"),
+    localTrabalhoMae: stringField(sources, "local_trabalho_mae", "localTrabalhoMae"),
+    ocupacaoPai: stringField(sources, "ocupacao_pai", "ocupacaoPai"),
+    rendaPai: numberStringField(sources, "renda_pai", "rendaPai"),
+    localTrabalhoPai: stringField(sources, "local_trabalho_pai", "localTrabalhoPai"),
+    ocupacaoResponsavel: stringField(
+      sources,
+      "ocupacao_responsavel",
+      "ocupacaoResponsavel"
+    ),
+    rendaResponsavel: numberStringField(
+      sources,
+      "renda_responsavel",
+      "rendaResponsavel"
+    ),
+    localTrabalhoResponsavel: stringField(
+      sources,
+      "local_trabalho_responsavel",
+      "localTrabalhoResponsavel"
+    ),
+    crasReferencia: stringField(sources, "cras_referencia", "crasReferencia"),
+    bolsaFamilia: booleanField(sources, "bolsa_familia", "bolsaFamilia"),
+    valorBolsaFamilia: numberStringField(
+      sources,
+      "valor_bolsa_familia",
+      "valorBolsaFamilia"
+    ),
+    bpc: booleanField(sources, "bpc"),
+    valorBpc: numberStringField(sources, "valor_bpc", "valorBpc"),
+    quemCuida: stringField(sources, "quem_cuida", "quemCuida"),
+    terapiaOutraInstituicao: booleanField(
+      sources,
+      "terapia_outra_instituicao",
+      "terapiaOutraInstituicao"
+    ),
+    qualTerapiaOutra: stringField(sources, "qual_terapia_outra", "qualTerapiaOutra"),
+    tipoMoradia: stringField(sources, "tipo_moradia", "tipoMoradia"),
+    observacoesMoradia: stringField(
+      sources,
+      "observacoes_moradia",
+      "observacoesMoradia"
+    ),
+    valorMoradia: numberStringField(sources, "valor_moradia", "valorMoradia"),
+    numeroComodos: numberStringField(sources, "numero_comodos", "numeroComodos"),
+    tratamentoAgua: stringField(sources, "tratamento_agua", "tratamentoAgua"),
+    tipoIluminacao: stringField(sources, "tipo_iluminacao", "tipoIluminacao"),
+    escoamentoSanitario: stringField(
+      sources,
+      "escoamento_sanitario",
+      "escoamentoSanitario"
+    ),
+    destinoLixo: stringField(sources, "destino_lixo", "destinoLixo"),
+    observacoesGerais: stringField(
+      sources,
+      "observacoes_gerais",
+      "observacoesGerais"
+    ),
+    parecerSocial,
+    resultadoTerapeutas: stringField(
+      sources,
+      "resultado_terapeutas",
+      "resultadoTerapeutas"
+    ),
+    dataResultadoTerapeutas: stringField(
+      sources,
+      "data_resultado_terapeutas",
+      "dataResultadoTerapeutas"
+    ),
+  };
+};
+
+const mapToApi = (draft: SocialInterviewDraft, patientId?: string) => {
+  const isDraft = draft.parecerSocial.trim().length === 0;
+
+  return {
+    patient_id: patientId || draft.atendidoId,
+    assistente_social: draft.assistenteSocial,
+    interview_date: draft.dataEntrevista,
+    interview_time: null,
+    atendido_nome: draft.atendidoNome,
+    data_nascimento: draft.dataNascimento,
+    sexo: draft.sexo,
+    cor_raca: draft.corRaca,
+    mae: draft.mae,
+    cor_mae: draft.corMae,
+    pai: draft.pai,
+    cor_pai: draft.corPai,
+    responsavel: draft.responsavel,
+    cpf_responsavel: draft.cpfResponsavel,
+    endereco: draft.endereco,
+    bairro: draft.bairro,
+    cep: draft.cep,
+    referencia: draft.referencia,
+    telefones: draft.telefones,
+    possui_whatsapp: draft.possuiWhatsApp,
+    possui_laudo: draft.possuiLaudo,
+    cids: draft.cids,
+    rg: draft.rg,
+    cpf: draft.cpf,
+    certidao_nascimento: draft.certidaoNascimento,
+    possui_carteira_vacinacao: draft.possuiCarteiraVacinacao,
+    encaminhada_por: draft.encaminhadaPor,
+    motivo_encaminhamento: draft.motivoEncaminhamento,
+    posto_saude: draft.postoSaude,
+    endereco_posto: draft.enderecoPosto,
+    data_ultima_consulta: draft.dataUltimaConsulta,
+    especialidade_ultima_consulta: draft.especialidadeUltimaConsulta,
+    terapias: draft.terapias,
+    idade_inicio_escola: draft.idadeInicioEscola ? Number(draft.idadeInicioEscola) : null,
+    adaptacao: draft.adaptacao,
+    escola_atual: draft.escolaAtual,
+    serie: draft.serie,
+    turno: draft.turno,
+    horario: draft.horario,
+    repeticao: draft.repeticao,
+    rendimento: draft.rendimento,
+    membros_familia: draft.membrosFamilia,
+    status_pais: draft.statusPais,
+    relacionamento_casa: draft.relacionamentoCasa,
+    ocupacao_mae: draft.ocupacaoMae,
+    renda_mae: draft.rendaMae ? Number(draft.rendaMae) : null,
+    local_trabalho_mae: draft.localTrabalhoMae,
+    ocupacao_pai: draft.ocupacaoPai,
+    renda_pai: draft.rendaPai ? Number(draft.rendaPai) : null,
+    local_trabalho_pai: draft.localTrabalhoPai,
+    ocupacao_responsavel: draft.ocupacaoResponsavel,
+    renda_responsavel: draft.rendaResponsavel ? Number(draft.rendaResponsavel) : null,
+    local_trabalho_responsavel: draft.localTrabalhoResponsavel,
+    cras_referencia: draft.crasReferencia,
+    bolsa_familia: draft.bolsaFamilia,
+    valor_bolsa_familia: draft.valorBolsaFamilia ? Number(draft.valorBolsaFamilia) : null,
+    bpc: draft.bpc,
+    valor_bpc: draft.valorBpc ? Number(draft.valorBpc) : null,
+    quem_cuida: draft.quemCuida,
+    terapia_outra_instituicao: draft.terapiaOutraInstituicao,
+    qual_terapia_outra: draft.qualTerapiaOutra,
+    tipo_moradia: draft.tipoMoradia,
+    observacoes_moradia: draft.observacoesMoradia,
+    valor_moradia: draft.valorMoradia ? Number(draft.valorMoradia) : null,
+    numero_comodos: draft.numeroComodos ? Number(draft.numeroComodos) : null,
+    tratamento_agua: draft.tratamentoAgua,
+    tipo_iluminacao: draft.tipoIluminacao,
+    escoamento_sanitario: draft.escoamentoSanitario,
+    destino_lixo: draft.destinoLixo,
+    observacoes_gerais: draft.observacoesGerais,
+    parecer_social: draft.parecerSocial,
+    resultado_terapeutas: draft.resultadoTerapeutas,
+    data_resultado_terapeutas: draft.dataResultadoTerapeutas || null,
+    is_draft: isDraft,
+    status_entrevista: isDraft ? "rascunho" : "concluida",
+  };
+};
 
 export default function Entrevistas() {
+  const { toast } = useToast();
+  const entrevistasPermissions = useModulePermissions("entrevistas");
   const [viewMode, setViewMode] = useState<"list" | "create" | "view">("list");
-  const [patients, setPatients] = useState<Paciente[]>(pacientesMock);
-  const [selectedPacienteId, setSelectedPacienteId] = useState(pacientesMock[0]?.id ?? "");
-  const [draft, setDraft] = useState<SocialInterviewDraft>(createEmptyDraft(pacientesMock[0]));
+  const [patients, setPatients] = useState<Paciente[]>([]);
+  const [selectedPacienteId, setSelectedPacienteId] = useState("");
+  const [draft, setDraft] = useState<SocialInterviewDraft>(createEmptyDraft());
   const [entrevistas, setEntrevistas] = useState<SocialInterviewRecord[]>([]);
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+  const [interviewsLoading, setInterviewsLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [patientsError, setPatientsError] = useState<string | null>(null);
+  const [interviewsError, setInterviewsError] = useState<string | null>(null);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [usingMockData, setUsingMockData] = useState(false);
 
   const selectedInterview = useMemo(
     () => entrevistas.find((ent) => ent.id === selectedInterviewId),
     [entrevistas, selectedInterviewId]
   );
+  const patientOptions = patients;
+  const selectedPaciente = useMemo(
+    () => patientOptions.find((paciente) => paciente.id === selectedPacienteId) ?? null,
+    [patientOptions, selectedPacienteId]
+  );
+  const selectedJourneyStatusLabel = formatJourneyStatus(selectedPaciente?.statusJornada);
+  const isEditingInterview = viewMode === "create" && Boolean(selectedInterviewId);
+  const canCreateInterview = entrevistasPermissions.canCreate;
+  const canEditInterview = entrevistasPermissions.canEdit;
+  const canStartInterview = Boolean(selectedPacienteId);
+  const canPersistInterview =
+    Boolean(selectedPacienteId) &&
+    !usingMockData &&
+    (selectedInterviewId ? canEditInterview : canCreateInterview);
 
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async () => {
+    setPatientsLoading(true);
+    setPatientsError(null);
+    setUsingMockData(false);
     try {
       const data = await apiService.getPatients();
-      if (Array.isArray(data) && data.length > 0) {
-        const normalized = data.map((p: any) => ({
-          id: p.id,
-          nome: p.nome || p.name,
-          dataNascimento: p.dataNascimento || p.date_of_birth || "",
-          sexo: p.sexo || p.gender || "",
-          corRaca: p.corRaca || p.race || "",
-          mae: p.mae || "",
-          corMae: p.corMae || "",
-          pai: p.pai || "",
-          corPai: p.corPai || "",
-          responsavel: p.responsavel || "",
-          cpfResponsavel: p.cpfResponsavel || p.cpf_responsavel || "",
-          endereco: p.endereco || p.address || "",
-          bairro: p.bairro || p.neighborhood || "",
-          cep: p.cep || p.zip_code || "",
-          referencia: p.referencia || "",
-          telefones: p.telefones || p.phone || p.mobile || "",
-          cpf: p.cpf || "",
-        })) as Paciente[];
-        setPatients(normalized);
-        const first = normalized[0];
-        setSelectedPacienteId(first.id);
-        setDraft(createEmptyDraft(first));
-      }
-    } catch (error) {
-      console.error("Falha ao carregar pacientes, usando mock.", error);
-      setPatients(pacientesMock);
-    }
-  };
+      const normalized = (Array.isArray(data) ? data : [])
+        .map((dto) => (isRecord(dto) ? normalizePatientFromApi(dto) : null))
+        .filter((patient): patient is Paciente => patient !== null);
 
-  const loadInterviews = async (patientId: string) => {
-    if (!patientId) return;
-    setLoading(true);
+      if (normalized.length === 0) {
+        setPatients([]);
+        setSelectedPacienteId("");
+        setDraft(createEmptyDraft());
+        setEntrevistas([]);
+        setSelectedInterviewId(null);
+        setViewMode("list");
+        return;
+      }
+
+      const first = normalized[0];
+      setPatients(normalized);
+      setSelectedPacienteId(first.id);
+      setDraft(createEmptyDraft(first));
+      setEntrevistas([]);
+      setSelectedInterviewId(null);
+      setViewMode("list");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Nao foi possivel carregar atendidos.";
+
+      if (ENABLE_MOCK_FALLBACK) {
+        const firstMock = pacientesMock[0];
+        setUsingMockData(true);
+        setPatients(pacientesMock);
+        setSelectedPacienteId(firstMock?.id ?? "");
+        setDraft(createEmptyDraft(firstMock));
+        setEntrevistas([]);
+        setSelectedInterviewId(null);
+        setViewMode("list");
+        setPatientsError(
+          "Falha ao carregar atendidos reais. Modo mock ativo para desenvolvimento local."
+        );
+      } else {
+        setPatients([]);
+        setSelectedPacienteId("");
+        setDraft(createEmptyDraft());
+        setEntrevistas([]);
+        setSelectedInterviewId(null);
+        setViewMode("list");
+        setPatientsError(
+          "Nao foi possivel carregar os atendidos. Verifique permissao de acesso e tente novamente."
+        );
+      }
+
+      toast({
+        title: "Falha ao carregar atendidos",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setPatientsLoading(false);
+    }
+  }, [toast]);
+
+  const loadInterviews = useCallback(async (
+    patientId: string,
+    options: {
+      preferredInterviewId?: string | null;
+      preserveCreateMode?: boolean;
+      fallbackPaciente?: Paciente | null;
+    } = {}
+  ): Promise<boolean> => {
+    const preferredInterviewId = options.preferredInterviewId ?? null;
+    const preserveCreateMode = options.preserveCreateMode === true;
+    const fallbackPaciente = options.fallbackPaciente ?? null;
+
+    if (!patientId) {
+      setEntrevistas([]);
+      setSelectedInterviewId(null);
+      setInterviewsError(null);
+      if (!preserveCreateMode) setViewMode("list");
+      return false;
+    }
+
+    setInterviewsLoading(true);
+    setInterviewsError(null);
     try {
       const data = await apiService.getSocialInterviews(patientId);
-      const mapped = Array.isArray(data) ? data.map(mapFromApi) : [];
+      const pacienteAtual = fallbackPaciente;
+      const mapped = extractInterviewList(data).map((dto) => {
+        const mappedInterview = mapFromApi(dto);
+        return {
+          ...mappedInterview,
+          atendidoId: mappedInterview.atendidoId || patientId,
+          atendidoNome:
+            mappedInterview.atendidoNome || pacienteAtual?.nome || pacienteAtual?.name || "",
+          dataNascimento:
+            mappedInterview.dataNascimento || pacienteAtual?.dataNascimento || "",
+        };
+      });
       setEntrevistas(mapped);
-      setSelectedInterviewId(mapped[0]?.id ?? null);
-      if (mapped.length > 0) {
+
+      if (mapped.length === 0) {
+        setSelectedInterviewId(null);
+        if (!preserveCreateMode) {
+          setDraft(createEmptyDraft(pacienteAtual ?? undefined));
+          setViewMode("list");
+        }
+        return false;
+      }
+
+      const candidateId =
+        preferredInterviewId && mapped.some((ent) => ent.id === preferredInterviewId)
+          ? preferredInterviewId
+          : mapped[0].id;
+      const interviewToShow = mapped.find((ent) => ent.id === candidateId) ?? mapped[0];
+      setSelectedInterviewId(interviewToShow.id);
+
+      if (!preserveCreateMode) {
+        const { id: _id, ...rest } = interviewToShow;
+        setDraft(rest);
         setViewMode("view");
       }
+      return true;
     } catch (error) {
-      console.error("Falha ao carregar entrevistas sociais", error);
+      const message =
+        error instanceof Error ? error.message : "Falha ao carregar entrevistas sociais.";
+      setEntrevistas([]);
+      setSelectedInterviewId(null);
+      setInterviewsError(
+        "Nao foi possivel carregar as entrevistas deste atendido. Tente novamente."
+      );
+      if (!preserveCreateMode) {
+        setViewMode("list");
+      }
+      toast({
+        title: "Falha ao carregar entrevistas",
+        description: message,
+        variant: "destructive",
+      });
+      return false;
     } finally {
-      setLoading(false);
+      setInterviewsLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
-    loadPatients();
-  }, []);
+    void loadPatients();
+  }, [loadPatients]);
 
   useEffect(() => {
-    if (selectedPacienteId) {
-      loadInterviews(selectedPacienteId);
+    if (!selectedPacienteId) {
+      setEntrevistas([]);
+      setSelectedInterviewId(null);
+      setInterviewsError(null);
+      setViewMode("list");
+      return;
     }
-  }, [selectedPacienteId]);
+    void loadInterviews(selectedPacienteId, { fallbackPaciente: selectedPaciente });
+  }, [selectedPaciente, selectedPacienteId, loadInterviews]);
+
+  useEffect(() => {
+    if (viewMode !== "view" || !selectedInterview) return;
+    const { id: _id, ...rest } = selectedInterview;
+    setDraft(rest);
+  }, [selectedInterview, viewMode]);
 
   const handleSelectPaciente = (id: string) => {
     setSelectedPacienteId(id);
-    const paciente = patients.find((p) => p.id === id) || pacientesMock.find((p) => p.id === id);
-    setDraft((prev) => ({
-      ...createEmptyDraft(paciente),
-      parecerSocial: prev.parecerSocial,
-      resultadoTerapeutas: prev.resultadoTerapeutas,
-      dataResultadoTerapeutas: prev.dataResultadoTerapeutas,
-    }));
+    const paciente = patientOptions.find((p) => p.id === id);
+    setDraft(createEmptyDraft(paciente));
+    setSelectedInterviewId(null);
+    setEntrevistas([]);
+    setInterviewsError(null);
+    setSaveSuccessMessage(null);
+    setViewMode("list");
   };
 
   const handleDraftChange = <K extends keyof SocialInterviewDraft>(
@@ -551,41 +962,159 @@ export default function Entrevistas() {
   };
 
   const handleNovaEntrevista = () => {
-    const paciente = patients.find((p) => p.id === selectedPacienteId) || pacientesMock.find((p) => p.id === selectedPacienteId);
+    if (!canCreateInterview) {
+      toast({
+        title: "Permissao insuficiente",
+        description: "Seu perfil possui apenas visualizacao de entrevistas sociais.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedPacienteId) {
+      toast({
+        title: "Selecione um atendido",
+        description: "Escolha um atendido antes de iniciar uma nova entrevista social.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const paciente = patientOptions.find((p) => p.id === selectedPacienteId);
     setDraft(createEmptyDraft(paciente));
     setViewMode("create");
     setSelectedInterviewId(null);
+    setSaveSuccessMessage(null);
   };
 
   const handleSave = async () => {
-    if (!selectedPacienteId) return;
-    setLoading(true);
+    const isUpdate = Boolean(selectedInterviewId);
+    if (isUpdate && !canEditInterview) {
+      toast({
+        title: "Permissao insuficiente",
+        description: "Seu perfil nao pode editar entrevistas sociais.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isUpdate && !canCreateInterview) {
+      toast({
+        title: "Permissao insuficiente",
+        description: "Seu perfil nao pode criar entrevistas sociais.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedPacienteId) {
+      toast({
+        title: "Selecione um atendido",
+        description: "A entrevista precisa estar vinculada ao cadastro canonico do atendido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (usingMockData) {
+      toast({
+        title: "Persistencia bloqueada no modo mock",
+        description:
+          "Desative o fallback mock e recarregue os dados reais antes de salvar entrevistas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!draft.dataEntrevista) {
+      toast({
+        title: "Data obrigatoria",
+        description: "Informe a data da entrevista social.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    setSaveSuccessMessage(null);
     try {
       const payload = mapToApi(draft, selectedPacienteId);
-      if (selectedInterviewId) {
-        await apiService.updateSocialInterview(selectedInterviewId, payload);
+      let mutationResult: SocialInterviewMutationResponse | null = null;
+      if (isUpdate && selectedInterviewId) {
+        mutationResult = await apiService.updateSocialInterview(selectedInterviewId, payload);
       } else {
-        await apiService.createSocialInterview(payload);
+        mutationResult = await apiService.createSocialInterview(payload);
       }
-      await loadInterviews(selectedPacienteId);
-      setViewMode("view");
+      const reloaded = await loadInterviews(selectedPacienteId, {
+        preferredInterviewId: selectedInterviewId,
+        preserveCreateMode: true,
+        fallbackPaciente: selectedPaciente,
+      });
+      setViewMode(reloaded ? "view" : "list");
+      const savedAsDraft = mutationResult?.interview?.is_draft === true;
+      const transitionChanged = mutationResult?.status_transition?.changed === true;
+      const regressionPrevented =
+        mutationResult?.status_transition?.regression_prevented === true;
+      const successMessage =
+        mutationResult?.message ||
+        (savedAsDraft
+          ? "Entrevista social salva como rascunho."
+          : isUpdate
+            ? "Entrevista social atualizada com sucesso."
+            : "Entrevista social registrada com sucesso.");
+
+      setSaveSuccessMessage(successMessage);
+      toast({
+        title: savedAsDraft
+          ? "Rascunho salvo"
+          : isUpdate
+            ? "Entrevista atualizada"
+            : "Entrevista registrada",
+        description: savedAsDraft
+          ? "Status da jornada nao foi alterado porque a entrevista ainda esta em rascunho."
+          : regressionPrevented
+            ? "Entrevista concluida sem regressao de jornada; status mais avancado foi preservado."
+            : transitionChanged
+              ? "Entrevista concluida e status da jornada atualizado para entrevista_realizada."
+              : "Entrevista concluida sem necessidade de nova transicao de status.",
+      });
     } catch (error) {
-      console.error("Erro ao salvar entrevista social", error);
+      const message =
+        error instanceof Error ? error.message : "Nao foi possivel salvar a entrevista social.";
+      toast({
+        title: "Erro ao salvar",
+        description: message,
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   const handleVisualizar = (id: string) => {
+    const interview = entrevistas.find((ent) => ent.id === id);
+    if (!interview) return;
+    const { id: _id, ...rest } = interview;
+    setDraft(rest);
     setSelectedInterviewId(id);
     setViewMode("view");
+    setSaveSuccessMessage(null);
   };
 
   const handleEditar = () => {
+    if (!canEditInterview) {
+      toast({
+        title: "Permissao insuficiente",
+        description: "Seu perfil nao pode editar entrevistas sociais.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!selectedInterview) return;
     const { id: _id, ...rest } = selectedInterview;
     setDraft(rest);
     setViewMode("create");
+    setSaveSuccessMessage(null);
   };
 
   const handleExportar = () => {
@@ -598,168 +1127,310 @@ export default function Entrevistas() {
     comParecer: entrevistas.filter((e) => !!e.parecerSocial).length,
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    window.location.href = "/";
-  };
-
   return (
-    <Layout onLogout={handleLogout}>
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Entrevistas Sociais</h1>
-            <p className="text-muted-foreground text-sm">
-              Dossies sociais baseados no modelo ENTREVISTA SOCIAL - IDSLM
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleNovaEntrevista}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Entrevista Social
+    <div className="mx-auto w-full max-w-[1400px] space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Entrevistas Sociais</h1>
+          <p className="text-sm text-muted-foreground">
+            Etapa formal do Servico Social na jornada institucional do assistido.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={handleNovaEntrevista}
+            disabled={!canStartInterview || patientsLoading || !canCreateInterview}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Entrevista Social
+          </Button>
+          {selectedInterview ? (
+            <Button variant="outline" onClick={handleExportar}>
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimir / Exportar PDF
             </Button>
-            {selectedInterview ? (
-              <Button variant="outline" onClick={handleExportar}>
-                <Printer className="w-4 h-4 mr-2" />
-                Imprimir / Exportar PDF
-              </Button>
-            ) : null}
-          </div>
+          ) : null}
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Total de entrevistas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-primary">{estatisticas.total}</div>
-              <p className="text-sm text-muted-foreground">Dossies sociais cadastrados</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Com parecer social</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-emerald-600">{estatisticas.comParecer}</div>
-              <p className="text-sm text-muted-foreground">Registros com parecer preenchido</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Pendentes de resultado clinico</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-600">{estatisticas.pendentesResultado}</div>
-              <p className="text-sm text-muted-foreground">Aguardando resultado dos terapeutas</p>
-            </CardContent>
-          </Card>
-        </div>
+      {patientsError ? (
+        <Alert variant={usingMockData ? "default" : "destructive"}>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>
+            {usingMockData ? "Modo de desenvolvimento com mock" : "Falha ao carregar atendidos"}
+          </AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{patientsError}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void loadPatients();
+              }}
+            >
+              Tentar novamente
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-        <Tabs defaultValue="lista" value={viewMode === "list" ? "lista" : "detalhe"}>
-          <TabsList>
-            <TabsTrigger value="lista" onClick={() => setViewMode("list")}>
-              Lista
-            </TabsTrigger>
-            <TabsTrigger value="detalhe" disabled>
-              Detalhe / Formulario
-            </TabsTrigger>
-          </TabsList>
+      {saveSuccessMessage ? (
+        <Alert>
+          <AlertTitle>Entrevista social salva</AlertTitle>
+          <AlertDescription>{saveSuccessMessage}</AlertDescription>
+        </Alert>
+      ) : null}
 
-          <TabsContent value="lista">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Dossies de Entrevista Social
-                </CardTitle>
-                <CardDescription>Registros vinculados ao cadastro dos atendidos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4 flex flex-col md:flex-row md:items-center gap-3">
-                  <div className="w-full md:w-80">
-                    <label className="text-sm font-medium">Selecionar atendido</label>
-                    <select
-                      className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-                      value={selectedPacienteId}
-                      onChange={(e) => handleSelectPaciente(e.target.value)}
-                    >
-                      {(patients.length ? patients : pacientesMock).map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.nome || p.name || "Paciente"} - {p.cpfResponsavel || p.cpf || "sem CPF"}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Dados serao pre-preenchidos a partir do cadastro.
-                    </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-base">Total de entrevistas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">{estatisticas.total}</div>
+            <p className="text-xs text-muted-foreground">Dossies sociais cadastrados</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-base">Com parecer social</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-600">{estatisticas.comParecer}</div>
+            <p className="text-xs text-muted-foreground">Registros com parecer preenchido</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-base">Pendentes de resultado clinico</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">{estatisticas.pendentesResultado}</div>
+            <p className="text-xs text-muted-foreground">Aguardando resultado dos terapeutas</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid items-start gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <aside className="space-y-4 xl:sticky xl:top-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Selecao do atendido</CardTitle>
+              <CardDescription>Use o cadastro canonico para iniciar ou consultar dossies.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {patientsLoading ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando atendidos...
+                </p>
+              ) : null}
+              <div>
+                <label className="text-sm font-medium">Selecionar atendido</label>
+                <select
+                  className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                  value={selectedPacienteId}
+                  onChange={(e) => handleSelectPaciente(e.target.value)}
+                  disabled={patientsLoading || patientOptions.length === 0}
+                >
+                  {patientOptions.length === 0 ? (
+                    <option value="">Nenhum atendido disponivel</option>
+                  ) : (
+                    patientOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nome || p.name || "Paciente"} - {p.cpfResponsavel || p.cpf || "sem CPF"}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {selectedPaciente ? (
+                <div className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
+                  <InfoLine label="Atendido" value={selectedPaciente.nome || selectedPaciente.name || "-"} />
+                  <InfoLine label="Data de nascimento" value={formatDate(selectedPaciente.dataNascimento)} />
+                  <InfoLine label="Responsavel" value={selectedPaciente.responsavel || "-"} />
+                  <InfoLine label="Contato" value={selectedPaciente.telefones || "-"} />
+
+                  <div className="space-y-2 rounded-md border bg-background p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">Status da jornada</span>
+                      <Badge variant="secondary">{selectedJourneyStatusLabel}</Badge>
+                    </div>
+                    <InfoLine label="Etapa atual" value="Entrevista Social" />
+                    <InfoLine label="Proxima etapa prevista" value="Avaliacao Multidisciplinar" />
                   </div>
-                  <Button className="self-start" onClick={handleNovaEntrevista}>
-                    <Plus className="w-4 h-4 mr-2" />
+                </div>
+              ) : !patientsLoading ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum atendido selecionado. Carregue os dados para iniciar a etapa social.
+                </p>
+              ) : null}
+
+              <Button
+                className="w-full"
+                onClick={handleNovaEntrevista}
+                disabled={!canStartInterview || patientsLoading || !canCreateInterview}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Entrevista Social
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-4 w-4" />
+                Dossies cadastrados
+              </CardTitle>
+              <CardDescription>Entrevistas registradas para o atendido selecionado.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {!selectedPacienteId ? (
+                <p className="text-sm text-muted-foreground">
+                  Selecione um atendido para listar os dossies sociais registrados.
+                </p>
+              ) : null}
+
+              {selectedPacienteId && interviewsLoading ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando entrevistas...
+                </p>
+              ) : null}
+
+              {selectedPacienteId && interviewsError ? (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Erro na lista de entrevistas</AlertTitle>
+                  <AlertDescription className="space-y-2">
+                    <p>{interviewsError}</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        void loadInterviews(selectedPacienteId, {
+                          preferredInterviewId: selectedInterviewId,
+                          fallbackPaciente: selectedPaciente,
+                        });
+                      }}
+                    >
+                      Recarregar entrevistas
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              {selectedPacienteId &&
+              !interviewsLoading &&
+              !interviewsError &&
+              entrevistas.length === 0 ? (
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                  <p>Nenhuma entrevista registrada para este atendido.</p>
+                  <p className="mt-1">Inicie uma nova entrevista social para continuar o fluxo institucional.</p>
+                  <Button
+                    className="mt-3"
+                    size="sm"
+                    onClick={handleNovaEntrevista}
+                    disabled={!canStartInterview || !canCreateInterview}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
                     Nova Entrevista Social
                   </Button>
                 </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Atendido</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Assistente Social</TableHead>
-                      <TableHead>Resultado terapeutas</TableHead>
-                      <TableHead>Acoes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {entrevistas.map((ent) => (
-                      <TableRow key={ent.id}>
-                        <TableCell className="font-medium">{ent.atendidoNome}</TableCell>
-                        <TableCell>{formatDate(ent.dataEntrevista)}</TableCell>
-                        <TableCell>{ent.assistenteSocial || "-"}</TableCell>
-                        <TableCell>
+              ) : null}
+
+              {selectedPacienteId && !interviewsLoading && !interviewsError
+                ? entrevistas.map((ent) => (
+                    <div
+                      key={ent.id}
+                      className={`rounded-md border p-3 ${
+                        selectedInterviewId === ent.id ? "border-primary bg-primary/5" : "bg-background"
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{ent.atendidoNome || "Atendido sem nome"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(ent.dataEntrevista)} - {ent.assistenteSocial || "Assistente social nao informado"}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {ent.isDraft ? (
+                            <Badge variant="secondary">Rascunho</Badge>
+                          ) : (
+                            <Badge variant="outline">Concluida</Badge>
+                          )}
                           {ent.resultadoTerapeutas ? (
                             <Badge variant="outline">Integrado ao modulo clinico</Badge>
                           ) : (
                             <Badge variant="secondary">Aguardando</Badge>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleVisualizar(ent.id)}>
-                              Ver
-                            </Button>
-                            <Button size="sm" onClick={() => handleVisualizar(ent.id)}>
-                              Acompanhar
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <Button size="sm" variant="outline" onClick={() => handleVisualizar(ent.id)}>
+                          Visualizar
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                : null}
+            </CardContent>
+          </Card>
+        </aside>
 
-        {viewMode === "create" ? (
+        <div className="space-y-4">
+          {viewMode === "create" ? (
           <Card id="form-entrevista">
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle>Nova Entrevista Social</CardTitle>
-                <CardDescription>Formulario baseado no modelo oficial do IDSLM</CardDescription>
+                <CardTitle>{isEditingInterview ? "Editar Entrevista Social" : "Nova Entrevista Social"}</CardTitle>
+                <CardDescription>
+                  {isEditingInterview
+                    ? "Ajuste o dossie social sem perder o historico da etapa."
+                    : "Formulario baseado no modelo oficial do IDSLM."}
+                </CardDescription>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant="secondary">Etapa atual: Entrevista Social</Badge>
+                  <Badge variant="outline">Proxima etapa: Avaliacao Multidisciplinar</Badge>
+                </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setViewMode("list")}>
+                <Button
+                  variant="outline"
+                  onClick={() => setViewMode(selectedInterviewId ? "view" : "list")}
+                >
                   Cancelar
                 </Button>
-                <Button onClick={handleSave} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Salvar dossie
+                <Button onClick={handleSave} disabled={!canPersistInterview || saving}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {isEditingInterview ? "Salvar alteracoes" : "Salvar dossie"}
+                    </>
+                  )}
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-8">
+              {usingMockData ? (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Salvamento desabilitado</AlertTitle>
+                  <AlertDescription>
+                    A tela esta em modo mock para desenvolvimento. Recarregue os atendidos reais
+                    antes de persistir o dossie social.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
               <SectionTitle title="Cabecalho" description="Informacoes iniciais da entrevista social" />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -770,12 +1441,17 @@ export default function Entrevistas() {
                     onChange={(e) => {
                       handleSelectPaciente(e.target.value);
                     }}
+                    disabled={patientOptions.length === 0}
                   >
-                    {(patients.length ? patients : pacientesMock).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome || p.name}
-                      </option>
-                    ))}
+                    {patientOptions.length === 0 ? (
+                      <option value="">Nenhum atendido disponivel</option>
+                    ) : (
+                      patientOptions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome || p.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
                 <div>
@@ -1278,6 +1954,7 @@ export default function Entrevistas() {
                     value={draft.tipoMoradia}
                     onChange={(e) => handleDraftChange("tipoMoradia", e.target.value)}
                   >
+                    <option value="">Selecione</option>
                     {tiposMoradia.map((tipo) => (
                       <option key={tipo} value={tipo}>
                         {tipo}
@@ -1350,26 +2027,32 @@ export default function Entrevistas() {
                 placeholder="Descreva a analise social e encaminhamentos."
               />
 
-              <SectionTitle
-                title="Resultado da avaliacao dos terapeutas"
-                description="Campo sincronizavel com o modulo clinico/PIA"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Data da avaliacao</label>
-                  <Input
-                    type="date"
-                    value={draft.dataResultadoTerapeutas}
-                    onChange={(e) => handleDraftChange("dataResultadoTerapeutas", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Resultado / parecer clinico</label>
-                  <Textarea
-                    value={draft.resultadoTerapeutas}
-                    onChange={(e) => handleDraftChange("resultadoTerapeutas", e.target.value)}
-                    placeholder="Texto que tambem sera consumido pelo modulo clinico."
-                  />
+              <div className="space-y-3 rounded-md border border-dashed bg-muted/20 p-4">
+                <SectionTitle
+                  title="Integracao com avaliacao tecnica"
+                  description="Bloco de transicao para a etapa seguinte (nao substitui o parecer social)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use este campo somente para registrar devolutivas tecnicas que alimentam a
+                  continuidade do fluxo apos a entrevista social.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Data da avaliacao tecnica</label>
+                    <Input
+                      type="date"
+                      value={draft.dataResultadoTerapeutas}
+                      onChange={(e) => handleDraftChange("dataResultadoTerapeutas", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Resultado terapeutico / encaminhamento</label>
+                    <Textarea
+                      value={draft.resultadoTerapeutas}
+                      onChange={(e) => handleDraftChange("resultadoTerapeutas", e.target.value)}
+                      placeholder="Registro complementar para a proxima etapa."
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1380,13 +2063,26 @@ export default function Entrevistas() {
           <Card id="visualizacao-entrevista">
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle>Entrevista Social - {selectedInterview.atendidoNome}</CardTitle>
+                <CardTitle>
+                  Entrevista Social -{" "}
+                  {selectedInterview.atendidoNome || selectedPaciente?.nome || "Atendido"}
+                </CardTitle>
                 <CardDescription>
                   {formatDate(selectedInterview.dataEntrevista)} | {selectedInterview.assistenteSocial}
                 </CardDescription>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant="secondary">Status da jornada: {selectedJourneyStatusLabel}</Badge>
+                  <Badge variant="outline">Etapa atual: Entrevista Social</Badge>
+                  <Badge variant="outline">Proxima etapa: Avaliacao Multidisciplinar</Badge>
+                  {selectedInterview.isDraft ? (
+                    <Badge variant="secondary">Registro em rascunho</Badge>
+                  ) : (
+                    <Badge variant="outline">Entrevista concluida</Badge>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleEditar}>
+                <Button variant="outline" onClick={handleEditar} disabled={!canEditInterview}>
                   Editar
                 </Button>
                 <Button onClick={handleExportar}>
@@ -1555,25 +2251,93 @@ export default function Entrevistas() {
                 {selectedInterview.parecerSocial || "Nao preenchido"}
               </div>
 
-              <SectionTitle title="Resultado da avaliacao dos terapeutas" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <InfoLine
-                  label="Data da avaliacao"
-                  value={
-                    selectedInterview.dataResultadoTerapeutas
-                      ? formatDate(selectedInterview.dataResultadoTerapeutas)
-                      : "-"
-                  }
+              <div className="space-y-3 rounded-md border border-dashed bg-muted/20 p-4">
+                <SectionTitle
+                  title="Integracao com avaliacao tecnica"
+                  description="Informacao complementar para transicao de etapa"
                 />
-                <InfoLine
-                  label="Resultado"
-                  value={selectedInterview.resultadoTerapeutas || "Aguardando atualizacao pelo modulo clinico"}
-                />
+                <p className="text-xs text-muted-foreground">
+                  Este trecho apoia a passagem para avaliacao multidisciplinar e nao representa o
+                  nucleo do parecer social.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <InfoLine
+                    label="Data da avaliacao tecnica"
+                    value={
+                      selectedInterview.dataResultadoTerapeutas
+                        ? formatDate(selectedInterview.dataResultadoTerapeutas)
+                        : "-"
+                    }
+                  />
+                  <InfoLine
+                    label="Resultado terapeutico"
+                    value={
+                      selectedInterview.resultadoTerapeutas ||
+                      "Aguardando atualizacao pela avaliacao tecnica"
+                    }
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
         ) : null}
+
+        {viewMode === "list" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Detalhe da entrevista</CardTitle>
+              <CardDescription>
+                {selectedPacienteId
+                  ? "Selecione um dossie na coluna esquerda ou inicie uma nova entrevista social."
+                  : "Carregue e selecione um atendido para operar a etapa de entrevista social."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!selectedPacienteId ? (
+                <p className="text-sm text-muted-foreground">
+                  Sem atendido selecionado. A entrevista social depende do cadastro canonico da crianca.
+                </p>
+              ) : null}
+
+              {selectedPacienteId && interviewsLoading ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando dossies sociais...
+                </p>
+              ) : null}
+
+              {selectedPacienteId && interviewsError ? (
+                <p className="text-sm text-destructive">{interviewsError}</p>
+              ) : null}
+
+              {selectedPacienteId &&
+              !interviewsLoading &&
+              !interviewsError &&
+              entrevistas.length === 0 ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Ainda nao existe entrevista para este atendido. Inicie um novo dossie social.
+                  </p>
+                  <Button onClick={handleNovaEntrevista} disabled={!canStartInterview || !canCreateInterview}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nova Entrevista Social
+                  </Button>
+                </>
+              ) : null}
+
+              {selectedPacienteId &&
+              !interviewsLoading &&
+              !interviewsError &&
+              entrevistas.length > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Selecione um dossie na coluna esquerda para visualizar ou editar.
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+        </div>
       </div>
-    </Layout>
+    </div>
   );
 }

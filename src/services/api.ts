@@ -126,6 +126,39 @@ export type PatientCreateResponse = {
   message?: string;
 };
 
+export type SocialInterviewDTO = {
+  id: string;
+  patient_id?: string | null;
+  assistente_social?: string | null;
+  assistente_social_id?: string | null;
+  interview_date?: string | null;
+  interview_time?: string | null;
+  parecer_social?: string | null;
+  resultado_terapeutas?: string | null;
+  data_resultado_terapeutas?: string | null;
+  is_draft?: boolean;
+  payload?: Record<string, unknown> | null;
+  created_by?: string | number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type SocialInterviewStatusTransition = {
+  attempted?: boolean;
+  changed?: boolean;
+  previous_status?: string | null;
+  new_status?: string | null;
+  regression_prevented?: boolean;
+  reason?: string | null;
+};
+
+export type SocialInterviewMutationResponse = {
+  success: boolean;
+  message?: string;
+  interview?: SocialInterviewDTO;
+  status_transition?: SocialInterviewStatusTransition | null;
+};
+
 export type ApiRequestError = Error & {
   status?: number;
   existing_patient_id?: string | null;
@@ -1773,41 +1806,66 @@ class ApiService {
   }
 
   // ---------- ENTREVISTAS SOCIAIS ----------
-  async getSocialInterviews(patientId?: string) {
+  async getSocialInterviews(patientId?: string): Promise<SocialInterviewDTO[]> {
     const query = patientId ? `?patient_id=${encodeURIComponent(patientId)}` : "";
     const response = await fetch(`${API_BASE_URL}/social-interviews${query}`, {
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) {
-      throw new Error("Falha ao carregar entrevistas sociais");
+
+    const raw = await this.parseResponseOrThrow<unknown>(
+      response,
+      "Falha ao carregar entrevistas sociais"
+    );
+
+    if (Array.isArray(raw)) {
+      return raw as SocialInterviewDTO[];
     }
-    return response.json();
+
+    if (raw && typeof raw === "object") {
+      const payload = raw as Record<string, unknown>;
+      if (Array.isArray(payload.interviews)) {
+        return payload.interviews as SocialInterviewDTO[];
+      }
+      if (Array.isArray(payload.entrevistas)) {
+        return payload.entrevistas as SocialInterviewDTO[];
+      }
+      if (payload.interview && typeof payload.interview === "object") {
+        return [payload.interview as SocialInterviewDTO];
+      }
+    }
+
+    return [];
   }
 
-  async createSocialInterview(payload: Record<string, unknown>) {
+  async createSocialInterview(
+    payload: Record<string, unknown>
+  ): Promise<SocialInterviewMutationResponse> {
     const response = await fetch(`${API_BASE_URL}/social-interviews`, {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload),
     });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Erro ao criar entrevista social: ${text}`);
-    }
-    return response.json();
+
+    return this.parseResponseOrThrow<SocialInterviewMutationResponse>(
+      response,
+      "Erro ao criar entrevista social"
+    );
   }
 
-  async updateSocialInterview(id: string, payload: Record<string, unknown>) {
+  async updateSocialInterview(
+    id: string,
+    payload: Record<string, unknown>
+  ): Promise<SocialInterviewMutationResponse> {
     const response = await fetch(`${API_BASE_URL}/social-interviews/${id}`, {
       method: "PUT",
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload),
     });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Erro ao atualizar entrevista social: ${text}`);
-    }
-    return response.json();
+
+    return this.parseResponseOrThrow<SocialInterviewMutationResponse>(
+      response,
+      "Erro ao atualizar entrevista social"
+    );
   }
 }
 

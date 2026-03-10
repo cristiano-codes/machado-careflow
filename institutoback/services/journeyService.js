@@ -13,6 +13,23 @@ const VALID_JOURNEY_STATUSES = new Set([
   'desligado',
 ]);
 
+const JOURNEY_STATUS_FLOW = [
+  'em_fila_espera',
+  'entrevista_realizada',
+  'em_avaliacao',
+  'em_analise_vaga',
+  'aprovado',
+  'encaminhado',
+  'matriculado',
+  'ativo',
+  'inativo_assistencial',
+  'desligado',
+];
+
+const JOURNEY_STATUS_ORDER = new Map(
+  JOURNEY_STATUS_FLOW.map((status, index) => [status, index])
+);
+
 let historySchemaCache = null;
 
 function normalizeJourneyStatus(value) {
@@ -24,6 +41,23 @@ function normalizeUserIdInt(value) {
   const parsed = Number.parseInt(String(value), 10);
   if (!Number.isInteger(parsed) || parsed <= 0) return null;
   return parsed;
+}
+
+function getJourneyStatusRank(value) {
+  const normalized = normalizeJourneyStatus(value);
+  if (!normalized) return null;
+  return JOURNEY_STATUS_ORDER.has(normalized) ? JOURNEY_STATUS_ORDER.get(normalized) : null;
+}
+
+function isJourneyRegression(previousStatus, nextStatus) {
+  const previousRank = getJourneyStatusRank(previousStatus);
+  const nextRank = getJourneyStatusRank(nextStatus);
+
+  if (previousRank === null || nextRank === null) {
+    return false;
+  }
+
+  return nextRank < previousRank;
 }
 
 async function resolveHistorySchema(client) {
@@ -96,6 +130,7 @@ async function transitionPatientStatus({
   userIdInt,
   motivoNullable = null,
   client: externalClient = null,
+  preventRegression = false,
 }) {
   const normalizedPatientId = (patientId || '').toString().trim();
   const normalizedStatus = normalizeJourneyStatus(newStatus);
@@ -148,6 +183,18 @@ async function transitionPatientStatus({
         previousStatus,
         newStatus: normalizedStatus,
         changed: false,
+      };
+    }
+
+    if (preventRegression === true && isJourneyRegression(previousStatus, normalizedStatus)) {
+      if (ownsTransaction) {
+        await client.query('COMMIT');
+      }
+      return {
+        previousStatus,
+        newStatus: normalizedStatus,
+        changed: false,
+        regressionPrevented: true,
       };
     }
 
@@ -288,8 +335,11 @@ async function createInitialStatusHistory({
 
 module.exports = {
   VALID_JOURNEY_STATUSES,
+  JOURNEY_STATUS_FLOW,
   normalizeJourneyStatus,
   normalizeUserIdInt,
+  getJourneyStatusRank,
+  isJourneyRegression,
   transitionPatientStatus,
   createInitialStatusHistory,
 };
