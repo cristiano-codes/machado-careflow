@@ -97,6 +97,41 @@ export type LinkableProfessionalUser = {
   professional_id?: string | null;
 };
 
+export type PatientDTO = {
+  id: string;
+  nome: string;
+  cpf?: string | null;
+  telefone?: string | null;
+  email?: string | null;
+  dataNascimento?: string | null;
+  status?: string | null;
+  status_jornada?: string | null;
+};
+
+export type PatientCreatePayload = {
+  name: string;
+  date_of_birth?: string | null;
+  cpf?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  notes?: string | null;
+  status_jornada?: string | null;
+  status?: string | null;
+};
+
+export type PatientCreateResponse = {
+  success: boolean;
+  paciente?: PatientDTO;
+  existing_patient_id?: string;
+  message?: string;
+};
+
+export type ApiRequestError = Error & {
+  status?: number;
+  existing_patient_id?: string | null;
+  payload?: Record<string, unknown>;
+};
+
 export type RegistrationMode = "ADMIN_ONLY" | "PUBLIC_SIGNUP" | "INVITE_ONLY";
 export type PublicSignupDefaultStatus = "pendente" | "ativo";
 export type LinkPolicy =
@@ -1691,6 +1726,42 @@ class ApiService {
   }
 
   // ---------- PACIENTES ----------
+  async createPatient(payload: PatientCreatePayload): Promise<PatientCreateResponse> {
+    const response = await fetch(`${API_BASE_URL}/pacientes`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+    const raw = await this.parseJsonSafe(response);
+    const data =
+      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.notifyUnauthorized();
+      }
+      const error = new Error(
+        this.resolveHttpErrorMessage(response, data, "Falha ao criar pre-cadastro")
+      ) as ApiRequestError;
+      error.status = response.status;
+      error.existing_patient_id =
+        typeof data.existing_patient_id === "string" ? data.existing_patient_id : null;
+      error.payload = data;
+      throw error;
+    }
+
+    return {
+      success: data.success === true,
+      paciente:
+        data.paciente && typeof data.paciente === "object"
+          ? (data.paciente as PatientDTO)
+          : undefined,
+      existing_patient_id:
+        typeof data.existing_patient_id === "string" ? data.existing_patient_id : undefined,
+      message: typeof data.message === "string" ? data.message : undefined,
+    };
+  }
+
   async getPatients() {
     const response = await fetch(`${API_BASE_URL}/pacientes`, {
       headers: this.getAuthHeaders(),

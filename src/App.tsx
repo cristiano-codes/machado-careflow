@@ -92,7 +92,16 @@ const AppContent = () => {
             </ProtectedRoute>
           }
         />
-        <Route path="/pre-cadastro" element={<ProtectedRoute><PreCadastro /></ProtectedRoute>} />
+        <Route
+          path="/pre-cadastro"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute module="pre_cadastro" permission="view">
+                <PreCadastro />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
         <Route path="/entrevistas" element={<ProtectedRoute><Entrevistas /></ProtectedRoute>} />
         <Route path="/avaliacoes" element={<ProtectedRoute><Avaliacoes /></ProtectedRoute>} />
         <Route path="/analise-vagas" element={<ProtectedRoute><AnaliseVagas /></ProtectedRoute>} />

@@ -1,321 +1,341 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { Info, Loader2, UserPlus } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, User, MapPin, Phone, Mail } from "lucide-react";
-import { Layout } from "@/components/layout/Layout";
-import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  apiService,
+  type ApiRequestError,
+  type PatientCreatePayload,
+} from "@/services/api";
+
+type PreCadastroFormState = {
+  child_name: string;
+  date_of_birth: string;
+  responsible_name: string;
+  phone: string;
+  email: string;
+  referral_source: string;
+  cid_investigation: string;
+  notes: string;
+  cpf: string;
+};
+
+const INITIAL_FORM: PreCadastroFormState = {
+  child_name: "",
+  date_of_birth: "",
+  responsible_name: "",
+  phone: "",
+  email: "",
+  referral_source: "",
+  cid_investigation: "",
+  notes: "",
+  cpf: "",
+};
+
+function toOptionalTrimmed(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeCpf(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  return digits.length > 0 ? digits : null;
+}
+
+function buildInitialNotes(form: PreCadastroFormState): string | null {
+  const lines: string[] = [];
+
+  const responsibleName = toOptionalTrimmed(form.responsible_name);
+  if (responsibleName) {
+    lines.push(`Responsavel principal: ${responsibleName}`);
+  }
+
+  const referralSource = toOptionalTrimmed(form.referral_source);
+  if (referralSource) {
+    lines.push(`Origem do encaminhamento: ${referralSource}`);
+  }
+
+  const cidInvestigation = toOptionalTrimmed(form.cid_investigation);
+  if (cidInvestigation) {
+    lines.push(`CID em investigacao: ${cidInvestigation}`);
+  }
+
+  const shortNotes = toOptionalTrimmed(form.notes);
+  if (shortNotes) {
+    lines.push(`Observacoes iniciais: ${shortNotes}`);
+  }
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return lines.join("\n");
+}
+
 export default function PreCadastro() {
-  const [formData, setFormData] = useState({
-    nome: '',
-    cpf: '',
-    rg: '',
-    data_nascimento: '',
-    email: '',
-    telefone: '',
-    celular: '',
-    endereco: '',
-    numero: '',
-    complemento: '',
-    bairro: '',
-    cidade: '',
-    estado: '',
-    cep: '',
-    profissao: '',
-    estado_civil: '',
-    escolaridade: '',
-    convenio: '',
-    numero_convenio: '',
-    observacoes: ''
-  });
-  const {
-    toast
-  } = useToast();
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast({
-      title: "Pré-cadastro realizado!",
-      description: "Seus dados foram salvos com sucesso."
-    });
+  const [form, setForm] = useState<PreCadastroFormState>(INITIAL_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const updateField = <K extends keyof PreCadastroFormState>(
+    field: K,
+    value: PreCadastroFormState[K]
+  ) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    window.location.href = '/';
+
+  const resetForm = () => {
+    setForm(INITIAL_FORM);
   };
-  return <Layout onLogout={handleLogout}>
-      <div className="max-w-7xl mx-auto space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pré-Cadastro</h1>
-          <p className="text-muted-foreground text-sm">Cadastre informações básicas do assistido</p>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Dados Pessoais */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Dados Pessoais
-              </CardTitle>
-              <CardDescription>Informações básicas do assistido</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="nome">Nome Completo*</Label>
-                  <Input id="nome" value={formData.nome} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  nome: e.target.value
-                }))} required />
-                </div>
-                <div>
-                  <Label htmlFor="data_nascimento">Data de Nascimento*</Label>
-                  <Input id="data_nascimento" type="date" value={formData.data_nascimento} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  data_nascimento: e.target.value
-                }))} required />
-                </div>
-              </div>
+  const validateForm = () => {
+    if (!form.child_name.trim()) {
+      throw new Error("Informe o nome da crianca.");
+    }
+    if (!form.date_of_birth) {
+      throw new Error("Informe a data de nascimento.");
+    }
+    if (!form.responsible_name.trim()) {
+      throw new Error("Informe o nome do responsavel.");
+    }
+    if (!form.phone.trim()) {
+      throw new Error("Informe o telefone principal.");
+    }
+  };
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="cpf">CPF*</Label>
-                  <Input id="cpf" placeholder="000.000.000-00" value={formData.cpf} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  cpf: e.target.value
-                }))} required />
-                </div>
-                <div>
-                  <Label htmlFor="rg">RG</Label>
-                  <Input id="rg" value={formData.rg} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  rg: e.target.value
-                }))} />
-                </div>
-              </div>
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="estado_civil">Estado Civil</Label>
-                  <Select value={formData.estado_civil} onValueChange={value => setFormData(prev => ({
-                  ...prev,
-                  estado_civil: value
-                }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="solteiro">Solteiro(a)</SelectItem>
-                      <SelectItem value="casado">Casado(a)</SelectItem>
-                      <SelectItem value="divorciado">Divorciado(a)</SelectItem>
-                      <SelectItem value="viuvo">Viúvo(a)</SelectItem>
-                      <SelectItem value="uniao_estavel">União Estável</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="escolaridade">Escolaridade</Label>
-                  <Select value={formData.escolaridade} onValueChange={value => setFormData(prev => ({
-                  ...prev,
-                  escolaridade: value
-                }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fundamental">Ensino Fundamental</SelectItem>
-                      <SelectItem value="medio">Ensino Médio</SelectItem>
-                      <SelectItem value="superior">Ensino Superior</SelectItem>
-                      <SelectItem value="pos">Pós-graduação</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+    try {
+      validateForm();
+    } catch (error) {
+      toast({
+        title: "Validacao",
+        description: error instanceof Error ? error.message : "Dados obrigatorios ausentes.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-              <div>
-                <Label htmlFor="profissao">Profissão</Label>
-                <Input id="profissao" value={formData.profissao} onChange={e => setFormData(prev => ({
-                ...prev,
-                profissao: e.target.value
-              }))} />
-              </div>
-            </CardContent>
-          </Card>
+    const payload: PatientCreatePayload = {
+      name: form.child_name.trim(),
+      date_of_birth: form.date_of_birth,
+      cpf: normalizeCpf(form.cpf),
+      phone: form.phone.trim(),
+      email: toOptionalTrimmed(form.email),
+      notes: buildInitialNotes(form),
+      status: "pre_cadastro",
+      status_jornada: "em_fila_espera",
+    };
 
-          {/* Contato */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Phone className="w-5 h-5" />
-                Informações de Contato
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="email">E-mail*</Label>
-                  <Input id="email" type="email" value={formData.email} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  email: e.target.value
-                }))} required />
-                </div>
-                <div>
-                  <Label htmlFor="telefone">Telefone</Label>
-                  <Input id="telefone" placeholder="(11) 1234-5678" value={formData.telefone} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  telefone: e.target.value
-                }))} />
-                </div>
-              </div>
+    try {
+      setSubmitting(true);
+      const response = await apiService.createPatient(payload);
 
-              <div>
-                <Label htmlFor="celular">Celular*</Label>
-                <Input id="celular" placeholder="(11) 99999-9999" value={formData.celular} onChange={e => setFormData(prev => ({
-                ...prev,
-                celular: e.target.value
-              }))} required />
-              </div>
-            </CardContent>
-          </Card>
+      if (!response.success || !response.paciente?.id) {
+        throw new Error(response.message || "Nao foi possivel salvar o pre-cadastro.");
+      }
 
-          {/* Endereço */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="w-5 h-5" />
-                Endereço
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="cep">CEP</Label>
-                  <Input id="cep" placeholder="00000-000" value={formData.cep} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  cep: e.target.value
-                }))} />
-                </div>
-                <div className="md:col-span-2">
-                  <Label htmlFor="endereco">Endereço</Label>
-                  <Input id="endereco" value={formData.endereco} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  endereco: e.target.value
-                }))} />
-                </div>
-              </div>
+      toast({
+        title: "Pre-cadastro salvo",
+        description: `Assistido cadastrado na jornada com status inicial em fila de espera (ID ${response.paciente.id}).`,
+      });
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="numero">Número</Label>
-                  <Input id="numero" value={formData.numero} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  numero: e.target.value
-                }))} />
-                </div>
-                <div className="md:col-span-2">
-                  <Label htmlFor="complemento">Complemento</Label>
-                  <Input id="complemento" value={formData.complemento} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  complemento: e.target.value
-                }))} />
-                </div>
-              </div>
+      resetForm();
+    } catch (error) {
+      const typedError = error as ApiRequestError;
+      const duplicateId = typedError?.existing_patient_id || undefined;
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="bairro">Bairro</Label>
-                  <Input id="bairro" value={formData.bairro} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  bairro: e.target.value
-                }))} />
-                </div>
-                <div>
-                  <Label htmlFor="cidade">Cidade</Label>
-                  <Input id="cidade" value={formData.cidade} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  cidade: e.target.value
-                }))} />
-                </div>
-                <div>
-                  <Label htmlFor="estado">Estado</Label>
-                  <Select value={formData.estado} onValueChange={value => setFormData(prev => ({
-                  ...prev,
-                  estado: value
-                }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="UF" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SP">São Paulo</SelectItem>
-                      <SelectItem value="RJ">Rio de Janeiro</SelectItem>
-                      <SelectItem value="MG">Minas Gerais</SelectItem>
-                      {/* Adicionar outros estados conforme necessário */}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      if (typedError?.status === 409) {
+        toast({
+          title: "Cadastro duplicado",
+          description: duplicateId
+            ? `Ja existe um cadastro para esta crianca (ID ${duplicateId}). Verifique o registro existente antes de tentar novamente.`
+            : "Ja existe um cadastro para esta crianca. Verifique o registro existente antes de tentar novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-          {/* Convênio */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="w-5 h-5" />
-                Informações do Convênio
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="convenio">Convênio</Label>
-                  <Select value={formData.convenio} onValueChange={value => setFormData(prev => ({
-                  ...prev,
-                  convenio: value
-                }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o convênio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="particular">Particular</SelectItem>
-                      <SelectItem value="unimed">Unimed</SelectItem>
-                      <SelectItem value="bradesco">Bradesco Saúde</SelectItem>
-                      <SelectItem value="sulamerica">SulAmérica</SelectItem>
-                      <SelectItem value="amil">Amil</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="numero_convenio">Número do Convênio</Label>
-                  <Input id="numero_convenio" value={formData.numero_convenio} onChange={e => setFormData(prev => ({
-                  ...prev,
-                  numero_convenio: e.target.value
-                }))} />
-                </div>
-              </div>
+      toast({
+        title: "Erro ao salvar",
+        description:
+          typedError instanceof Error
+            ? typedError.message
+            : "Nao foi possivel concluir o pre-cadastro.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-              <div>
-                <Label htmlFor="observacoes">Observações</Label>
-                <Textarea id="observacoes" placeholder="Informações adicionais..." value={formData.observacoes} onChange={e => setFormData(prev => ({
-                ...prev,
-                observacoes: e.target.value
-              }))} />
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end gap-4">
-            <Button type="button" variant="outline">
-              Cancelar
-            </Button>
-            <Button type="submit">
-              Salvar Pré-Cadastro
-            </Button>
-          </div>
-        </form>
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Pre-Cadastro de Recepcao</h1>
+        <p className="text-sm text-muted-foreground">
+          Entrada institucional inicial para fila de espera. Entrevista social, avaliacao
+          tecnica e PIA acontecem nas etapas seguintes.
+        </p>
       </div>
-    </Layout>;
+
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>Fluxo oficial</AlertTitle>
+        <AlertDescription>
+          Este cadastro cria o registro canonico da crianca e inicia a jornada em{" "}
+          <strong>em fila de espera</strong>.
+        </AlertDescription>
+      </Alert>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Dados iniciais da crianca
+            </CardTitle>
+            <CardDescription>Somente dados necessarios para recepcao e entrada na fila.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="child_name">Nome da crianca *</Label>
+                <Input
+                  id="child_name"
+                  value={form.child_name}
+                  onChange={(event) => updateField("child_name", event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="date_of_birth">Data de nascimento *</Label>
+                <Input
+                  id="date_of_birth"
+                  type="date"
+                  value={form.date_of_birth}
+                  onChange={(event) => updateField("date_of_birth", event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="cpf">CPF da crianca (opcional)</Label>
+                <Input
+                  id="cpf"
+                  placeholder="000.000.000-00"
+                  value={form.cpf}
+                  onChange={(event) => updateField("cpf", event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cid_investigation">CID em investigacao (opcional)</Label>
+                <Input
+                  id="cid_investigation"
+                  placeholder="Ex.: F84.0"
+                  value={form.cid_investigation}
+                  onChange={(event) => updateField("cid_investigation", event.target.value)}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Contato do responsavel</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="responsible_name">Nome do responsavel *</Label>
+                <Input
+                  id="responsible_name"
+                  value={form.responsible_name}
+                  onChange={(event) => updateField("responsible_name", event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefone principal *</Label>
+                <Input
+                  id="phone"
+                  placeholder="(11) 99999-9999"
+                  value={form.phone}
+                  onChange={(event) => updateField("phone", event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-mail (opcional)</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => updateField("email", event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="referral_source">Origem do encaminhamento (opcional)</Label>
+                <Input
+                  id="referral_source"
+                  placeholder="Escola, UBS, familia, etc."
+                  value={form.referral_source}
+                  onChange={(event) => updateField("referral_source", event.target.value)}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Observacoes breves</CardTitle>
+            <CardDescription>
+              Use apenas apontamentos iniciais de recepcao. Dados detalhados ficam para a entrevista
+              social.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Observacoes (opcional)</Label>
+              <Textarea
+                id="notes"
+                placeholder="Escreva apenas informacoes iniciais relevantes."
+                value={form.notes}
+                onChange={(event) => updateField("notes", event.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-wrap justify-end gap-3">
+          <Button type="button" variant="outline" onClick={resetForm} disabled={submitting}>
+            Limpar formulario
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              "Salvar e entrar na fila"
+            )}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
 }
