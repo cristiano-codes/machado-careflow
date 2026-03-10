@@ -8,6 +8,7 @@ import { SettingsProvider } from "@/contexts/SettingsContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
 import { ProtectedRoute as PermissionProtectedRoute } from "@/components/common/ProtectedRoute";
+import { AGENDA_READ_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -84,7 +85,7 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={["agenda:view", "profissionais:view"]}
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
               >
                 <Agenda />
               </PermissionProtectedRoute>

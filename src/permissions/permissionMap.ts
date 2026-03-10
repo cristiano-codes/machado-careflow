@@ -29,6 +29,19 @@ export type RoutePermissionConfig = {
   match?: "exact" | "prefix";
 };
 
+export const AGENDA_READ_PRIMARY_SCOPES: string[] = ["agenda:view"];
+export const AGENDA_LEGACY_COMPAT_DEPRECATION_PHASE = "phase5_controlled_removal";
+export const AGENDA_LEGACY_COMPAT_ENABLED = true;
+// Compatibilidade temporaria da Fase 5: manter profissionais:view somente
+// para leitura da agenda ate a migracao completa dos perfis para agenda:view.
+export const AGENDA_READ_LEGACY_COMPAT_SCOPES: string[] = ["profissionais:view"];
+export function buildAgendaReadRequiredScopes(includeLegacy = AGENDA_LEGACY_COMPAT_ENABLED): string[] {
+  return includeLegacy
+    ? [...AGENDA_READ_PRIMARY_SCOPES, ...AGENDA_READ_LEGACY_COMPAT_SCOPES]
+    : [...AGENDA_READ_PRIMARY_SCOPES];
+}
+export const AGENDA_READ_REQUIRED_SCOPES: string[] = buildAgendaReadRequiredScopes();
+
 export const STANDARD_PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "access"] as const;
 export const ADMIN_MACRO_PERMISSION_NAMES = new Set([
   "admin_panel_access",
@@ -107,7 +120,7 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
     title: "Agenda",
     url: "/agenda",
     icon: Calendar,
-    requiredAnyScopes: ["agenda:view", "profissionais:view"],
+    requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES,
   },
   {
     id: "pre_cadastro",
@@ -203,7 +216,7 @@ export const ALLOW_MANAGEMENT_WITHOUT_MAIN_MODULE = false;
 
 export const ROUTE_PERMISSION_MAP: RoutePermissionConfig[] = [
   { path: "/dashboard", requiredAnyScopes: ["dashboard:view"] },
-  { path: "/agenda", requiredAnyScopes: ["agenda:view", "profissionais:view"] },
+  { path: "/agenda", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/pre-agendamento", requiredAnyScopes: ["pre_agendamento:view"] },
   { path: "/pre-cadastro", requiredAnyScopes: ["pre_cadastro:view"] },
   { path: "/entrevistas", requiredAnyScopes: ["entrevistas:view"] },

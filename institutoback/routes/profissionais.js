@@ -4,19 +4,359 @@ const router = express.Router();
 const pool = require('../config/pg');
 const bcrypt = require('bcryptjs');
 const authMiddleware = require('../middleware/auth');
-const { authorize, authorizeAny } = require('../middleware/authorize');
+const { authorize } = require('../middleware/authorize');
 const {
   DEFAULT_ACCESS_SETTINGS,
   readAccessSettings,
 } = require('../lib/accessSettings');
+const {
+  AGENDA_PRIMARY_SCOPE,
+  AGENDA_LEGACY_COMPAT_SCOPE,
+  AGENDA_LEGACY_COMPAT_PHASE,
+  AGENDA_LEGACY_FALLBACK_ENABLED,
+  AGENDA_READ_ACCESS_MODE,
+  AGENDA_LEGACY_SCOPE_REASON,
+  AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+  buildAgendaInstitutionalContext,
+  buildAgendaReadMetadata,
+  prepareAgendaWriteGuard,
+  prepareAgendaWriteValidation,
+  resolveAgendaWriteEnforcementMode,
+  summarizeWriteValidation,
+  toAgendaWriteValidationPayload,
+  normalizeJourneyStatus,
+} = require('../services/agendaInstitutionalService');
 
 router.use(authMiddleware);
 
 const authorizeProfessionalsView = authorize('profissionais', 'view');
-const authorizeAgendaOrProfessionalsView = authorizeAny([
-  { module: 'agenda', action: 'view' },
-  { module: 'profissionais', action: 'view' },
-]);
+const LEGACY_ACCESS_SIGNAL_THROTTLE_MS = 5 * 60 * 1000;
+function readAgendaBooleanFlag(envName, fallback = false) {
+  const rawValue = process.env[envName];
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return fallback;
+  }
+
+  return ['1', 'true', 'sim', 'yes', 'on'].includes(
+    rawValue.toString().trim().toLowerCase()
+  );
+}
+
+// Flags operacionais da agenda institucional (rollout controlado).
+const AGENDA_VALIDATE_WRITE_ALLOW_LEGACY = readAgendaBooleanFlag(
+  'AGENDA_VALIDATE_WRITE_ALLOW_LEGACY',
+  false
+);
+const AGENDA_CREATE_WRITE_ALLOW_LEGACY = readAgendaBooleanFlag(
+  'AGENDA_CREATE_WRITE_ALLOW_LEGACY',
+  false
+);
+const AGENDA_CREATE_PERSIST_ENABLED = readAgendaBooleanFlag(
+  'AGENDA_CREATE_PERSIST_ENABLED',
+  true
+);
+const AGENDA_CREATE_ALLOW_CONFIRMED_STATUS = readAgendaBooleanFlag(
+  'AGENDA_CREATE_ALLOW_CONFIRMED_STATUS',
+  false
+);
+const AGENDA_STATUS_UPDATE_ALLOW_LEGACY = readAgendaBooleanFlag(
+  'AGENDA_STATUS_UPDATE_ALLOW_LEGACY',
+  false
+);
+const AGENDA_STATUS_UPDATE_ENABLED = readAgendaBooleanFlag(
+  'AGENDA_STATUS_UPDATE_ENABLED',
+  true
+);
+
+let patientsStatusJornadaColumnCache = null;
+const legacyAgendaAccessSignalCache = new Map();
+
+function normalizeDateParam(value) {
+  const text = (value || '').toString().trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  return text;
+}
+
+function normalizeOptionalText(value) {
+  const text = (value || '').toString().trim();
+  return text || null;
+}
+
+function normalizeEntityId(value) {
+  const text = normalizeOptionalText(value);
+  return text || null;
+}
+
+function normalizeAppointmentStatus(value) {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (!normalized) return 'scheduled';
+
+  if (['scheduled', 'agendado'].includes(normalized)) return 'scheduled';
+  if (['confirmed', 'confirmado'].includes(normalized)) return 'confirmed';
+  if (['completed', 'concluido'].includes(normalized)) return 'completed';
+  if (['cancelled', 'cancelado'].includes(normalized)) return 'cancelled';
+  return null;
+}
+
+function normalizeAppointmentTime(value) {
+  const text = (value || '').toString().trim();
+  if (!text) return null;
+  if (!/^\d{2}:\d{2}$/.test(text)) return null;
+  if (parseTimeToMinutes(text) === null) return null;
+  return text;
+}
+
+function normalizeAppointmentStatusAction(value) {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (!normalized) return null;
+  if (['confirm', 'confirmar', 'confirmed', 'confirmado'].includes(normalized)) return 'confirm';
+  if (['cancel', 'cancelar', 'cancelled', 'cancelado'].includes(normalized)) return 'cancel';
+  return null;
+}
+
+function mapAppointmentStatusActionToTarget(action) {
+  if (action === 'confirm') return 'confirmed';
+  if (action === 'cancel') return 'cancelled';
+  return null;
+}
+
+function getAllowedCreateAppointmentStatuses() {
+  return AGENDA_CREATE_ALLOW_CONFIRMED_STATUS === true
+    ? ['scheduled', 'confirmed']
+    : ['scheduled'];
+}
+
+function buildCreateStatusAllowedLabel() {
+  const allowed = getAllowedCreateAppointmentStatuses();
+  if (allowed.includes('confirmed')) {
+    return 'scheduled/agendado ou confirmed/confirmado';
+  }
+  return 'scheduled/agendado';
+}
+
+function buildStatusUpdatePolicyPayload() {
+  return {
+    allowed_actions: ['confirm', 'cancel'],
+    allowed_target_statuses: ['confirmed', 'cancelled'],
+    immutable_statuses: ['completed'],
+    cancellation_guard_bypass_controlled: true,
+  };
+}
+
+function buildAgendaScopePayload(access, extra = {}) {
+  return {
+    ...buildAgendaReadMetadata({
+      accessMode: access?.mode || null,
+      compatibilityMode: access?.compatibilityMode === true,
+      legacyReason: access?.legacyReason || null,
+    }),
+    ...extra,
+  };
+}
+
+function canAccessAgendaWriteTarget(accessContext, professionalId) {
+  const isOwnAgenda =
+    accessContext?.linkedProfessionalId &&
+    String(accessContext.linkedProfessionalId) === String(professionalId);
+
+  if (
+    accessContext?.linkedProfessionalId &&
+    !isOwnAgenda &&
+    !accessContext?.canViewOtherProfessionals
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildAgendaWriteScopeWithSummary({
+  agendaReadAccess,
+  accessContext,
+  writeEnforcement,
+  validationPayload,
+  writeValidationSummary,
+}) {
+  return buildAgendaScopePayload(agendaReadAccess, {
+    professional_id: accessContext?.linkedProfessionalId || null,
+    can_view_all_professionals: accessContext?.canViewOtherProfessionals === true,
+    allow_professional_view_others: accessContext?.allowProfessionalViewOthers === true,
+    write_validation_summary: {
+      mode: validationPayload?.mode || writeEnforcement?.configuredMode || null,
+      effective_mode:
+        validationPayload?.effective_mode || writeEnforcement?.effectiveMode || null,
+      rollout_phase: validationPayload?.rollout_phase || writeEnforcement?.rolloutPhase || null,
+      hard_block_enabled: validationPayload?.hard_block_enabled === true,
+      legacy_mode_alias: validationPayload?.legacy_mode_alias || null,
+      ...(writeValidationSummary || {}),
+      blocking_active: validationPayload?.blocking_active === true,
+      enforcement_ready: validationPayload?.enforcement_ready === true,
+    },
+  });
+}
+
+function buildAgendaWriteOverridePayload({
+  requestedEnforcementMode,
+  canOverrideEnforcementMode,
+  writeEnforcement,
+}) {
+  return {
+    requested_enforcement_mode: requestedEnforcementMode || null,
+    override_allowed: canOverrideEnforcementMode === true,
+    override_ignored: Boolean(requestedEnforcementMode && !canOverrideEnforcementMode),
+    configured_mode: writeEnforcement?.configuredMode || null,
+    effective_mode: writeEnforcement?.effectiveMode || null,
+  };
+}
+
+function buildAgendaWriteResponseBase({
+  dryRun,
+  persisted,
+  endpoint,
+  blocked,
+  canProceed,
+  validationPayload,
+  resolvedContext,
+  overridePayload,
+  scopePayload,
+  extra = {},
+}) {
+  return {
+    dry_run: dryRun === true,
+    persisted: persisted === true,
+    endpoint: endpoint || null,
+    blocked: blocked === true,
+    can_proceed: canProceed === true,
+    validation: validationPayload || null,
+    resolved_context: resolvedContext || null,
+    override: overridePayload || null,
+    scope: scopePayload || null,
+    ...extra,
+  };
+}
+
+function buildAgendaLegacyWriteScopeError({
+  code,
+  message,
+  agendaReadAccess,
+  accessContext,
+}) {
+  return {
+    success: false,
+    code,
+    message,
+    scope: buildAgendaScopePayload(agendaReadAccess, {
+      professional_id: accessContext?.linkedProfessionalId || null,
+      can_view_all_professionals: accessContext?.canViewOtherProfessionals === true,
+      allow_professional_view_others: accessContext?.allowProfessionalViewOthers === true,
+    }),
+  };
+}
+
+function resolveAgendaReadAccess(user) {
+  const hasAgendaViewScope = hasPermissionScope(user?.permissions, AGENDA_PRIMARY_SCOPE);
+  if (hasAgendaViewScope) {
+    return {
+      allowed: true,
+      mode: AGENDA_READ_ACCESS_MODE.AGENDA_SCOPE,
+      compatibilityMode: false,
+      legacyReason: null,
+    };
+  }
+
+  if (AGENDA_LEGACY_FALLBACK_ENABLED !== true) {
+    return {
+      allowed: false,
+      mode: null,
+      compatibilityMode: false,
+      legacyReason: null,
+    };
+  }
+
+  // Compatibilidade temporaria: manter leitura com profissionais:view enquanto
+  // os perfis de agenda sao saneados para escopo explicito agenda:view.
+  const hasLegacyProfessionalsViewScope = hasPermissionScope(
+    user?.permissions,
+    AGENDA_LEGACY_COMPAT_SCOPE
+  );
+  if (hasLegacyProfessionalsViewScope) {
+    return {
+      allowed: true,
+      mode: AGENDA_READ_ACCESS_MODE.LEGACY_PROFISSIONAIS_SCOPE,
+      compatibilityMode: true,
+      legacyReason: AGENDA_LEGACY_SCOPE_REASON.LEGACY_SCOPE_PERMISSION,
+    };
+  }
+
+  if (isAdminUser(user)) {
+    return {
+      allowed: true,
+      mode: AGENDA_READ_ACCESS_MODE.ADMIN_ROLE_COMPAT,
+      compatibilityMode: true,
+      legacyReason: AGENDA_LEGACY_SCOPE_REASON.ADMIN_ROLE_COMPATIBILITY,
+    };
+  }
+
+  return {
+    allowed: false,
+    mode: null,
+    compatibilityMode: false,
+    legacyReason: null,
+  };
+}
+
+function emitLegacyAgendaAccessSignal(req, access) {
+  if (!access || access.compatibilityMode !== true) return;
+
+  const userId = (req?.user?.id || 'unknown').toString();
+  const accessMode = (access?.mode || 'unknown').toString();
+  const cacheKey = `${userId}:${accessMode}`;
+  const now = Date.now();
+  const lastSignalAt = legacyAgendaAccessSignalCache.get(cacheKey) || 0;
+
+  if (now - lastSignalAt < LEGACY_ACCESS_SIGNAL_THROTTLE_MS) {
+    return;
+  }
+
+  legacyAgendaAccessSignalCache.set(cacheKey, now);
+  if (legacyAgendaAccessSignalCache.size > 1000) {
+    for (const [key, timestamp] of legacyAgendaAccessSignalCache.entries()) {
+      if (now - timestamp > LEGACY_ACCESS_SIGNAL_THROTTLE_MS * 4) {
+        legacyAgendaAccessSignalCache.delete(key);
+      }
+    }
+  }
+
+  console.warn('[agenda][legacy_scope_compatibility_active]', {
+    user_id: userId,
+    access_mode: accessMode,
+    legacy_scope_reason: access?.legacyReason || null,
+    legacy_scope_required: AGENDA_LEGACY_COMPAT_SCOPE,
+    primary_scope_required: AGENDA_PRIMARY_SCOPE,
+    legacy_scope_deprecation_phase: AGENDA_LEGACY_COMPAT_PHASE,
+    endpoint: req?.originalUrl || req?.path || null,
+    method: req?.method || null,
+    timestamp: new Date(now).toISOString(),
+  });
+}
+
+function authorizeAgendaRead(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Nao autenticado' });
+  }
+
+  const access = resolveAgendaReadAccess(req.user);
+  if (!access.allowed) {
+    return res.status(403).json({
+      success: false,
+      message: 'Acesso negado para visualizar agenda',
+    });
+  }
+
+  req.agendaReadAccess = access;
+  emitLegacyAgendaAccessSignal(req, access);
+  return next();
+}
 
 function authorizeProfessionalsListView(req, res, next) {
   const forAgenda = ['1', 'true', 'sim', 'yes'].includes(
@@ -24,7 +364,7 @@ function authorizeProfessionalsListView(req, res, next) {
   );
 
   if (forAgenda) {
-    return authorizeAgendaOrProfessionalsView(req, res, next);
+    return authorizeAgendaRead(req, res, next);
   }
 
   return authorizeProfessionalsView(req, res, next);
@@ -146,6 +486,294 @@ async function getProfessionalsRuntimeConfig() {
       defaultEndTime: DEFAULT_DAY_END_TIME,
     };
   }
+}
+
+async function hasPatientsStatusJornadaColumn(client) {
+  if (patientsStatusJornadaColumnCache !== null) {
+    return patientsStatusJornadaColumnCache;
+  }
+
+  const db = client || pool;
+  try {
+    const { rows } = await db.query(
+      `
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'patients'
+          AND column_name = 'status_jornada'
+        LIMIT 1
+      `
+    );
+    patientsStatusJornadaColumnCache = rows.length > 0;
+  } catch (error) {
+    if (!['42P01', '42703'].includes(error?.code)) {
+      console.error(
+        '[profissionais] Falha ao verificar coluna patients.status_jornada:',
+        error
+      );
+    }
+    patientsStatusJornadaColumnCache = false;
+  }
+
+  return patientsStatusJornadaColumnCache;
+}
+
+async function resolveAgendaWriteProfessionalContext({ professionalId, client }) {
+  const normalizedProfessionalId = normalizeEntityId(professionalId);
+  if (!normalizedProfessionalId) {
+    return {
+      professionalId: null,
+      professionalName: null,
+      professionalRole: null,
+      professionalSpecialty: null,
+      source: 'not_provided',
+      found: null,
+    };
+  }
+
+  const db = client || pool;
+  const result = await db.query(
+    `
+      SELECT
+        p.id::text AS professional_id,
+        COALESCE(
+          u.name,
+          p.email,
+          p.funcao,
+          p.specialty,
+          'Profissional ' || p.id::text
+        ) AS professional_name,
+        COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+        p.specialty AS professional_specialty
+      FROM public.professionals p
+      LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+      LEFT JOIN public.users u
+        ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+      WHERE p.id::text = $1
+      LIMIT 1
+    `,
+    [normalizedProfessionalId]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return {
+      professionalId: normalizedProfessionalId,
+      professionalName: null,
+      professionalRole: null,
+      professionalSpecialty: null,
+      source: 'professional_not_found',
+      found: false,
+    };
+  }
+
+  return {
+    professionalId: row?.professional_id || normalizedProfessionalId,
+    professionalName: row?.professional_name || null,
+    professionalRole: row?.professional_role || null,
+    professionalSpecialty: row?.professional_specialty || null,
+    source: 'professionals.catalog',
+    found: true,
+  };
+}
+
+async function resolveAgendaWritePatientContext({
+  patientId,
+  journeyStatusInput = null,
+  client,
+}) {
+  const normalizedPatientId = normalizeEntityId(patientId);
+  const normalizedJourneyStatus = normalizeJourneyStatus(journeyStatusInput);
+  if (normalizedJourneyStatus) {
+    return {
+      patientId: normalizedPatientId,
+      patientName: null,
+      journeyStatus: normalizedJourneyStatus,
+      source: 'request_body_journey_status',
+      found: normalizedPatientId ? null : true,
+    };
+  }
+
+  if (!normalizedPatientId) {
+    return {
+      patientId: null,
+      patientName: null,
+      journeyStatus: null,
+      source: 'not_provided',
+      found: null,
+    };
+  }
+
+  const db = client || pool;
+  const hasStatusJornada = await hasPatientsStatusJornadaColumn(db);
+  const patientQuery = hasStatusJornada
+    ? `
+        SELECT
+          pa.id::text AS patient_id,
+          pa.name AS patient_name,
+          pa.status_jornada AS status_jornada
+        FROM public.patients pa
+        WHERE pa.id::text = $1
+        LIMIT 1
+      `
+    : `
+        SELECT
+          pa.id::text AS patient_id,
+          pa.name AS patient_name,
+          NULL::text AS status_jornada
+        FROM public.patients pa
+        WHERE pa.id::text = $1
+        LIMIT 1
+      `;
+
+  const result = await db.query(patientQuery, [normalizedPatientId]);
+  const row = result.rows[0];
+  if (!row) {
+    return {
+      patientId: normalizedPatientId,
+      patientName: null,
+      journeyStatus: null,
+      source: 'patient_not_found',
+      found: false,
+    };
+  }
+
+  const journeyStatusFromPatient = normalizeJourneyStatus(row?.status_jornada || null);
+  return {
+    patientId: row?.patient_id || normalizedPatientId,
+    patientName: row?.patient_name || null,
+    journeyStatus: journeyStatusFromPatient,
+    source: hasStatusJornada
+      ? journeyStatusFromPatient
+        ? 'patients.status_jornada'
+        : 'patients.status_jornada_missing'
+      : 'patients.status_jornada_column_unavailable',
+    found: true,
+  };
+}
+
+async function resolveAgendaWriteServiceContext({
+  serviceId,
+  serviceNameInput = null,
+  client,
+}) {
+  const normalizedServiceId = normalizeEntityId(serviceId);
+  const normalizedServiceName = normalizeOptionalText(serviceNameInput);
+
+  if (normalizedServiceName) {
+    return {
+      serviceId: normalizedServiceId,
+      serviceName: normalizedServiceName,
+      source: 'request_body_service_name',
+      found: normalizedServiceId ? null : true,
+    };
+  }
+
+  if (!normalizedServiceId) {
+    return {
+      serviceId: null,
+      serviceName: null,
+      source: 'not_provided',
+      found: null,
+    };
+  }
+
+  const db = client || pool;
+  const result = await db.query(
+    `
+      SELECT s.id::text AS service_id, s.name AS service_name
+      FROM public.services s
+      WHERE s.id::text = $1
+      LIMIT 1
+    `,
+    [normalizedServiceId]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return {
+      serviceId: normalizedServiceId,
+      serviceName: null,
+      source: 'service_not_found',
+      found: false,
+    };
+  }
+
+  return {
+    serviceId: row?.service_id || normalizedServiceId,
+    serviceName: row?.service_name || null,
+    source: 'services.catalog',
+    found: true,
+  };
+}
+
+async function resolveAgendaAppointmentContextById({
+  appointmentId,
+  professionalId,
+  client,
+}) {
+  const normalizedAppointmentId = normalizeEntityId(appointmentId);
+  const normalizedProfessionalId = normalizeEntityId(professionalId);
+  if (!normalizedAppointmentId || !normalizedProfessionalId) {
+    return null;
+  }
+
+  const db = client || pool;
+  const hasStatusJornada = await hasPatientsStatusJornadaColumn(db);
+  const patientJourneyProjection = hasStatusJornada
+    ? 'pa.status_jornada AS status_jornada, pa.status_jornada AS journey_status,'
+    : 'NULL::text AS status_jornada, NULL::text AS journey_status,';
+
+  const result = await db.query(
+    `
+      SELECT
+        a.id::text AS appointment_id,
+        a.id::text AS id,
+        a.professional_id::text AS professional_id,
+        COALESCE(
+          u.name,
+          p.email,
+          p.funcao,
+          p.specialty,
+          'Profissional ' || p.id::text
+        ) AS professional_name,
+        COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+        p.specialty AS professional_specialty,
+        a.appointment_date,
+        to_char(a.appointment_time, 'HH24:MI') AS appointment_time,
+        a.status AS appointment_status,
+        a.status,
+        a.notes,
+        pa.id::text AS patient_id,
+        pa.name AS patient_name,
+        ${patientJourneyProjection}
+        s.id::text AS service_id,
+        s.name AS service_name,
+        COALESCE(pr.nome, p.specialty, p.funcao, NULL) AS sector_responsible,
+        COALESCE(
+          u.name,
+          p.email,
+          p.funcao,
+          p.specialty,
+          NULL
+        ) AS responsible_name
+      FROM public.appointments a
+      JOIN public.patients pa ON pa.id = a.patient_id
+      JOIN public.professionals p ON p.id = a.professional_id
+      LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+      LEFT JOIN public.users u
+        ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+      LEFT JOIN public.services s ON s.id = a.service_id
+      WHERE a.id::text = $1
+        AND a.professional_id::text = $2
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [normalizedAppointmentId, normalizedProfessionalId]
+  );
+
+  return result.rows[0] || null;
 }
 
 function normalizeContractType(value, allowedContractTypes = DEFAULT_CONTRACT_TYPES) {
@@ -815,9 +1443,18 @@ router.get('/', authorizeProfessionalsListView, async (req, res) => {
       }));
     }
 
+    const agendaReadAccess = forAgenda
+      ? req.agendaReadAccess || resolveAgendaReadAccess(req.user)
+      : null;
+
     res.json({
       success: true,
       professionals,
+      ...(forAgenda
+        ? {
+            scope: buildAgendaScopePayload(agendaReadAccess),
+          }
+        : {}),
     });
   } catch (error) {
     console.error('Erro ao listar profissionais:', error);
@@ -2083,9 +2720,15 @@ router.patch('/link-requests/:id/reject', authorize('profissionais', 'edit'), as
   }
 });
 
-router.get('/me', authorizeAgendaOrProfessionalsView, async (req, res) => {
+router.get('/me', authorizeAgendaRead, async (req, res) => {
   try {
     const accessContext = await resolveAgendaAccessContext(req.user, pool);
+    const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+    const agendaReadMetadata = buildAgendaReadMetadata({
+      accessMode: agendaReadAccess?.mode || null,
+      compatibilityMode: agendaReadAccess?.compatibilityMode === true,
+      legacyReason: agendaReadAccess?.legacyReason || null,
+    });
 
     if (!accessContext.linkedProfessionalId) {
       return res.json({
@@ -2093,6 +2736,7 @@ router.get('/me', authorizeAgendaOrProfessionalsView, async (req, res) => {
         professional_id: null,
         can_view_all_professionals: false,
         allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+        ...agendaReadMetadata,
         professional: null,
       });
     }
@@ -2126,6 +2770,7 @@ router.get('/me', authorizeAgendaOrProfessionalsView, async (req, res) => {
       professional_id: accessContext.linkedProfessionalId,
       can_view_all_professionals: accessContext.canViewOtherProfessionals,
       allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+      ...agendaReadMetadata,
       professional: professionalResult.rows[0] || null,
     });
   } catch (error) {
@@ -2138,12 +2783,25 @@ router.get('/me', authorizeAgendaOrProfessionalsView, async (req, res) => {
 });
 
 // Agenda do profissional em um dia
-router.get('/:id/agenda', authorizeAgendaOrProfessionalsView, async (req, res) => {
+router.get('/:id/agenda', authorizeAgendaRead, async (req, res) => {
   const { id } = req.params;
-  const date = req.query.date || new Date().toISOString().split('T')[0];
+  const dateCandidate = req.query.date || new Date().toISOString().split('T')[0];
+  const date = normalizeDateParam(dateCandidate);
+
+  // Fase 5: futuros endpoints de escrita da agenda institucional (POST/PUT/PATCH)
+  // devem reutilizar prepareAgendaWriteValidation/prepareAgendaWriteGuard do service.
+
+  if (!date) {
+    return res.status(400).json({
+      success: false,
+      message: 'Parametro date invalido. Use YYYY-MM-DD.',
+    });
+  }
 
   try {
     const accessContext = await resolveAgendaAccessContext(req.user, pool);
+    const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+    const writeEnforcement = resolveAgendaWriteEnforcementMode();
     const isOwnAgenda =
       accessContext.linkedProfessionalId &&
       String(accessContext.linkedProfessionalId) === String(id);
@@ -2161,36 +2819,119 @@ router.get('/:id/agenda', authorizeAgendaOrProfessionalsView, async (req, res) =
       });
     }
 
+    const hasStatusJornada = await hasPatientsStatusJornadaColumn(pool);
+    const patientJourneyProjection = hasStatusJornada
+      ? 'pa.status_jornada AS status_jornada, pa.status_jornada AS journey_status,'
+      : 'NULL::text AS status_jornada, NULL::text AS journey_status,';
+
     const query = `
       SELECT
-        a.id,
-        a.professional_id,
+        a.id::text AS id,
+        a.id::text AS appointment_id,
+        a.professional_id::text AS professional_id,
+        COALESCE(
+          u.name,
+          p.email,
+          p.funcao,
+          p.specialty,
+          'Profissional ' || p.id::text
+        ) AS professional_name,
+        COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+        p.specialty AS professional_specialty,
         a.appointment_date,
-        a.appointment_time,
+        to_char(a.appointment_time, 'HH24:MI') AS appointment_time,
+        a.status AS appointment_status,
         a.status,
         a.notes,
-        pa.id AS patient_id,
+        pa.id::text AS patient_id,
         pa.name AS patient_name,
-        s.id AS service_id,
-        s.name AS service_name
-      FROM appointments a
-      JOIN patients pa ON pa.id = a.patient_id
-      LEFT JOIN services s ON s.id = a.service_id
-      WHERE a.professional_id = $1
-        AND a.appointment_date = $2
+        ${patientJourneyProjection}
+        s.id::text AS service_id,
+        s.name AS service_name,
+        COALESCE(pr.nome, p.specialty, p.funcao, NULL) AS sector_responsible,
+        COALESCE(
+          u.name,
+          p.email,
+          p.funcao,
+          p.specialty,
+          NULL
+        ) AS responsible_name
+      FROM public.appointments a
+      JOIN public.patients pa ON pa.id = a.patient_id
+      JOIN public.professionals p ON p.id = a.professional_id
+      LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+      LEFT JOIN public.users u
+        ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+      LEFT JOIN public.services s ON s.id = a.service_id
+      WHERE a.professional_id::text = $1
+        AND a.appointment_date = $2::date
       ORDER BY a.appointment_time ASC;
     `;
 
     const result = await pool.query(query, [id, date]);
+    const agenda = result.rows.map((row) => {
+      const journeyStatus = normalizeJourneyStatus(
+        row?.status_jornada || row?.journey_status || null
+      );
+      const institutionalContext = buildAgendaInstitutionalContext({
+        journeyStatus,
+        serviceName: row?.service_name || null,
+      });
+      // Fase 5: enforcement controlado preparado para futuras rotas de escrita (POST/PUT agenda).
+      const writeValidation = prepareAgendaWriteValidation({
+        journeyStatus,
+        serviceName: row?.service_name || null,
+        explicitEventType: institutionalContext.event_type_institutional,
+        enforcementMode: writeEnforcement.configuredMode,
+      });
+
+      return {
+        ...row,
+        ...institutionalContext,
+        write_validation_ready: true,
+        write_validation_mode: writeValidation.mode || writeEnforcement.configuredMode,
+        write_validation_effective_mode:
+          writeValidation.effectiveMode || writeEnforcement.effectiveMode,
+        write_validation_rollout_phase:
+          writeValidation.rolloutPhase || writeEnforcement.rolloutPhase,
+        write_validation_hard_block_enabled: writeValidation.hardBlockGloballyEnabled === true,
+        write_validation_legacy_mode_alias: writeValidation.legacyModeAlias || null,
+        write_validation_level: writeValidation.level || null,
+        write_validation_action: writeValidation.action || null,
+        write_validation_code: writeValidation.code || null,
+        write_validation_message: writeValidation.message || null,
+        write_validation_supported_levels:
+          Array.isArray(writeValidation.supportedLevels) &&
+          writeValidation.supportedLevels.length > 0
+            ? writeValidation.supportedLevels
+            : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+        write_validation_would_block: writeValidation.wouldBlockWhenEnforced === true,
+        write_validation_blocking_active: writeValidation.blockingActive === true,
+        write_validation_enforcement_ready: writeValidation.enforcementReady === true,
+        write_validation_should_warn: writeValidation.shouldWarn,
+        write_validation_should_block: writeValidation.shouldBlock,
+      };
+    });
+    const writeValidationSummary = summarizeWriteValidation(agenda);
 
     res.json({
       success: true,
-      agenda: result.rows,
-      scope: {
+      agenda,
+      scope: buildAgendaScopePayload(agendaReadAccess, {
         professional_id: accessContext.linkedProfessionalId,
         can_view_all_professionals: accessContext.canViewOtherProfessionals,
         allow_professional_view_others: accessContext.allowProfessionalViewOthers,
-      },
+        write_validation_summary: {
+          mode: writeEnforcement.configuredMode,
+          effective_mode: writeEnforcement.effectiveMode,
+          rollout_phase: writeEnforcement.rolloutPhase,
+          hard_block_enabled: writeEnforcement.hardBlockGloballyEnabled === true,
+          legacy_mode_alias: writeEnforcement.legacyModeAlias || null,
+          ...writeValidationSummary,
+          blocking_active: writeEnforcement.blockingActive,
+          enforcement_ready: true,
+        },
+      }),
     });
   } catch (error) {
     console.error('Erro ao buscar agenda do profissional:', error);
@@ -2272,6 +3013,931 @@ router.get('/:id', authorize('profissionais', 'view'), async (req, res) => {
       success: false,
       message: 'Erro ao buscar profissional',
     });
+  }
+});
+
+// Validacao de escrita da agenda (dry-run), sem persistencia.
+router.post('/:id/agenda/validate-write', authorizeAgendaRead, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+    const accessContext = await resolveAgendaAccessContext(req.user, pool);
+    const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+
+    // Protege contra IDOR: profissional nao pode validar escrita para agenda arbitraria.
+    if (!canAccessAgendaWriteTarget(accessContext, id)) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Acesso negado: voce nao pode validar escrita para agenda de outro profissional.',
+      });
+    }
+
+    // Reduz dependencia pratica do legado: endpoint de escrita pode optar por nao aceitar fallback.
+    if (agendaReadAccess?.compatibilityMode === true && AGENDA_VALIDATE_WRITE_ALLOW_LEGACY !== true) {
+      return res.status(403).json(
+        buildAgendaLegacyWriteScopeError({
+          code: 'agenda_write_validation_requires_primary_scope',
+          message:
+            'Validacao de escrita da agenda requer escopo primario agenda:view nesta fase de rollout.',
+          agendaReadAccess,
+          accessContext,
+        })
+      );
+    }
+
+    const patientId = normalizeEntityId(payload?.patient_id);
+    const serviceId = normalizeEntityId(payload?.service_id);
+    const journeyStatusInput = normalizeOptionalText(payload?.journey_status);
+    const serviceNameInput = normalizeOptionalText(payload?.service_name);
+    const explicitEventType = normalizeOptionalText(payload?.explicit_event_type);
+    const requestedEnforcementMode = normalizeOptionalText(payload?.enforcement_mode);
+    const canOverrideEnforcementMode =
+      isAdminUser(req.user) ||
+      hasPermissionScope(req.user?.permissions, 'agenda:enforcement_control');
+    const writeEnforcement = resolveAgendaWriteEnforcementMode({
+      requestedMode: canOverrideEnforcementMode ? requestedEnforcementMode : null,
+    });
+
+    if (!patientId && !journeyStatusInput) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_write_validation_patient_or_journey_required',
+        message: 'Informe patient_id ou journey_status para validar a coerencia de jornada.',
+      });
+    }
+
+    if (!serviceId && !serviceNameInput) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_write_validation_service_required',
+        message: 'Informe service_id ou service_name para classificar o tipo institucional.',
+      });
+    }
+
+    const patientContext = await resolveAgendaWritePatientContext({
+      patientId,
+      journeyStatusInput,
+      client: pool,
+    });
+    const serviceContext = await resolveAgendaWriteServiceContext({
+      serviceId,
+      serviceNameInput,
+      client: pool,
+    });
+    const guard = prepareAgendaWriteGuard({
+      journeyStatus: patientContext.journeyStatus,
+      serviceName: serviceContext.serviceName,
+      explicitEventType,
+      enforcementMode: writeEnforcement.configuredMode,
+      context: {
+        endpoint: 'POST /profissionais/:id/agenda/validate-write',
+        professional_id: String(id),
+        patient_id: patientContext.patientId,
+        service_id: serviceContext.serviceId,
+      },
+    });
+    const validationPayload = toAgendaWriteValidationPayload(guard);
+    const resolvedContext = {
+      professional_id: String(id),
+      patient_id: patientContext.patientId,
+      patient_name: patientContext.patientName,
+      journey_status: patientContext.journeyStatus,
+      journey_status_source: patientContext.source,
+      journey_status_found: patientContext.found,
+      service_id: serviceContext.serviceId,
+      service_name: serviceContext.serviceName,
+      service_name_source: serviceContext.source,
+      service_found: serviceContext.found,
+      explicit_event_type: explicitEventType,
+    };
+    const writeValidationSummary = summarizeWriteValidation([
+      {
+        write_validation_level: guard.level,
+        write_validation_should_block: guard.shouldBlock === true,
+      },
+    ]);
+    const scopePayload = buildAgendaWriteScopeWithSummary({
+      agendaReadAccess,
+      accessContext,
+      writeEnforcement,
+      validationPayload,
+      writeValidationSummary,
+    });
+    const responseBase = buildAgendaWriteResponseBase({
+      dryRun: true,
+      persisted: false,
+      endpoint: 'agenda_validate_write_v1',
+      blocked: guard.shouldBlock === true,
+      canProceed: guard.canProceed === true,
+      validationPayload,
+      resolvedContext,
+      overridePayload: buildAgendaWriteOverridePayload({
+        requestedEnforcementMode,
+        canOverrideEnforcementMode,
+        writeEnforcement,
+      }),
+      scopePayload,
+    });
+
+    if (guard.canProceed !== true) {
+      return res.status(guard.statusCode || 409).json({
+        success: false,
+        code: guard.blockPayload?.code || 'agenda_write_blocked_by_journey',
+        message:
+          guard.blockPayload?.message ||
+          validationPayload.message ||
+          'Validacao bloqueada pelo guard institucional no modo atual.',
+        ...responseBase,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: validationPayload.should_warn
+        ? 'Validacao concluida com alerta(s) no modo atual.'
+        : 'Validacao concluida sem bloqueio no modo atual.',
+      ...responseBase,
+    });
+  } catch (error) {
+    console.error('Erro ao validar escrita da agenda (dry-run):', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao validar escrita da agenda',
+    });
+  }
+});
+
+// Criacao real de agendamento institucional (escopo minimo, com persistencia).
+router.post('/:id/agenda', authorizeAgendaRead, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  let transactionStarted = false;
+
+  try {
+    if (AGENDA_CREATE_PERSIST_ENABLED !== true) {
+      return res.status(503).json({
+        success: false,
+        code: 'agenda_create_persist_disabled',
+        message: 'Criacao de agendamento institucional desabilitada por rollout controlado.',
+      });
+    }
+
+    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+    const accessContext = await resolveAgendaAccessContext(req.user, client);
+    const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+
+    // Protege contra IDOR: profissional nao pode criar agendamento para agenda arbitraria.
+    if (!canAccessAgendaWriteTarget(accessContext, id)) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Acesso negado: voce nao pode criar agendamento para agenda de outro profissional.',
+      });
+    }
+
+    // Compatibilidade legada da escrita permanece explicita e desligavel por ambiente.
+    if (agendaReadAccess?.compatibilityMode === true && AGENDA_CREATE_WRITE_ALLOW_LEGACY !== true) {
+      return res.status(403).json(
+        buildAgendaLegacyWriteScopeError({
+          code: 'agenda_create_requires_primary_scope',
+          message:
+            'Criacao de agendamento requer escopo primario agenda:view nesta fase de rollout.',
+          agendaReadAccess,
+          accessContext,
+        })
+      );
+    }
+
+    const patientId = normalizeEntityId(payload?.patient_id);
+    const serviceId = normalizeEntityId(payload?.service_id);
+    const appointmentDate = normalizeDateParam(payload?.appointment_date);
+    const appointmentTime = normalizeAppointmentTime(payload?.appointment_time);
+    const journeyStatusInput = normalizeOptionalText(payload?.journey_status);
+    const explicitEventType = normalizeOptionalText(payload?.explicit_event_type);
+    const notes = normalizeOptionalText(payload?.notes);
+    const statusInput = normalizeOptionalText(payload?.appointment_status || payload?.status);
+    const appointmentStatus = normalizeAppointmentStatus(statusInput);
+    const createAllowedStatuses = getAllowedCreateAppointmentStatuses();
+    const requestedEnforcementMode = normalizeOptionalText(payload?.enforcement_mode);
+    const canOverrideEnforcementMode =
+      isAdminUser(req.user) ||
+      hasPermissionScope(req.user?.permissions, 'agenda:enforcement_control');
+    const writeEnforcement = resolveAgendaWriteEnforcementMode({
+      requestedMode: canOverrideEnforcementMode ? requestedEnforcementMode : null,
+    });
+
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_create_patient_required',
+        message: 'Informe patient_id para criar o agendamento.',
+      });
+    }
+
+    if (!serviceId) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_create_service_required',
+        message: 'Informe service_id para classificar e persistir o agendamento.',
+      });
+    }
+
+    if (!appointmentDate) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_create_date_required',
+        message: 'Informe appointment_date valido no formato YYYY-MM-DD.',
+      });
+    }
+
+    if (!appointmentTime) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_create_time_required',
+        message: 'Informe appointment_time valido no formato HH:MM.',
+      });
+    }
+
+    if (!appointmentStatus) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_create_status_invalid',
+        message:
+          `status invalido para criacao. Use ${buildCreateStatusAllowedLabel()}.`,
+      });
+    }
+
+    if (!createAllowedStatuses.includes(appointmentStatus)) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_create_status_not_allowed',
+        message:
+          `status nao permitido na criacao nesta fase. Use ${buildCreateStatusAllowedLabel()}.`,
+        allowed_statuses: createAllowedStatuses,
+      });
+    }
+
+    const professionalContext = await resolveAgendaWriteProfessionalContext({
+      professionalId: id,
+      client,
+    });
+    if (professionalContext.found === false) {
+      return res.status(404).json({
+        success: false,
+        code: 'agenda_create_professional_not_found',
+        message: 'Profissional informado nao foi encontrado.',
+      });
+    }
+
+    const patientContext = await resolveAgendaWritePatientContext({
+      patientId,
+      journeyStatusInput,
+      client,
+    });
+    if (patientContext.found === false) {
+      return res.status(404).json({
+        success: false,
+        code: 'agenda_create_patient_not_found',
+        message: 'Assistido informado nao foi encontrado.',
+      });
+    }
+
+    const serviceContext = await resolveAgendaWriteServiceContext({
+      serviceId,
+      serviceNameInput: null,
+      client,
+    });
+    if (serviceContext.found === false) {
+      return res.status(404).json({
+        success: false,
+        code: 'agenda_create_service_not_found',
+        message: 'Servico informado nao foi encontrado.',
+      });
+    }
+
+    const guard = prepareAgendaWriteGuard({
+      journeyStatus: patientContext.journeyStatus,
+      serviceName: serviceContext.serviceName,
+      explicitEventType,
+      enforcementMode: writeEnforcement.configuredMode,
+      context: {
+        endpoint: 'POST /profissionais/:id/agenda',
+        professional_id: String(id),
+        patient_id: patientContext.patientId,
+        service_id: serviceContext.serviceId,
+        appointment_date: appointmentDate,
+        appointment_time: appointmentTime,
+      },
+    });
+    const validationPayload = toAgendaWriteValidationPayload(guard);
+    const resolvedContext = {
+      professional_id: professionalContext.professionalId || String(id),
+      professional_name: professionalContext.professionalName,
+      patient_id: patientContext.patientId,
+      patient_name: patientContext.patientName,
+      journey_status: patientContext.journeyStatus,
+      journey_status_source: patientContext.source,
+      journey_status_found: patientContext.found,
+      service_id: serviceContext.serviceId,
+      service_name: serviceContext.serviceName,
+      service_name_source: serviceContext.source,
+      service_found: serviceContext.found,
+      explicit_event_type: explicitEventType,
+    };
+    const writeValidationSummary = summarizeWriteValidation([
+      {
+        write_validation_level: guard.level,
+        write_validation_should_block: guard.shouldBlock === true,
+      },
+    ]);
+    const scopePayload = buildAgendaWriteScopeWithSummary({
+      agendaReadAccess,
+      accessContext,
+      writeEnforcement,
+      validationPayload,
+      writeValidationSummary,
+    });
+    const responseBase = buildAgendaWriteResponseBase({
+      dryRun: false,
+      persisted: false,
+      endpoint: 'agenda_create_v1',
+      blocked: guard.shouldBlock === true,
+      canProceed: guard.canProceed === true,
+      validationPayload,
+      resolvedContext,
+      overridePayload: buildAgendaWriteOverridePayload({
+        requestedEnforcementMode,
+        canOverrideEnforcementMode,
+        writeEnforcement,
+      }),
+      scopePayload,
+      extra: {
+        create_status_policy: {
+          default_status: 'scheduled',
+          allow_confirmed_on_create: AGENDA_CREATE_ALLOW_CONFIRMED_STATUS === true,
+          allowed_statuses: createAllowedStatuses,
+        },
+      },
+    });
+
+    if (guard.canProceed !== true) {
+      return res.status(guard.statusCode || 409).json({
+        success: false,
+        code: guard.blockPayload?.code || 'agenda_write_blocked_by_journey',
+        message:
+          guard.blockPayload?.message ||
+          validationPayload.message ||
+          'Criacao bloqueada pelo guard institucional no modo atual.',
+        ...responseBase,
+      });
+    }
+
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    // Mitiga corrida de concorrencia no mesmo slot sem exigir mudanca estrutural de schema.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      `agenda_slot:${String(id)}:${appointmentDate}:${appointmentTime}`,
+    ]);
+
+    const conflictResult = await client.query(
+      `
+        SELECT
+          a.id::text AS appointment_id,
+          a.status AS appointment_status
+        FROM public.appointments a
+        WHERE a.professional_id::text = $1
+          AND a.appointment_date = $2::date
+          AND a.appointment_time = $3::time
+          AND COALESCE(LOWER(a.status), '') NOT IN ('cancelled', 'cancelado')
+        LIMIT 1
+      `,
+      [String(id), appointmentDate, appointmentTime]
+    );
+
+    if (conflictResult.rows.length > 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_slot_conflict',
+        message:
+          'Conflito de horario: ja existe agendamento ativo para este profissional na data/hora informada.',
+        conflict: {
+          appointment_id: conflictResult.rows[0]?.appointment_id || null,
+          appointment_status: conflictResult.rows[0]?.appointment_status || null,
+        },
+        ...responseBase,
+      });
+    }
+
+    const insertResult = await client.query(
+      `
+        INSERT INTO public.appointments (
+          professional_id,
+          patient_id,
+          service_id,
+          appointment_date,
+          appointment_time,
+          status,
+          notes
+        )
+        VALUES (
+          (SELECT p.id FROM public.professionals p WHERE p.id::text = $1 LIMIT 1),
+          (SELECT pa.id FROM public.patients pa WHERE pa.id::text = $2 LIMIT 1),
+          (SELECT s.id FROM public.services s WHERE s.id::text = $3 LIMIT 1),
+          $4::date,
+          $5::time,
+          $6,
+          $7
+        )
+        RETURNING
+          id::text AS id,
+          id::text AS appointment_id,
+          professional_id::text AS professional_id,
+          appointment_date,
+          to_char(appointment_time, 'HH24:MI') AS appointment_time,
+          status AS appointment_status,
+          status,
+          notes,
+          patient_id::text AS patient_id,
+          service_id::text AS service_id
+      `,
+      [
+        professionalContext.professionalId || String(id),
+        patientContext.patientId,
+        serviceContext.serviceId,
+        appointmentDate,
+        appointmentTime,
+        appointmentStatus,
+        notes,
+      ]
+    );
+
+    const createdRow = insertResult.rows[0];
+    if (!createdRow) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(500).json({
+        success: false,
+        code: 'agenda_create_insert_failed',
+        message: 'Nao foi possivel persistir o agendamento.',
+        ...responseBase,
+      });
+    }
+
+    await client.query('COMMIT');
+    transactionStarted = false;
+
+    const appointment = {
+      ...createdRow,
+      professional_name: professionalContext.professionalName || null,
+      professional_role: professionalContext.professionalRole || null,
+      professional_specialty: professionalContext.professionalSpecialty || null,
+      patient_name: patientContext.patientName || null,
+      status_jornada: patientContext.journeyStatus || null,
+      journey_status: patientContext.journeyStatus || null,
+      service_name: serviceContext.serviceName || null,
+      sector_responsible:
+        professionalContext.professionalRole || professionalContext.professionalSpecialty || null,
+      responsible_name: professionalContext.professionalName || null,
+      event_type_institutional: guard.event_type_institutional || null,
+      event_type_institutional_source: guard.event_type_institutional_source || null,
+      journey_consistency_status: guard.journey_consistency_status || null,
+      journey_consistency_code: guard.journey_consistency_code || null,
+      journey_consistency_message: guard.journey_consistency_message || null,
+      journey_consistency_expected_statuses:
+        Array.isArray(guard.journey_consistency_expected_statuses) &&
+        guard.journey_consistency_expected_statuses.length > 0
+          ? guard.journey_consistency_expected_statuses
+          : null,
+      write_validation_ready: true,
+      write_validation_mode: validationPayload.mode || writeEnforcement.configuredMode,
+      write_validation_effective_mode:
+        validationPayload.effective_mode || writeEnforcement.effectiveMode,
+      write_validation_rollout_phase:
+        validationPayload.rollout_phase || writeEnforcement.rolloutPhase,
+      write_validation_hard_block_enabled: validationPayload.hard_block_enabled === true,
+      write_validation_legacy_mode_alias: validationPayload.legacy_mode_alias || null,
+      write_validation_level: validationPayload.level || null,
+      write_validation_action: validationPayload.action || null,
+      write_validation_code: validationPayload.reason_code || null,
+      write_validation_message: validationPayload.message || null,
+      write_validation_supported_levels:
+        Array.isArray(validationPayload.supported_levels) &&
+        validationPayload.supported_levels.length > 0
+          ? validationPayload.supported_levels
+          : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+      write_validation_would_block: validationPayload.would_block_when_enforced === true,
+      write_validation_blocking_active: validationPayload.blocking_active === true,
+      write_validation_enforcement_ready: validationPayload.enforcement_ready === true,
+      write_validation_should_warn: validationPayload.should_warn === true,
+      write_validation_should_block: validationPayload.should_block === true,
+    };
+
+    return res.status(201).json({
+      success: true,
+      message: validationPayload.should_warn
+        ? 'Agendamento criado com alerta(s) de coerencia de jornada.'
+        : 'Agendamento criado com sucesso.',
+      ...responseBase,
+      persisted: true,
+      appointment,
+    });
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Erro ao efetuar rollback na criacao da agenda:', rollbackError);
+      }
+    }
+    console.error('Erro ao criar agendamento institucional:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao criar agendamento institucional',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Atualizacao pontual de status do agendamento (confirmar/cancelar), sem CRUD amplo.
+router.post('/:id/agenda/:appointmentId/status', authorizeAgendaRead, async (req, res) => {
+  const { id, appointmentId } = req.params;
+  const client = await pool.connect();
+  let transactionStarted = false;
+
+  try {
+    if (AGENDA_STATUS_UPDATE_ENABLED !== true) {
+      return res.status(503).json({
+        success: false,
+        code: 'agenda_status_update_disabled',
+        message: 'Atualizacao de status da agenda desabilitada por rollout controlado.',
+      });
+    }
+
+    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+    const accessContext = await resolveAgendaAccessContext(req.user, client);
+    const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+    const normalizedAppointmentId = normalizeEntityId(appointmentId);
+
+    // Protege contra IDOR: profissional nao pode alterar status de agenda arbitraria.
+    if (!canAccessAgendaWriteTarget(accessContext, id)) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Acesso negado: voce nao pode alterar status de agendamento de outro profissional.',
+      });
+    }
+
+    if (!normalizedAppointmentId) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_status_update_appointment_required',
+        message: 'Informe appointmentId valido para atualizar status.',
+      });
+    }
+
+    // Compatibilidade legada da escrita permanece explicita e desligavel por ambiente.
+    if (agendaReadAccess?.compatibilityMode === true && AGENDA_STATUS_UPDATE_ALLOW_LEGACY !== true) {
+      return res.status(403).json(
+        buildAgendaLegacyWriteScopeError({
+          code: 'agenda_status_update_requires_primary_scope',
+          message:
+            'Atualizacao de status requer escopo primario agenda:view nesta fase de rollout.',
+          agendaReadAccess,
+          accessContext,
+        })
+      );
+    }
+
+    const actionInput = normalizeOptionalText(payload?.action);
+    const action = normalizeAppointmentStatusAction(actionInput);
+    const statusInput = normalizeOptionalText(payload?.appointment_status || payload?.status);
+    const normalizedStatusInput = normalizeAppointmentStatus(statusInput);
+    const statusTargetFromAction = mapAppointmentStatusActionToTarget(action);
+    const statusTargetFromStatus = ['confirmed', 'cancelled'].includes(normalizedStatusInput)
+      ? normalizedStatusInput
+      : null;
+
+    if (statusInput && !normalizedStatusInput) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_status_update_status_invalid',
+        message:
+          'status invalido. Use confirmed/confirmado ou cancelled/cancelado para esta operacao.',
+      });
+    }
+
+    if (statusInput && normalizedStatusInput && !statusTargetFromStatus) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_status_update_status_not_allowed',
+        message:
+          'status nao permitido nesta fase. Use apenas confirmed/confirmado ou cancelled/cancelado.',
+      });
+    }
+
+    if (!action && actionInput) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_status_update_action_invalid',
+        message: 'action invalida. Use confirm/confirmar ou cancel/cancelar.',
+      });
+    }
+
+    const targetStatus = statusTargetFromAction || statusTargetFromStatus;
+    if (!targetStatus) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_status_update_target_required',
+        message:
+          'Informe action (confirm/cancel) ou status (confirmed/cancelled) para atualizar o agendamento.',
+      });
+    }
+
+    if (statusTargetFromAction && statusTargetFromStatus && statusTargetFromAction !== statusTargetFromStatus) {
+      return res.status(400).json({
+        success: false,
+        code: 'agenda_status_update_action_status_conflict',
+        message: 'action e status informados sao conflitantes para esta operacao.',
+      });
+    }
+
+    const requestedEnforcementMode = normalizeOptionalText(payload?.enforcement_mode);
+    const canOverrideEnforcementMode =
+      isAdminUser(req.user) ||
+      hasPermissionScope(req.user?.permissions, 'agenda:enforcement_control');
+    const writeEnforcement = resolveAgendaWriteEnforcementMode({
+      requestedMode: canOverrideEnforcementMode ? requestedEnforcementMode : null,
+    });
+
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const appointmentContext = await resolveAgendaAppointmentContextById({
+      appointmentId: normalizedAppointmentId,
+      professionalId: id,
+      client,
+    });
+    if (!appointmentContext) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({
+        success: false,
+        code: 'agenda_status_update_not_found',
+        message: 'Agendamento informado nao foi encontrado para este profissional.',
+      });
+    }
+
+    const currentStatus = normalizeAppointmentStatus(
+      appointmentContext?.appointment_status || appointmentContext?.status
+    );
+    if (!currentStatus) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_status_update_current_status_invalid',
+        message: 'Status atual do agendamento nao reconhecido para transicao segura.',
+      });
+    }
+
+    if (currentStatus === 'completed') {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_status_update_transition_not_allowed',
+        message: 'Agendamento concluido nao pode ser alterado por esta operacao enxuta.',
+      });
+    }
+
+    if (currentStatus === 'cancelled' && targetStatus !== 'cancelled') {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_status_update_transition_not_allowed',
+        message: 'Agendamento cancelado nao pode ser confirmado novamente nesta fase.',
+      });
+    }
+
+    if (targetStatus === 'confirmed' && !['scheduled', 'confirmed'].includes(currentStatus)) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_status_update_transition_not_allowed',
+        message: `Transicao nao permitida de "${currentStatus}" para "${targetStatus}".`,
+      });
+    }
+
+    if (targetStatus === 'cancelled' && !['scheduled', 'confirmed', 'cancelled'].includes(currentStatus)) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_status_update_transition_not_allowed',
+        message: `Transicao nao permitida de "${currentStatus}" para "${targetStatus}".`,
+      });
+    }
+
+    const journeyStatusInput = normalizeOptionalText(payload?.journey_status);
+    const explicitEventType = normalizeOptionalText(payload?.explicit_event_type);
+    const journeyStatus = normalizeJourneyStatus(
+      journeyStatusInput ||
+        appointmentContext?.status_jornada ||
+        appointmentContext?.journey_status ||
+        null
+    );
+
+    const guard = prepareAgendaWriteGuard({
+      journeyStatus,
+      serviceName: appointmentContext?.service_name || null,
+      explicitEventType,
+      enforcementMode: writeEnforcement.configuredMode,
+      context: {
+        endpoint: 'POST /profissionais/:id/agenda/:appointmentId/status',
+        appointment_id: appointmentContext?.appointment_id || null,
+        professional_id: String(id),
+        patient_id: appointmentContext?.patient_id || null,
+        service_id: appointmentContext?.service_id || null,
+        current_status: currentStatus,
+        target_status: targetStatus,
+      },
+    });
+    const validationPayload = toAgendaWriteValidationPayload(guard);
+    const guardWouldBlock = guard.canProceed !== true;
+    // Politica operacional desta fase: cancelamento pode seguir com bypass controlado
+    // para evitar aprisionar agenda em casos de correção operacional.
+    const guardBlockBypassedForCancellation =
+      targetStatus === 'cancelled' && guardWouldBlock === true;
+    const blockedByGuard = guardWouldBlock && !guardBlockBypassedForCancellation;
+
+    const resolvedContext = {
+      professional_id: appointmentContext?.professional_id || String(id),
+      professional_name: appointmentContext?.professional_name || null,
+      appointment_id: appointmentContext?.appointment_id || null,
+      patient_id: appointmentContext?.patient_id || null,
+      patient_name: appointmentContext?.patient_name || null,
+      journey_status: journeyStatus,
+      journey_status_source: journeyStatusInput ? 'request_body_journey_status' : 'appointment_context',
+      journey_status_found: journeyStatus ? true : null,
+      service_id: appointmentContext?.service_id || null,
+      service_name: appointmentContext?.service_name || null,
+      service_name_source: 'appointment_context',
+      service_found: appointmentContext?.service_id ? true : null,
+      explicit_event_type: explicitEventType,
+      requested_action: action || null,
+      current_status: currentStatus,
+      target_status: targetStatus,
+      guard_block_bypassed_for_cancellation: guardBlockBypassedForCancellation,
+    };
+    const writeValidationSummary = summarizeWriteValidation([
+      {
+        write_validation_level: guard.level,
+        write_validation_should_block: blockedByGuard === true,
+      },
+    ]);
+    const scopePayload = buildAgendaWriteScopeWithSummary({
+      agendaReadAccess,
+      accessContext,
+      writeEnforcement,
+      validationPayload,
+      writeValidationSummary,
+    });
+    const responseBase = buildAgendaWriteResponseBase({
+      dryRun: false,
+      persisted: false,
+      endpoint: 'agenda_update_status_v1',
+      blocked: blockedByGuard,
+      canProceed: blockedByGuard !== true,
+      validationPayload,
+      resolvedContext,
+      overridePayload: buildAgendaWriteOverridePayload({
+        requestedEnforcementMode,
+        canOverrideEnforcementMode,
+        writeEnforcement,
+      }),
+      scopePayload,
+      extra: {
+        status_update_policy: buildStatusUpdatePolicyPayload(),
+      },
+    });
+
+    if (blockedByGuard) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(guard.statusCode || 409).json({
+        success: false,
+        code: guard.blockPayload?.code || 'agenda_write_blocked_by_journey',
+        message:
+          guard.blockPayload?.message ||
+          validationPayload.message ||
+          'Atualizacao de status bloqueada pelo guard institucional no modo atual.',
+        ...responseBase,
+      });
+    }
+
+    const finalStatus = targetStatus;
+    if (currentStatus !== targetStatus) {
+      const updateResult = await client.query(
+        `
+          UPDATE public.appointments
+          SET status = $1
+          WHERE id::text = $2
+            AND professional_id::text = $3
+          RETURNING id::text AS appointment_id
+        `,
+        [targetStatus, appointmentContext.appointment_id, String(id)]
+      );
+
+      if (updateResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({
+          success: false,
+          code: 'agenda_status_update_conflict',
+          message: 'Nao foi possivel atualizar status devido a conflito de concorrencia.',
+          ...responseBase,
+        });
+      }
+    }
+
+    await client.query('COMMIT');
+    transactionStarted = false;
+
+    const appointment = {
+      ...appointmentContext,
+      appointment_status: finalStatus,
+      status: finalStatus,
+      event_type_institutional: guard.event_type_institutional || null,
+      event_type_institutional_source: guard.event_type_institutional_source || null,
+      journey_consistency_status: guard.journey_consistency_status || null,
+      journey_consistency_code: guard.journey_consistency_code || null,
+      journey_consistency_message: guard.journey_consistency_message || null,
+      journey_consistency_expected_statuses:
+        Array.isArray(guard.journey_consistency_expected_statuses) &&
+        guard.journey_consistency_expected_statuses.length > 0
+          ? guard.journey_consistency_expected_statuses
+          : null,
+      write_validation_ready: true,
+      write_validation_mode: validationPayload.mode || writeEnforcement.configuredMode,
+      write_validation_effective_mode:
+        validationPayload.effective_mode || writeEnforcement.effectiveMode,
+      write_validation_rollout_phase:
+        validationPayload.rollout_phase || writeEnforcement.rolloutPhase,
+      write_validation_hard_block_enabled: validationPayload.hard_block_enabled === true,
+      write_validation_legacy_mode_alias: validationPayload.legacy_mode_alias || null,
+      write_validation_level: validationPayload.level || null,
+      write_validation_action: validationPayload.action || null,
+      write_validation_code: validationPayload.reason_code || null,
+      write_validation_message: validationPayload.message || null,
+      write_validation_supported_levels:
+        Array.isArray(validationPayload.supported_levels) &&
+        validationPayload.supported_levels.length > 0
+          ? validationPayload.supported_levels
+          : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+      write_validation_would_block: validationPayload.would_block_when_enforced === true,
+      write_validation_blocking_active: validationPayload.blocking_active === true,
+      write_validation_enforcement_ready: validationPayload.enforcement_ready === true,
+      write_validation_should_warn: validationPayload.should_warn === true,
+      write_validation_should_block: validationPayload.should_block === true,
+    };
+
+    return res.json({
+      success: true,
+      message:
+        currentStatus === targetStatus
+          ? 'Status ja estava aplicado; nenhuma alteracao de persistencia foi necessaria.'
+          : guardBlockBypassedForCancellation
+            ? 'Status atualizado com sucesso. Bloqueio de guard foi ignorado por tratar-se de cancelamento controlado.'
+            : validationPayload.should_warn
+              ? 'Status atualizado com alerta(s) de coerencia de jornada.'
+              : 'Status atualizado com sucesso.',
+      ...responseBase,
+      persisted: currentStatus !== targetStatus,
+      appointment,
+    });
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Erro ao efetuar rollback na atualizacao de status da agenda:', rollbackError);
+      }
+    }
+    console.error('Erro ao atualizar status do agendamento institucional:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao atualizar status do agendamento institucional',
+    });
+  } finally {
+    client.release();
   }
 });
 

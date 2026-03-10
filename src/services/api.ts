@@ -208,7 +208,321 @@ export type ProfessionalMeResponse = {
   professional_id: string | null;
   can_view_all_professionals: boolean;
   allow_professional_view_others: boolean;
+  access_mode?: AgendaReadAccessMode | null;
+  compatibility_mode?: boolean;
+  compatibility_notice?: string | null;
+  primary_scope_required?: string | null;
+  legacy_scope_required?: string | null;
+  legacy_scope_fallback_enabled?: boolean;
+  legacy_scope_active?: boolean;
+  legacy_scope_reason?: AgendaLegacyScopeReason | null;
+  legacy_scope_deprecation_phase?: string | null;
+  legacy_scope_requires_migration?: boolean;
+  legacy_scope_removal_ready?: boolean;
+  institutional_taxonomy_version?: string | null;
+  coherence_matrix_version?: string | null;
+  write_validation_ready?: boolean;
+  write_validation_mode?: AgendaWriteValidationMode | null;
+  write_validation_effective_mode?: AgendaWriteValidationMode | null;
+  write_validation_rollout_phase?: string | null;
+  write_validation_hard_block_enabled?: boolean;
+  write_validation_legacy_mode_alias?: AgendaWriteValidationMode | null;
+  write_validation_supported_levels?: AgendaWriteValidationLevel[] | null;
+  write_validation_blocking_active?: boolean;
+  write_validation_enforcement_ready?: boolean;
   professional: ProfessionalSummary | null;
+  message?: string;
+};
+
+export type AgendaReadAccessMode =
+  | "agenda_scope"
+  | "legacy_profissionais_scope"
+  | "admin_role_compat"
+  | string;
+
+export type AgendaLegacyScopeReason =
+  | "legacy_profissionais_scope_permission"
+  | "admin_role_compatibility"
+  | string;
+
+export type AgendaWriteValidationMode =
+  | "pre_enforcement"
+  | "observe_only"
+  | "soft_block"
+  | "hard_block"
+  | string;
+
+export type AgendaWriteValidationLevel = "info" | "warning" | "block_ready" | string;
+
+export type AgendaAppointmentStatus =
+  | "scheduled"
+  | "agendado"
+  | "confirmed"
+  | "confirmado"
+  | "completed"
+  | "concluido"
+  | "cancelled"
+  | "cancelado"
+  | string;
+
+export type AgendaInstitutionalEventType =
+  | "entrevista_social"
+  | "avaliacao_multidisciplinar"
+  | "analise_vaga"
+  | "devolutiva_institucional"
+  | "matricula_institucional"
+  | "acompanhamento_continuado"
+  | "devolutiva_matricula"
+  | string;
+
+export type AgendaInstitutionalEventTypeSource =
+  | "explicit_event_type"
+  | "journey_status_rule"
+  | "service_name_catalog"
+  | string;
+
+export type AgendaAppointmentItem = {
+  id: string;
+  appointment_id?: string | number | null;
+  professional_id?: string | number | null;
+  professional_name?: string | null;
+  professional_role?: string | null;
+  professional_specialty?: string | null;
+  appointment_date: string;
+  appointment_time: string;
+  appointment_status?: AgendaAppointmentStatus | null;
+  status?: AgendaAppointmentStatus | null;
+  notes?: string | null;
+  patient_id?: string | number | null;
+  patient_name?: string | null;
+  status_jornada?: string | null;
+  journey_status?: string | null;
+  service_id?: string | number | null;
+  service_name?: string | null;
+  event_type_institutional?: AgendaInstitutionalEventType | null;
+  event_type_institutional_source?: AgendaInstitutionalEventTypeSource | null;
+  journey_consistency_status?: "ok" | "warning" | "unknown" | string | null;
+  journey_consistency_code?: string | null;
+  journey_consistency_message?: string | null;
+  journey_consistency_expected_statuses?: string[] | null;
+  write_validation_ready?: boolean;
+  write_validation_mode?: AgendaWriteValidationMode | null;
+  write_validation_effective_mode?: AgendaWriteValidationMode | null;
+  write_validation_rollout_phase?: string | null;
+  write_validation_hard_block_enabled?: boolean;
+  write_validation_legacy_mode_alias?: AgendaWriteValidationMode | null;
+  write_validation_level?: AgendaWriteValidationLevel | null;
+  write_validation_action?: string | null;
+  write_validation_code?: string | null;
+  write_validation_message?: string | null;
+  write_validation_supported_levels?: AgendaWriteValidationLevel[] | null;
+  write_validation_would_block?: boolean;
+  write_validation_blocking_active?: boolean;
+  write_validation_enforcement_ready?: boolean;
+  write_validation_should_warn?: boolean;
+  write_validation_should_block?: boolean;
+  sector_responsible?: string | null;
+  responsible_name?: string | null;
+};
+
+export type AgendaWriteValidationSummary = {
+  mode?: AgendaWriteValidationMode | null;
+  effective_mode?: AgendaWriteValidationMode | null;
+  rollout_phase?: string | null;
+  hard_block_enabled?: boolean;
+  legacy_mode_alias?: AgendaWriteValidationMode | null;
+  total?: number;
+  info_count?: number;
+  warning_count?: number;
+  block_ready_count?: number;
+  would_block_count?: number;
+  blocking_count?: number;
+  blocking_active?: boolean;
+  enforcement_ready?: boolean;
+};
+
+export type AgendaWriteValidationPayload = {
+  mode?: AgendaWriteValidationMode | null;
+  effective_mode?: AgendaWriteValidationMode | null;
+  rollout_phase?: string | null;
+  hard_block_enabled?: boolean;
+  legacy_mode_alias?: AgendaWriteValidationMode | null;
+  level?: AgendaWriteValidationLevel | null;
+  action?: string | null;
+  reason_code?: string | null;
+  message?: string | null;
+  supported_levels?: AgendaWriteValidationLevel[] | null;
+  should_warn?: boolean;
+  should_block?: boolean;
+  would_block_when_enforced?: boolean;
+  blocking_active?: boolean;
+  enforcement_ready?: boolean;
+  taxonomy_version?: string | null;
+  coherence_matrix_version?: string | null;
+};
+
+export type AgendaWriteValidationRequest = {
+  patient_id?: string | number | null;
+  service_id?: string | number | null;
+  journey_status?: string | null;
+  service_name?: string | null;
+  explicit_event_type?: string | null;
+  enforcement_mode?: AgendaWriteValidationMode | null;
+};
+
+export type AgendaWriteValidationResolvedContext = {
+  professional_id?: string | null;
+  professional_name?: string | null;
+  appointment_id?: string | null;
+  patient_id?: string | null;
+  patient_name?: string | null;
+  journey_status?: string | null;
+  journey_status_source?: string | null;
+  journey_status_found?: boolean | null;
+  service_id?: string | null;
+  service_name?: string | null;
+  service_name_source?: string | null;
+  service_found?: boolean | null;
+  explicit_event_type?: string | null;
+  requested_action?: string | null;
+  current_status?: AgendaAppointmentStatus | null;
+  target_status?: AgendaAppointmentStatus | null;
+  guard_block_bypassed_for_cancellation?: boolean;
+};
+
+export type AgendaWriteValidationOverrideInfo = {
+  requested_enforcement_mode?: AgendaWriteValidationMode | null;
+  override_allowed?: boolean;
+  override_ignored?: boolean;
+  configured_mode?: AgendaWriteValidationMode | null;
+  effective_mode?: AgendaWriteValidationMode | null;
+};
+
+export type AgendaWriteValidationResponse = {
+  success: boolean;
+  dry_run: boolean;
+  endpoint?: string | null;
+  blocked: boolean;
+  can_proceed: boolean;
+  code?: string | null;
+  message?: string;
+  validation?: AgendaWriteValidationPayload | null;
+  resolved_context?: AgendaWriteValidationResolvedContext | null;
+  override?: AgendaWriteValidationOverrideInfo | null;
+  scope?: AgendaScopeContext | null;
+  http_status?: number;
+};
+
+export type AgendaSlotConflictInfo = {
+  appointment_id?: string | null;
+  appointment_status?: AgendaAppointmentStatus | null;
+};
+
+export type AgendaCreateRequest = {
+  patient_id: string | number;
+  service_id: string | number;
+  appointment_date: string;
+  appointment_time: string;
+  notes?: string | null;
+  status?: AgendaAppointmentStatus | null;
+  appointment_status?: AgendaAppointmentStatus | null;
+  journey_status?: string | null;
+  explicit_event_type?: string | null;
+  enforcement_mode?: AgendaWriteValidationMode | null;
+};
+
+export type AgendaCreateStatusPolicy = {
+  default_status?: AgendaAppointmentStatus | null;
+  allow_confirmed_on_create?: boolean;
+  allowed_statuses?: AgendaAppointmentStatus[] | null;
+};
+
+export type AgendaCreateResponse = {
+  success: boolean;
+  dry_run: boolean;
+  endpoint?: string | null;
+  persisted: boolean;
+  blocked: boolean;
+  can_proceed: boolean;
+  code?: string | null;
+  message?: string;
+  validation?: AgendaWriteValidationPayload | null;
+  resolved_context?: AgendaWriteValidationResolvedContext | null;
+  override?: AgendaWriteValidationOverrideInfo | null;
+  create_status_policy?: AgendaCreateStatusPolicy | null;
+  scope?: AgendaScopeContext | null;
+  appointment?: AgendaAppointmentItem | null;
+  conflict?: AgendaSlotConflictInfo | null;
+  http_status?: number;
+};
+
+export type AgendaStatusUpdateRequest = {
+  action?: "confirm" | "cancel" | string | null;
+  status?: AgendaAppointmentStatus | null;
+  appointment_status?: AgendaAppointmentStatus | null;
+  journey_status?: string | null;
+  explicit_event_type?: string | null;
+  enforcement_mode?: AgendaWriteValidationMode | null;
+};
+
+export type AgendaStatusUpdatePolicy = {
+  allowed_actions?: string[] | null;
+  allowed_target_statuses?: AgendaAppointmentStatus[] | null;
+  immutable_statuses?: AgendaAppointmentStatus[] | null;
+  cancellation_guard_bypass_controlled?: boolean;
+};
+
+export type AgendaStatusUpdateResponse = {
+  success: boolean;
+  dry_run: boolean;
+  endpoint?: string | null;
+  persisted: boolean;
+  blocked: boolean;
+  can_proceed: boolean;
+  code?: string | null;
+  message?: string;
+  validation?: AgendaWriteValidationPayload | null;
+  resolved_context?: AgendaWriteValidationResolvedContext | null;
+  override?: AgendaWriteValidationOverrideInfo | null;
+  status_update_policy?: AgendaStatusUpdatePolicy | null;
+  scope?: AgendaScopeContext | null;
+  appointment?: AgendaAppointmentItem | null;
+  http_status?: number;
+};
+
+export type AgendaScopeContext = {
+  professional_id?: string | null;
+  can_view_all_professionals?: boolean;
+  allow_professional_view_others?: boolean;
+  access_mode?: AgendaReadAccessMode | null;
+  compatibility_mode?: boolean;
+  compatibility_notice?: string | null;
+  primary_scope_required?: string | null;
+  legacy_scope_required?: string | null;
+  legacy_scope_fallback_enabled?: boolean;
+  legacy_scope_active?: boolean;
+  legacy_scope_reason?: AgendaLegacyScopeReason | null;
+  legacy_scope_deprecation_phase?: string | null;
+  legacy_scope_requires_migration?: boolean;
+  legacy_scope_removal_ready?: boolean;
+  institutional_taxonomy_version?: string | null;
+  coherence_matrix_version?: string | null;
+  write_validation_ready?: boolean;
+  write_validation_mode?: AgendaWriteValidationMode | null;
+  write_validation_effective_mode?: AgendaWriteValidationMode | null;
+  write_validation_rollout_phase?: string | null;
+  write_validation_hard_block_enabled?: boolean;
+  write_validation_legacy_mode_alias?: AgendaWriteValidationMode | null;
+  write_validation_supported_levels?: AgendaWriteValidationLevel[] | null;
+  write_validation_blocking_active?: boolean;
+  write_validation_enforcement_ready?: boolean;
+  write_validation_summary?: AgendaWriteValidationSummary | null;
+};
+
+export type ProfessionalAgendaResponse = {
+  success: boolean;
+  agenda: AgendaAppointmentItem[];
+  scope?: AgendaScopeContext | null;
   message?: string;
 };
 
@@ -314,7 +628,7 @@ class ApiService {
     return fallbackMessage;
   }
 
-  private async parseResponseOrThrow<T = any>(
+  private async parseResponseOrThrow<T = unknown>(
     response: Response,
     fallbackMessage: string
   ): Promise<T> {
@@ -326,6 +640,334 @@ class ApiService {
       throw new Error(this.resolveHttpErrorMessage(response, payload, fallbackMessage));
     }
     return payload as T;
+  }
+
+  private toNonEmptyString(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private parseAgendaWriteValidationSummary(raw: unknown): AgendaWriteValidationSummary | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      mode:
+        this.toNonEmptyString(payload.mode) as AgendaWriteValidationMode | null,
+      effective_mode:
+        this.toNonEmptyString(payload.effective_mode) as AgendaWriteValidationMode | null,
+      rollout_phase: this.toNonEmptyString(payload.rollout_phase),
+      hard_block_enabled: payload.hard_block_enabled === true,
+      legacy_mode_alias:
+        this.toNonEmptyString(payload.legacy_mode_alias) as AgendaWriteValidationMode | null,
+      total: typeof payload.total === "number" ? payload.total : undefined,
+      info_count: typeof payload.info_count === "number" ? payload.info_count : undefined,
+      warning_count: typeof payload.warning_count === "number" ? payload.warning_count : undefined,
+      block_ready_count:
+        typeof payload.block_ready_count === "number" ? payload.block_ready_count : undefined,
+      would_block_count:
+        typeof payload.would_block_count === "number" ? payload.would_block_count : undefined,
+      blocking_count:
+        typeof payload.blocking_count === "number" ? payload.blocking_count : undefined,
+      blocking_active: payload.blocking_active === true,
+      enforcement_ready: payload.enforcement_ready === true,
+    };
+  }
+
+  private parseAgendaScopeContext(raw: unknown): AgendaScopeContext | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      professional_id:
+        payload.professional_id === null || payload.professional_id === undefined
+          ? null
+          : String(payload.professional_id),
+      can_view_all_professionals: payload.can_view_all_professionals === true,
+      allow_professional_view_others: payload.allow_professional_view_others === true,
+      access_mode: this.toNonEmptyString(payload.access_mode) as AgendaReadAccessMode | null,
+      compatibility_mode: payload.compatibility_mode === true,
+      compatibility_notice: this.toNonEmptyString(payload.compatibility_notice),
+      primary_scope_required: this.toNonEmptyString(payload.primary_scope_required),
+      legacy_scope_required: this.toNonEmptyString(payload.legacy_scope_required),
+      legacy_scope_fallback_enabled: payload.legacy_scope_fallback_enabled === true,
+      legacy_scope_active: payload.legacy_scope_active === true,
+      legacy_scope_reason:
+        this.toNonEmptyString(payload.legacy_scope_reason) as AgendaLegacyScopeReason | null,
+      legacy_scope_deprecation_phase: this.toNonEmptyString(payload.legacy_scope_deprecation_phase),
+      legacy_scope_requires_migration: payload.legacy_scope_requires_migration === true,
+      legacy_scope_removal_ready: payload.legacy_scope_removal_ready === true,
+      institutional_taxonomy_version: this.toNonEmptyString(payload.institutional_taxonomy_version),
+      coherence_matrix_version: this.toNonEmptyString(payload.coherence_matrix_version),
+      write_validation_ready: payload.write_validation_ready === true,
+      write_validation_mode:
+        this.toNonEmptyString(payload.write_validation_mode) as AgendaWriteValidationMode | null,
+      write_validation_effective_mode:
+        this.toNonEmptyString(payload.write_validation_effective_mode) as
+          | AgendaWriteValidationMode
+          | null,
+      write_validation_rollout_phase: this.toNonEmptyString(payload.write_validation_rollout_phase),
+      write_validation_hard_block_enabled: payload.write_validation_hard_block_enabled === true,
+      write_validation_legacy_mode_alias:
+        this.toNonEmptyString(payload.write_validation_legacy_mode_alias) as
+          | AgendaWriteValidationMode
+          | null,
+      write_validation_supported_levels: Array.isArray(payload.write_validation_supported_levels)
+        ? (payload.write_validation_supported_levels
+            .filter((level): level is string => typeof level === "string")
+            .map((level) => level as AgendaWriteValidationLevel) as AgendaWriteValidationLevel[])
+        : null,
+      write_validation_blocking_active: payload.write_validation_blocking_active === true,
+      write_validation_enforcement_ready: payload.write_validation_enforcement_ready === true,
+      write_validation_summary: this.parseAgendaWriteValidationSummary(
+        payload.write_validation_summary
+      ),
+    };
+  }
+
+  private parseAgendaAppointmentItem(raw: unknown): AgendaAppointmentItem | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    const idCandidate = payload.id ?? payload.appointment_id;
+    if (idCandidate === null || idCandidate === undefined) return null;
+
+    const toIdString = (value: unknown): string | number | null =>
+      value === null || value === undefined ? null : String(value);
+
+    const appointmentDate = this.toNonEmptyString(payload.appointment_date) || "";
+    const appointmentTime = this.toNonEmptyString(payload.appointment_time) || "";
+
+    return {
+      id: String(idCandidate),
+      appointment_id: toIdString(payload.appointment_id),
+      professional_id: toIdString(payload.professional_id),
+      professional_name: this.toNonEmptyString(payload.professional_name),
+      professional_role: this.toNonEmptyString(payload.professional_role),
+      professional_specialty: this.toNonEmptyString(payload.professional_specialty),
+      appointment_date: appointmentDate,
+      appointment_time: appointmentTime,
+      appointment_status:
+        this.toNonEmptyString(payload.appointment_status) as AgendaAppointmentStatus | null,
+      status: this.toNonEmptyString(payload.status) as AgendaAppointmentStatus | null,
+      notes: this.toNonEmptyString(payload.notes),
+      patient_id: toIdString(payload.patient_id),
+      patient_name: this.toNonEmptyString(payload.patient_name),
+      status_jornada: this.toNonEmptyString(payload.status_jornada),
+      journey_status: this.toNonEmptyString(payload.journey_status),
+      service_id: toIdString(payload.service_id),
+      service_name: this.toNonEmptyString(payload.service_name),
+      event_type_institutional:
+        this.toNonEmptyString(payload.event_type_institutional) as
+          | AgendaInstitutionalEventType
+          | null,
+      event_type_institutional_source:
+        this.toNonEmptyString(payload.event_type_institutional_source) as
+          | AgendaInstitutionalEventTypeSource
+          | null,
+      journey_consistency_status:
+        this.toNonEmptyString(payload.journey_consistency_status) as
+          | "ok"
+          | "warning"
+          | "unknown"
+          | string
+          | null,
+      journey_consistency_code: this.toNonEmptyString(payload.journey_consistency_code),
+      journey_consistency_message: this.toNonEmptyString(payload.journey_consistency_message),
+      journey_consistency_expected_statuses: Array.isArray(
+        payload.journey_consistency_expected_statuses
+      )
+        ? payload.journey_consistency_expected_statuses
+            .filter((status): status is string => typeof status === "string")
+            .map((status) => status.trim())
+            .filter((status) => status.length > 0)
+        : null,
+      write_validation_ready: payload.write_validation_ready === true,
+      write_validation_mode:
+        this.toNonEmptyString(payload.write_validation_mode) as AgendaWriteValidationMode | null,
+      write_validation_effective_mode:
+        this.toNonEmptyString(payload.write_validation_effective_mode) as
+          | AgendaWriteValidationMode
+          | null,
+      write_validation_rollout_phase: this.toNonEmptyString(payload.write_validation_rollout_phase),
+      write_validation_hard_block_enabled: payload.write_validation_hard_block_enabled === true,
+      write_validation_legacy_mode_alias:
+        this.toNonEmptyString(payload.write_validation_legacy_mode_alias) as
+          | AgendaWriteValidationMode
+          | null,
+      write_validation_level:
+        this.toNonEmptyString(payload.write_validation_level) as AgendaWriteValidationLevel | null,
+      write_validation_action: this.toNonEmptyString(payload.write_validation_action),
+      write_validation_code: this.toNonEmptyString(payload.write_validation_code),
+      write_validation_message: this.toNonEmptyString(payload.write_validation_message),
+      write_validation_supported_levels: Array.isArray(payload.write_validation_supported_levels)
+        ? payload.write_validation_supported_levels
+            .filter((level): level is string => typeof level === "string")
+            .map((level) => level as AgendaWriteValidationLevel)
+        : null,
+      write_validation_would_block: payload.write_validation_would_block === true,
+      write_validation_blocking_active: payload.write_validation_blocking_active === true,
+      write_validation_enforcement_ready: payload.write_validation_enforcement_ready === true,
+      write_validation_should_warn: payload.write_validation_should_warn === true,
+      write_validation_should_block: payload.write_validation_should_block === true,
+      sector_responsible: this.toNonEmptyString(payload.sector_responsible),
+      responsible_name: this.toNonEmptyString(payload.responsible_name),
+    };
+  }
+
+  private parseAgendaWriteValidationPayload(raw: unknown): AgendaWriteValidationPayload | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      mode:
+        this.toNonEmptyString(payload.mode) as AgendaWriteValidationMode | null,
+      effective_mode:
+        this.toNonEmptyString(payload.effective_mode) as AgendaWriteValidationMode | null,
+      rollout_phase: this.toNonEmptyString(payload.rollout_phase),
+      hard_block_enabled: payload.hard_block_enabled === true,
+      legacy_mode_alias:
+        this.toNonEmptyString(payload.legacy_mode_alias) as AgendaWriteValidationMode | null,
+      level:
+        this.toNonEmptyString(payload.level) as AgendaWriteValidationLevel | null,
+      action: this.toNonEmptyString(payload.action),
+      reason_code: this.toNonEmptyString(payload.reason_code),
+      message: this.toNonEmptyString(payload.message),
+      supported_levels: Array.isArray(payload.supported_levels)
+        ? (payload.supported_levels
+            .filter((level): level is string => typeof level === "string")
+            .map((level) => level as AgendaWriteValidationLevel) as AgendaWriteValidationLevel[])
+        : null,
+      should_warn: payload.should_warn === true,
+      should_block: payload.should_block === true,
+      would_block_when_enforced: payload.would_block_when_enforced === true,
+      blocking_active: payload.blocking_active === true,
+      enforcement_ready: payload.enforcement_ready === true,
+      taxonomy_version: this.toNonEmptyString(payload.taxonomy_version),
+      coherence_matrix_version: this.toNonEmptyString(payload.coherence_matrix_version),
+    };
+  }
+
+  private parseAgendaWriteValidationResolvedContext(
+    raw: unknown
+  ): AgendaWriteValidationResolvedContext | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      professional_id: this.toNonEmptyString(payload.professional_id),
+      professional_name: this.toNonEmptyString(payload.professional_name),
+      appointment_id: this.toNonEmptyString(payload.appointment_id),
+      patient_id: this.toNonEmptyString(payload.patient_id),
+      patient_name: this.toNonEmptyString(payload.patient_name),
+      journey_status: this.toNonEmptyString(payload.journey_status),
+      journey_status_source: this.toNonEmptyString(payload.journey_status_source),
+      journey_status_found:
+        typeof payload.journey_status_found === "boolean"
+          ? payload.journey_status_found
+          : payload.journey_status_found === null
+            ? null
+            : undefined,
+      service_id: this.toNonEmptyString(payload.service_id),
+      service_name: this.toNonEmptyString(payload.service_name),
+      service_name_source: this.toNonEmptyString(payload.service_name_source),
+      service_found:
+        typeof payload.service_found === "boolean"
+          ? payload.service_found
+          : payload.service_found === null
+            ? null
+            : undefined,
+      explicit_event_type: this.toNonEmptyString(payload.explicit_event_type),
+      requested_action: this.toNonEmptyString(payload.requested_action),
+      current_status:
+        this.toNonEmptyString(payload.current_status) as AgendaAppointmentStatus | null,
+      target_status:
+        this.toNonEmptyString(payload.target_status) as AgendaAppointmentStatus | null,
+      guard_block_bypassed_for_cancellation:
+        payload.guard_block_bypassed_for_cancellation === true,
+    };
+  }
+
+  private parseAgendaWriteValidationOverrideInfo(
+    raw: unknown
+  ): AgendaWriteValidationOverrideInfo | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      requested_enforcement_mode:
+        this.toNonEmptyString(payload.requested_enforcement_mode) as
+          | AgendaWriteValidationMode
+          | null,
+      override_allowed: payload.override_allowed === true,
+      override_ignored: payload.override_ignored === true,
+      configured_mode:
+        this.toNonEmptyString(payload.configured_mode) as AgendaWriteValidationMode | null,
+      effective_mode:
+        this.toNonEmptyString(payload.effective_mode) as AgendaWriteValidationMode | null,
+    };
+  }
+
+  private parseAgendaSlotConflict(raw: unknown): AgendaSlotConflictInfo | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      appointment_id: this.toNonEmptyString(payload.appointment_id),
+      appointment_status:
+        this.toNonEmptyString(payload.appointment_status) as AgendaAppointmentStatus | null,
+    };
+  }
+
+  private parseAgendaCreateStatusPolicy(raw: unknown): AgendaCreateStatusPolicy | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      default_status:
+        this.toNonEmptyString(payload.default_status) as AgendaAppointmentStatus | null,
+      allow_confirmed_on_create: payload.allow_confirmed_on_create === true,
+      allowed_statuses: Array.isArray(payload.allowed_statuses)
+        ? (payload.allowed_statuses
+            .filter((status): status is string => typeof status === "string")
+            .map((status) => status as AgendaAppointmentStatus) as AgendaAppointmentStatus[])
+        : null,
+    };
+  }
+
+  private parseAgendaStatusUpdatePolicy(raw: unknown): AgendaStatusUpdatePolicy | null {
+    if (!raw || typeof raw !== "object") return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+      allowed_actions: Array.isArray(payload.allowed_actions)
+        ? payload.allowed_actions.filter((action): action is string => typeof action === "string")
+        : null,
+      allowed_target_statuses: Array.isArray(payload.allowed_target_statuses)
+        ? (payload.allowed_target_statuses
+            .filter((status): status is string => typeof status === "string")
+            .map((status) => status as AgendaAppointmentStatus) as AgendaAppointmentStatus[])
+        : null,
+      immutable_statuses: Array.isArray(payload.immutable_statuses)
+        ? (payload.immutable_statuses
+            .filter((status): status is string => typeof status === "string")
+            .map((status) => status as AgendaAppointmentStatus) as AgendaAppointmentStatus[])
+        : null,
+      cancellation_guard_bypass_controlled:
+        payload.cancellation_guard_bypass_controlled === true,
+    };
+  }
+
+  private parseAgendaWriteCommonResponse(
+    data: Record<string, unknown>,
+    response: Response
+  ): AgendaWriteValidationResponse {
+    return {
+      success: data?.success === true,
+      dry_run: data?.dry_run === true,
+      endpoint: this.toNonEmptyString(data?.endpoint),
+      blocked: data?.blocked === true,
+      can_proceed: data?.can_proceed === true,
+      code: this.toNonEmptyString(data?.code),
+      message: this.toNonEmptyString(data?.message) || undefined,
+      validation: this.parseAgendaWriteValidationPayload(data?.validation),
+      resolved_context: this.parseAgendaWriteValidationResolvedContext(data?.resolved_context),
+      override: this.parseAgendaWriteValidationOverrideInfo(data?.override),
+      scope: this.parseAgendaScopeContext(data?.scope),
+      http_status: response.status,
+    };
   }
 
   // ---------- AUTH ----------
@@ -479,17 +1121,20 @@ class ApiService {
       "Falha ao carregar usuarios elegiveis para vinculo"
     );
     const users = Array.isArray(data?.users) ? data.users : [];
-    return users.map((item: any) => ({
-      id: String(item?.id ?? ""),
-      name: (item?.name || "").toString(),
-      email: item?.email ?? null,
-      username: item?.username ?? null,
-      status: item?.status ?? null,
-      professional_id:
-        item?.professional_id === null || item?.professional_id === undefined
-          ? null
-          : String(item.professional_id),
-    }));
+    return users.map((item) => {
+      const payload = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      return {
+        id: String(payload.id ?? ""),
+        name: (payload.name || "").toString(),
+        email: typeof payload.email === "string" ? payload.email : null,
+        username: typeof payload.username === "string" ? payload.username : null,
+        status: typeof payload.status === "string" ? payload.status : null,
+        professional_id:
+          payload.professional_id === null || payload.professional_id === undefined
+            ? null
+            : String(payload.professional_id),
+      };
+    });
   }
 
   async linkProfessionalUser(
@@ -845,15 +1490,145 @@ class ApiService {
     return response.json();
   }
 
-  async getProfessionalAgenda(id: string, date?: string) {
+  async getProfessionalAgenda(
+    id: string,
+    date?: string
+  ): Promise<ProfessionalAgendaResponse> {
     const query = date ? `?date=${encodeURIComponent(date)}` : "";
     const response = await fetch(`${API_BASE_URL}/profissionais/${id}/agenda${query}`, {
       headers: this.getAuthHeaders(),
     });
-    return this.parseResponseOrThrow(
+    const data = await this.parseResponseOrThrow<Record<string, unknown>>(
       response,
       "Falha ao carregar agenda do profissional"
     );
+
+    const agenda = Array.isArray(data?.agenda)
+      ? data.agenda
+          .map((item) => this.parseAgendaAppointmentItem(item))
+          .filter((item): item is AgendaAppointmentItem => item !== null)
+      : [];
+
+    const scope = this.parseAgendaScopeContext(data?.scope ?? null);
+
+    const message = typeof data?.message === "string" ? data.message : undefined;
+
+    return {
+      success: data?.success === true,
+      agenda,
+      scope,
+      message,
+    };
+  }
+
+  async validateProfessionalAgendaWrite(
+    id: string,
+    payload: AgendaWriteValidationRequest
+  ): Promise<AgendaWriteValidationResponse> {
+    const response = await fetch(`${API_BASE_URL}/profissionais/${id}/agenda/validate-write`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+    const rawPayload = await this.parseJsonSafe(response);
+    const data =
+      rawPayload && typeof rawPayload === "object"
+        ? (rawPayload as Record<string, unknown>)
+        : {};
+
+    if (!response.ok && response.status !== 409) {
+      if (response.status === 401) {
+        this.notifyUnauthorized();
+      }
+      throw new Error(
+        this.resolveHttpErrorMessage(
+          response,
+          data,
+          "Falha ao validar escrita da agenda institucional"
+        )
+      );
+    }
+
+    return this.parseAgendaWriteCommonResponse(data, response);
+  }
+
+  async createProfessionalAgendaAppointment(
+    id: string,
+    payload: AgendaCreateRequest
+  ): Promise<AgendaCreateResponse> {
+    const response = await fetch(`${API_BASE_URL}/profissionais/${id}/agenda`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+    const rawPayload = await this.parseJsonSafe(response);
+    const data =
+      rawPayload && typeof rawPayload === "object"
+        ? (rawPayload as Record<string, unknown>)
+        : {};
+
+    if (!response.ok && response.status !== 409) {
+      if (response.status === 401) {
+        this.notifyUnauthorized();
+      }
+      throw new Error(
+        this.resolveHttpErrorMessage(
+          response,
+          data,
+          "Falha ao criar agendamento institucional"
+        )
+      );
+    }
+
+    const parsedCommon = this.parseAgendaWriteCommonResponse(data, response);
+    return {
+      ...parsedCommon,
+      persisted: data?.persisted === true,
+      create_status_policy: this.parseAgendaCreateStatusPolicy(data?.create_status_policy),
+      appointment: this.parseAgendaAppointmentItem(data?.appointment),
+      conflict: this.parseAgendaSlotConflict(data?.conflict),
+    };
+  }
+
+  async updateProfessionalAgendaAppointmentStatus(
+    id: string,
+    appointmentId: string,
+    payload: AgendaStatusUpdateRequest
+  ): Promise<AgendaStatusUpdateResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/${id}/agenda/${appointmentId}/status`,
+      {
+        method: "POST",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+    const rawPayload = await this.parseJsonSafe(response);
+    const data =
+      rawPayload && typeof rawPayload === "object"
+        ? (rawPayload as Record<string, unknown>)
+        : {};
+
+    if (!response.ok && response.status !== 409) {
+      if (response.status === 401) {
+        this.notifyUnauthorized();
+      }
+      throw new Error(
+        this.resolveHttpErrorMessage(
+          response,
+          data,
+          "Falha ao atualizar status do agendamento institucional"
+        )
+      );
+    }
+
+    const parsedCommon = this.parseAgendaWriteCommonResponse(data, response);
+    return {
+      ...parsedCommon,
+      persisted: data?.persisted === true,
+      status_update_policy: this.parseAgendaStatusUpdatePolicy(data?.status_update_policy),
+      appointment: this.parseAgendaAppointmentItem(data?.appointment),
+    };
   }
 
   async getProfessionalMe(): Promise<ProfessionalMeResponse> {
@@ -869,6 +1644,7 @@ class ApiService {
       data?.professional === null || data?.professional === undefined
         ? null
         : (data.professional as ProfessionalSummary);
+    const scope = this.parseAgendaScopeContext(data);
     return {
       success: data?.success === true,
       professional_id:
@@ -877,6 +1653,30 @@ class ApiService {
           : String(data.professional_id),
       can_view_all_professionals: data?.can_view_all_professionals === true,
       allow_professional_view_others: data?.allow_professional_view_others === true,
+      // Compatibilidade temporaria: backend pode sinalizar leitura via
+      // profissionais:view enquanto perfis migram para agenda:view.
+      access_mode: scope?.access_mode ?? null,
+      compatibility_mode: scope?.compatibility_mode === true,
+      compatibility_notice: scope?.compatibility_notice ?? null,
+      primary_scope_required: scope?.primary_scope_required ?? null,
+      legacy_scope_required: scope?.legacy_scope_required ?? null,
+      legacy_scope_fallback_enabled: scope?.legacy_scope_fallback_enabled === true,
+      legacy_scope_active: scope?.legacy_scope_active === true,
+      legacy_scope_reason: scope?.legacy_scope_reason ?? null,
+      legacy_scope_deprecation_phase: scope?.legacy_scope_deprecation_phase ?? null,
+      legacy_scope_requires_migration: scope?.legacy_scope_requires_migration === true,
+      legacy_scope_removal_ready: scope?.legacy_scope_removal_ready === true,
+      institutional_taxonomy_version: scope?.institutional_taxonomy_version ?? null,
+      coherence_matrix_version: scope?.coherence_matrix_version ?? null,
+      write_validation_ready: scope?.write_validation_ready === true,
+      write_validation_mode: scope?.write_validation_mode ?? null,
+      write_validation_effective_mode: scope?.write_validation_effective_mode ?? null,
+      write_validation_rollout_phase: scope?.write_validation_rollout_phase ?? null,
+      write_validation_hard_block_enabled: scope?.write_validation_hard_block_enabled === true,
+      write_validation_legacy_mode_alias: scope?.write_validation_legacy_mode_alias ?? null,
+      write_validation_supported_levels: scope?.write_validation_supported_levels ?? null,
+      write_validation_blocking_active: scope?.write_validation_blocking_active === true,
+      write_validation_enforcement_ready: scope?.write_validation_enforcement_ready === true,
       professional,
       message,
     };
