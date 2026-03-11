@@ -112,7 +112,16 @@ const AppContent = () => {
             </ProtectedRoute>
           }
         />
-        <Route path="/avaliacoes" element={<ProtectedRoute><Avaliacoes /></ProtectedRoute>} />
+        <Route
+          path="/avaliacoes"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute module="avaliacoes" permission="view">
+                <Avaliacoes />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
         <Route path="/analise-vagas" element={<ProtectedRoute><AnaliseVagas /></ProtectedRoute>} />
         <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
         <Route path="/gerenciar-usuarios" element={<ProtectedRoute><GerenciarUsuarios /></ProtectedRoute>} />

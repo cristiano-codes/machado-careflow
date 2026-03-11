@@ -159,6 +159,67 @@ export type SocialInterviewMutationResponse = {
   status_transition?: SocialInterviewStatusTransition | null;
 };
 
+export type EvaluationTechnicalStatus =
+  | "agendada"
+  | "em_andamento"
+  | "concluida"
+  | "cancelada";
+
+export type EvaluationDTO = {
+  id: string;
+  patient_id: string;
+  patient_name?: string | null;
+  status_jornada?: string | null;
+  professional_id?: string | null;
+  professional_name?: string | null;
+  type: string;
+  start_date: string;
+  end_date?: string | null;
+  status: EvaluationTechnicalStatus;
+  status_db?: string | null;
+  result?: string | null;
+  report?: string | null;
+  notes?: string | null;
+  is_stage_consolidation?: boolean;
+  checklist_ready_for_vaga?: boolean;
+  sent_to_vaga_at?: string | null;
+  devolutiva_date?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type EvaluationListFilters = {
+  patient_id?: string | null;
+  professional_id?: string | null;
+  status?: EvaluationTechnicalStatus | string | null;
+  type?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+  include_consolidation?: boolean | null;
+};
+
+export type EvaluationUpsertPayload = {
+  patient_id: string;
+  professional_id?: string | null;
+  type: string;
+  start_date: string;
+  end_date?: string | null;
+  status?: EvaluationTechnicalStatus | string | null;
+  result?: string | null;
+  report?: string | null;
+  notes?: string | null;
+  is_stage_consolidation?: boolean;
+  checklist_ready_for_vaga?: boolean;
+  devolutiva_date?: string | null;
+};
+
+export type EvaluationMutationResponse = {
+  success: boolean;
+  message?: string;
+  evaluation?: EvaluationDTO;
+  status_transition?: SocialInterviewStatusTransition | null;
+};
+
 export type ApiRequestError = Error & {
   status?: number;
   existing_patient_id?: string | null;
@@ -1865,6 +1926,130 @@ class ApiService {
     return this.parseResponseOrThrow<SocialInterviewMutationResponse>(
       response,
       "Erro ao atualizar entrevista social"
+    );
+  }
+
+  // ---------- AVALIACOES MULTIDISCIPLINARES ----------
+  async getEvaluations(filters?: EvaluationListFilters): Promise<EvaluationDTO[]> {
+    const params = new URLSearchParams();
+    if (filters?.patient_id) params.set("patient_id", String(filters.patient_id));
+    if (filters?.professional_id) params.set("professional_id", String(filters.professional_id));
+    if (filters?.status) params.set("status", String(filters.status));
+    if (filters?.type) params.set("type", String(filters.type));
+    if (filters?.date_from) params.set("date_from", String(filters.date_from));
+    if (filters?.date_to) params.set("date_to", String(filters.date_to));
+    if (typeof filters?.include_consolidation === "boolean") {
+      params.set("include_consolidation", filters.include_consolidation ? "true" : "false");
+    }
+
+    const query = params.toString().length > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_BASE_URL}/evaluations${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const raw = await this.parseResponseOrThrow<unknown>(
+      response,
+      "Falha ao carregar avaliacoes"
+    );
+
+    if (Array.isArray(raw)) {
+      return raw as EvaluationDTO[];
+    }
+
+    if (raw && typeof raw === "object") {
+      const payload = raw as Record<string, unknown>;
+      if (Array.isArray(payload.evaluations)) {
+        return payload.evaluations as EvaluationDTO[];
+      }
+      if (payload.evaluation && typeof payload.evaluation === "object") {
+        return [payload.evaluation as EvaluationDTO];
+      }
+    }
+
+    return [];
+  }
+
+  async getEvaluationById(id: string): Promise<EvaluationDTO | null> {
+    const response = await fetch(`${API_BASE_URL}/evaluations/${encodeURIComponent(id)}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar avaliacao"
+    );
+
+    if (raw?.evaluation && typeof raw.evaluation === "object") {
+      return raw.evaluation as EvaluationDTO;
+    }
+
+    return null;
+  }
+
+  async createEvaluation(payload: EvaluationUpsertPayload): Promise<EvaluationMutationResponse> {
+    const response = await fetch(`${API_BASE_URL}/evaluations`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+
+    return this.parseResponseOrThrow<EvaluationMutationResponse>(
+      response,
+      "Erro ao criar avaliacao"
+    );
+  }
+
+  async updateEvaluation(
+    id: string,
+    payload: EvaluationUpsertPayload
+  ): Promise<EvaluationMutationResponse> {
+    const response = await fetch(`${API_BASE_URL}/evaluations/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+
+    return this.parseResponseOrThrow<EvaluationMutationResponse>(
+      response,
+      "Erro ao atualizar avaliacao"
+    );
+  }
+
+  async completeEvaluation(
+    id: string,
+    payload: Partial<EvaluationUpsertPayload> = {}
+  ): Promise<EvaluationMutationResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/evaluations/${encodeURIComponent(id)}/complete`,
+      {
+        method: "POST",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+
+    return this.parseResponseOrThrow<EvaluationMutationResponse>(
+      response,
+      "Erro ao concluir avaliacao"
+    );
+  }
+
+  async sendEvaluationToVaga(
+    id: string,
+    payload: { justificativa?: string | null } = {}
+  ): Promise<EvaluationMutationResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/evaluations/${encodeURIComponent(id)}/send-to-vaga`,
+      {
+        method: "POST",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+
+    return this.parseResponseOrThrow<EvaluationMutationResponse>(
+      response,
+      "Erro ao enviar avaliacao para analise de vaga"
     );
   }
 }

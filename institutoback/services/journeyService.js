@@ -38,9 +38,21 @@ function normalizeJourneyStatus(value) {
 
 function normalizeUserIdInt(value) {
   if (value === null || value === undefined) return null;
-  const parsed = Number.parseInt(String(value), 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) return null;
-  return parsed;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+
+  if (/^\d+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) return null;
+    return parsed;
+  }
+
+  // Compatibilidade: ambiente atual utiliza users.id como UUID.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)) {
+    return normalized;
+  }
+
+  return null;
 }
 
 function getJourneyStatusRank(value) {

@@ -41,6 +41,7 @@ const jobVacanciesRoutes = require('./routes/jobVacancies');
 const jobCandidatesRoutes = require('./routes/jobCandidates');
 const profissionaisRoutes = require('./routes/profissionais');
 const socialInterviewsRoutes = require('./routes/socialInterviews');
+const evaluationsRoutes = require('./routes/evaluations');
 const vagaDecisionsRoutes = require('./routes/vagaDecisions');
 const debugDbInfoRoutes = require('./routes/debugDbInfo');
 
@@ -57,6 +58,7 @@ app.use('/api/job-vacancies', jobVacanciesRoutes);
 app.use('/api/job-candidates', jobCandidatesRoutes);
 app.use('/api/profissionais', profissionaisRoutes);
 app.use('/api/social-interviews', socialInterviewsRoutes);
+app.use('/api/evaluations', evaluationsRoutes);
 app.use('/api/vaga-decisions', vagaDecisionsRoutes);
 app.use('/api/_debug/dbinfo', debugDbInfoRoutes);
 

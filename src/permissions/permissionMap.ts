@@ -77,7 +77,9 @@ const MODULE_ALIASES: Record<string, string[]> = {
     "entrevistas",
     "entrevista_social",
   ],
-  avaliacoes: ["avaliacoes", "avaliacao"],
+  avaliacoes: ["avaliacoes", "avaliacao", "evaluations"],
+  avaliacao: ["avaliacao", "avaliacoes", "evaluations"],
+  evaluations: ["evaluations", "avaliacoes", "avaliacao"],
   analise_vagas: ["analise_vagas", "vagas"],
   vagas: ["vagas", "analise_vagas"],
 };
