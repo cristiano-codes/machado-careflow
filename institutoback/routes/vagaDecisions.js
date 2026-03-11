@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/pg');
 const authMiddleware = require('../middleware/auth');
+const { authorizeAny } = require('../middleware/authorize');
 const {
   normalizeUserIdInt,
   transitionPatientStatus,
@@ -11,7 +12,14 @@ const VALID_DECISIONS = new Set(['aprovado', 'encaminhado']);
 
 router.use(authMiddleware);
 
-router.post('/', async (req, res) => {
+const authorizeVagaDecisionsCreate = authorizeAny([
+  ['analise_vagas', 'create'],
+  ['analise_vagas', 'edit'],
+  ['vagas', 'create'],
+  ['vagas', 'edit'],
+]);
+
+router.post('/', authorizeVagaDecisionsCreate, async (req, res) => {
   const userIdInt = normalizeUserIdInt(req.user?.id);
   if (userIdInt === null) {
     return res.status(400).json({

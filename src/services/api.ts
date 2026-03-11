@@ -220,6 +220,23 @@ export type EvaluationMutationResponse = {
   status_transition?: SocialInterviewStatusTransition | null;
 };
 
+export type VagaDecisionValue = "aprovado" | "encaminhado";
+
+export type VagaDecisionPayload = {
+  assistido_id: string;
+  decisao: VagaDecisionValue;
+  justificativa: string;
+};
+
+export type VagaDecisionResponse = {
+  success: boolean;
+  decisionId?: string | number;
+  assistido_id?: string;
+  decisao?: VagaDecisionValue | string;
+  status_jornada_atual?: string | null;
+  message?: string;
+};
+
 export type ApiRequestError = Error & {
   status?: number;
   existing_patient_id?: string | null;
@@ -2050,6 +2067,19 @@ class ApiService {
     return this.parseResponseOrThrow<EvaluationMutationResponse>(
       response,
       "Erro ao enviar avaliacao para analise de vaga"
+    );
+  }
+
+  async createVagaDecision(payload: VagaDecisionPayload): Promise<VagaDecisionResponse> {
+    const response = await fetch(`${API_BASE_URL}/vaga-decisions`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+
+    return this.parseResponseOrThrow<VagaDecisionResponse>(
+      response,
+      "Erro ao registrar decisao de vaga"
     );
   }
 }
