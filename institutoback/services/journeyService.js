@@ -36,7 +36,7 @@ function normalizeJourneyStatus(value) {
   return (value || '').toString().trim().toLowerCase();
 }
 
-function normalizeUserIdInt(value) {
+function normalizeUserId(value) {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim();
   if (!normalized) return null;
@@ -54,6 +54,9 @@ function normalizeUserIdInt(value) {
 
   return null;
 }
+
+// Mantido para compatibilidade com imports legados.
+const normalizeUserIdInt = normalizeUserId;
 
 function getJourneyStatusRank(value) {
   const normalized = normalizeJourneyStatus(value);
@@ -97,7 +100,7 @@ async function appendStatusHistory({
   patientId,
   previousStatus,
   newStatus,
-  userIdInt,
+  userId,
   motivoNullable,
 }) {
   const schema = await resolveHistorySchema(client);
@@ -116,7 +119,7 @@ async function appendStatusHistory({
         )
         VALUES ($1, $2, $3, $4, $5, NOW())
       `,
-      [patientId, previousStatus, newStatus, userIdInt, motivo]
+      [patientId, previousStatus, newStatus, userId, motivo]
     );
     return;
   }
@@ -132,7 +135,7 @@ async function appendStatusHistory({
       )
       VALUES ($1, $2, $3, $4, NOW())
     `,
-    [patientId, previousStatus, newStatus, userIdInt]
+    [patientId, previousStatus, newStatus, userId]
   );
 }
 
@@ -146,7 +149,7 @@ async function transitionPatientStatus({
 }) {
   const normalizedPatientId = (patientId || '').toString().trim();
   const normalizedStatus = normalizeJourneyStatus(newStatus);
-  const actorUserIdInt = normalizeUserIdInt(userIdInt);
+  const actorUserId = normalizeUserId(userIdInt);
 
   if (!normalizedPatientId) {
     throw new Error('patientId e obrigatorio');
@@ -156,8 +159,8 @@ async function transitionPatientStatus({
     throw new Error('status_jornada invalido');
   }
 
-  if (actorUserIdInt === null) {
-    throw new Error('userIdInt invalido para registrar historico');
+  if (actorUserId === null) {
+    throw new Error('userId invalido para registrar historico');
   }
 
   const client = externalClient || (await pool.connect());
@@ -225,7 +228,7 @@ async function transitionPatientStatus({
       patientId: normalizedPatientId,
       previousStatus: previousStatus || null,
       newStatus: normalizedStatus,
-      userIdInt: actorUserIdInt,
+      userId: actorUserId,
       motivoNullable,
     });
 
@@ -257,14 +260,14 @@ async function createInitialStatusHistory({
   client: externalClient = null,
 }) {
   const normalizedPatientId = (patientId || '').toString().trim();
-  const actorUserIdInt = normalizeUserIdInt(userIdInt);
+  const actorUserId = normalizeUserId(userIdInt);
 
   if (!normalizedPatientId) {
     throw new Error('patientId e obrigatorio');
   }
 
-  if (actorUserIdInt === null) {
-    throw new Error('userIdInt invalido para registrar historico');
+  if (actorUserId === null) {
+    throw new Error('userId invalido para registrar historico');
   }
 
   const client = externalClient || (await pool.connect());
@@ -321,7 +324,7 @@ async function createInitialStatusHistory({
       patientId: normalizedPatientId,
       previousStatus: null,
       newStatus: statusAtual,
-      userIdInt: actorUserIdInt,
+      userId: actorUserId,
       motivoNullable,
     });
 
@@ -349,6 +352,7 @@ module.exports = {
   VALID_JOURNEY_STATUSES,
   JOURNEY_STATUS_FLOW,
   normalizeJourneyStatus,
+  normalizeUserId,
   normalizeUserIdInt,
   getJourneyStatusRank,
   isJourneyRegression,

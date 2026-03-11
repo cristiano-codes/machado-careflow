@@ -365,7 +365,7 @@ router.post('/', authorizeSocialInterviewsCreate, async (req, res) => {
   if (userIdInt === null) {
     return res.status(400).json({
       success: false,
-      message: 'Nao foi possivel identificar o usuario logado (users.id inteiro).',
+      message: 'Nao foi possivel identificar o usuario logado (users.id deve ser inteiro positivo ou UUID).',
     });
   }
 
@@ -438,7 +438,7 @@ router.put('/:id', authorizeSocialInterviewsEdit, async (req, res) => {
   if (userIdInt === null) {
     return res.status(400).json({
       success: false,
-      message: 'Nao foi possivel identificar o usuario logado (users.id inteiro).',
+      message: 'Nao foi possivel identificar o usuario logado (users.id deve ser inteiro positivo ou UUID).',
     });
   }
 
