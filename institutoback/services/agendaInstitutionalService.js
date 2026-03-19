@@ -1,3 +1,7 @@
+const {
+  normalizeJourneyStatus: normalizeJourneyStatusFromJourney,
+} = require('./journeyService');
+
 const INSTITUTIONAL_TAXONOMY_VERSION = '2026.03.phase5';
 const JOURNEY_COHERENCE_MATRIX_VERSION = '2026.03.phase5';
 
@@ -128,10 +132,7 @@ function normalizeCatalogKey(value) {
   return normalizeText(value).replace(/\s+/g, ' ').trim();
 }
 
-function normalizeJourneyStatus(value) {
-  const normalized = (value || '').toString().trim().toLowerCase();
-  return normalized || null;
-}
+const normalizeJourneyStatus = normalizeJourneyStatusFromJourney;
 
 function normalizeInstitutionalEventType(value) {
   const normalized = (value || '').toString().trim().toLowerCase();

@@ -129,7 +129,6 @@ export default function PreCadastro() {
       phone: form.phone.trim(),
       email: toOptionalTrimmed(form.email),
       notes: buildInitialNotes(form),
-      status: "pre_cadastro",
       status_jornada: "em_fila_espera",
     };
 
@@ -143,7 +142,7 @@ export default function PreCadastro() {
 
       toast({
         title: "Pre-cadastro salvo",
-        description: `Assistido cadastrado na jornada com status inicial em fila de espera (ID ${response.paciente.id}).`,
+        description: `Assistido cadastrado no cadastro principal e mantido em fila de espera (ID ${response.paciente.id}).`,
       });
 
       resetForm();
@@ -180,8 +179,8 @@ export default function PreCadastro() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Pre-Cadastro de Recepcao</h1>
         <p className="text-sm text-muted-foreground">
-          Entrada institucional inicial para fila de espera. Entrevista social, avaliacao
-          tecnica e PIA acontecem nas etapas seguintes.
+          Entrada institucional inicial para fila de espera. A jornada oficial permanece em
+          em_fila_espera ate a entrevista social.
         </p>
       </div>
 
@@ -189,20 +188,22 @@ export default function PreCadastro() {
         <Info className="h-4 w-4" />
         <AlertTitle>Fluxo oficial</AlertTitle>
         <AlertDescription>
-          Este cadastro cria o registro canonico da crianca e inicia a jornada em{" "}
-          <strong>em fila de espera</strong>.
+          Este cadastro cria o registro canonico da crianca. A jornada oficial permanece em{" "}
+          <strong>em_fila_espera</strong>.
         </AlertDescription>
       </Alert>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5" />
-              Dados iniciais da crianca
-            </CardTitle>
-            <CardDescription>Somente dados necessarios para recepcao e entrada na fila.</CardDescription>
-          </CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5" />
+                Dados iniciais da crianca
+              </CardTitle>
+            <CardDescription>
+              Somente dados necessarios para recepcao e entrada na fila oficial da jornada.
+            </CardDescription>
+            </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -300,13 +301,13 @@ export default function PreCadastro() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Observacoes breves</CardTitle>
-            <CardDescription>
+            <CardHeader>
+              <CardTitle>Observacoes breves</CardTitle>
+              <CardDescription>
               Use apenas apontamentos iniciais de recepcao. Dados detalhados ficam para a entrevista
-              social.
-            </CardDescription>
-          </CardHeader>
+              social sem alterar o status principal da jornada.
+              </CardDescription>
+            </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <Label htmlFor="notes">Observacoes (opcional)</Label>

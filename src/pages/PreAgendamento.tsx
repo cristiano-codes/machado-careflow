@@ -246,7 +246,8 @@ export default function PreAgendamento() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Solicitação de Atendimento</h1>
           <p className="text-sm text-muted-foreground">
-            Preencha as informações abaixo para entrar na fila de avaliação da instituição.
+            Preencha as informações abaixo para solicitar triagem. Esta tela nao altera o status
+            principal da jornada, que continua em fila de espera ate a entrevista social.
           </p>
         </div>
 
@@ -254,7 +255,7 @@ export default function PreAgendamento() {
           <aside className="space-y-4 xl:sticky xl:top-6">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Etapas do Atendimento</CardTitle>
+              <CardTitle className="text-base">Etapas do Atendimento</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <ol className="space-y-2">
@@ -283,6 +284,10 @@ export default function PreAgendamento() {
                     <span className="text-muted-foreground">Revisão e Envio</span>
                   </li>
                 </ol>
+                <p className="pt-2 text-xs text-muted-foreground">
+                  A solicitação organiza a recepção, mas o caso permanece em em_fila_espera até a
+                  abertura formal do fluxo institucional.
+                </p>
               </CardContent>
             </Card>
 
@@ -293,7 +298,7 @@ export default function PreAgendamento() {
               <CardContent className="space-y-2">
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>Campos com * são obrigatórios.</li>
-                  <li>Após o envio, a solicitação entra em fila de avaliação.</li>
+                  <li>Após o envio, a solicitação entra em triagem e nao avanca a jornada oficial.</li>
                   <li>Os canais informados serão usados para contato.</li>
                 </ul>
               </CardContent>
@@ -305,8 +310,8 @@ export default function PreAgendamento() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  O pré-agendamento organiza a entrada na jornada de atendimento e facilita a triagem
-                  inicial da equipe.
+                  O pre-agendamento organiza a entrada operacional e facilita a triagem inicial da
+                  equipe sem substituir o cadastro principal.
                 </p>
               </CardContent>
             </Card>
@@ -316,9 +321,9 @@ export default function PreAgendamento() {
             <Alert>
           <Info className="h-4 w-4" />
           <AlertTitle>Informação Institucional</AlertTitle>
-          <AlertDescription>
-            Esta solicitação gera seu ingresso inicial na jornada institucional. Após análise da equipe,
-            entraremos em contato pelos canais informados.
+        <AlertDescription>
+            Esta solicitação organiza a recepção inicial. A jornada institucional continua em
+            em_fila_espera ate a entrevista social, e o contato ocorre pelos canais informados.
           </AlertDescription>
         </Alert>
 

@@ -1,6 +1,14 @@
 // src/services/api.ts
 // Centraliza todas as chamadas HTTP do frontend (login, verify, users, settings, etc.)
 
+import {
+  JOURNEY_STATUS_LABELS as SHARED_JOURNEY_STATUS_LABELS,
+  JOURNEY_STATUS_SEQUENCE,
+  coerceStatusText,
+  resolveOfficialJourneyStatus,
+  type JourneyStatus as SharedJourneyStatus,
+} from "@/components/status/journey-status";
+
 /**
  * Descobre o melhor BASE URL para a API.
  * Preferencia:
@@ -106,6 +114,9 @@ export type PatientDTO = {
   dataNascimento?: string | null;
   status?: string | null;
   status_jornada?: string | null;
+  statusJornada?: string | null;
+  journey_status?: string | null;
+  journeyStatus?: string | null;
 };
 
 export type PatientCreatePayload = {
@@ -125,6 +136,66 @@ export type PatientCreateResponse = {
   existing_patient_id?: string;
   message?: string;
 };
+
+type PatientRecordLike = {
+  id?: string | number | null;
+  patient_id?: string | number | null;
+  paciente_id?: string | number | null;
+  nome?: string | null;
+  name?: string | null;
+  cpf?: string | null;
+  telefone?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  dataNascimento?: string | null;
+  data_nascimento?: string | null;
+  date_of_birth?: string | null;
+  status?: string | null;
+  status_jornada?: string | null;
+  statusJornada?: string | null;
+  journey_status?: string | null;
+  journeyStatus?: string | null;
+};
+
+function normalizePatientRecord(raw: unknown): PatientDTO | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const payload = raw as PatientRecordLike;
+  const idCandidate = payload.id ?? payload.patient_id ?? payload.paciente_id;
+  if (idCandidate === null || idCandidate === undefined) return null;
+
+  const officialJourneyStatus = resolveOfficialJourneyStatus(payload);
+  const legacyStatus = coerceStatusText(payload.status);
+
+  return {
+    id: String(idCandidate),
+    nome: coerceStatusText(payload.nome) ?? coerceStatusText(payload.name) ?? "",
+    cpf: coerceStatusText(payload.cpf),
+    telefone: coerceStatusText(payload.telefone) ?? coerceStatusText(payload.phone),
+    email: coerceStatusText(payload.email),
+    dataNascimento:
+      coerceStatusText(payload.dataNascimento) ??
+      coerceStatusText(payload.data_nascimento) ??
+      coerceStatusText(payload.date_of_birth),
+    status: legacyStatus,
+    status_jornada: officialJourneyStatus,
+    statusJornada: officialJourneyStatus,
+    journey_status: officialJourneyStatus,
+    journeyStatus: officialJourneyStatus,
+  };
+}
+
+function normalizePatientList(raw: unknown): PatientDTO[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).pacientes)
+      ? ((raw as Record<string, unknown>).pacientes as unknown[])
+      : [];
+
+  return list
+    .map((item) => normalizePatientRecord(item))
+    .filter((item): item is PatientDTO => item !== null);
+}
 
 export type SocialInterviewDTO = {
   id: string;
@@ -234,6 +305,40 @@ export type VagaDecisionResponse = {
   assistido_id?: string;
   decisao?: VagaDecisionValue | string;
   status_jornada_atual?: string | null;
+  message?: string;
+};
+
+export const JOURNEY_STATUS_FLOW = JOURNEY_STATUS_SEQUENCE;
+
+export type JourneyStatus = SharedJourneyStatus;
+
+export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> =
+  SHARED_JOURNEY_STATUS_LABELS;
+
+export type DashboardJourneySummaryItem = {
+  status: JourneyStatus;
+  label: string;
+  total: number;
+};
+
+export type DashboardStats = {
+  totalAssistidos: number;
+  unknownStatusCount: number;
+  journeyTotals: {
+    em_triagem: number;
+    em_avaliacao_e_vaga: number;
+    decisao_vaga: number;
+    em_acompanhamento: number;
+    encerrados: number;
+    em_fluxo_institucional: number;
+  };
+  journeyStatusSummary: DashboardJourneySummaryItem[];
+  updatedAt?: string | null;
+};
+
+export type DashboardStatsResponse = {
+  success: boolean;
+  stats?: DashboardStats | null;
   message?: string;
 };
 
@@ -1836,6 +1941,17 @@ class ApiService {
     return response.json();
   }
 
+  async getDashboardStats(): Promise<DashboardStatsResponse> {
+    const response = await fetch(`${API_BASE_URL}/stats`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    return this.parseResponseOrThrow<DashboardStatsResponse>(
+      response,
+      "Falha ao carregar estatisticas do dashboard"
+    );
+  }
+
   // ---------- PACIENTES ----------
   async createPatient(payload: PatientCreatePayload): Promise<PatientCreateResponse> {
     const response = await fetch(`${API_BASE_URL}/pacientes`, {
@@ -1863,24 +1979,19 @@ class ApiService {
 
     return {
       success: data.success === true,
-      paciente:
-        data.paciente && typeof data.paciente === "object"
-          ? (data.paciente as PatientDTO)
-          : undefined,
+      paciente: normalizePatientRecord(data.paciente ?? null) ?? undefined,
       existing_patient_id:
         typeof data.existing_patient_id === "string" ? data.existing_patient_id : undefined,
       message: typeof data.message === "string" ? data.message : undefined,
     };
   }
 
-  async getPatients() {
+  async getPatients(): Promise<PatientDTO[]> {
     const response = await fetch(`${API_BASE_URL}/pacientes`, {
       headers: this.getAuthHeaders(),
     });
     const data = await response.json();
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.pacientes)) return data.pacientes;
-    return [];
+    return normalizePatientList(data);
   }
 
   // ---------- ENTREVISTAS SOCIAIS ----------

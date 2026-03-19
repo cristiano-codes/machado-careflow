@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "smoke:dashboard-stats": "node scripts/smoke-dashboard-stats.cjs",
     "postinstall": "cd institutoback && npm install --omit=dev",
     "start": "cd institutoback && npm start"
   },

@@ -111,7 +111,41 @@ function buildPatientPayload(body, existing = null) {
     ),
     notes: normalizeOptionalText(payload.notes ?? payload.observacoes ?? existing?.notes),
     status: normalizeOptionalText(payload.status ?? existing?.status ?? 'pre_cadastro') || 'pre_cadastro',
-    status_jornada: statusJornada || 'em_fila_espera',
+    status_jornada: statusJornada || existing?.status_jornada || 'em_fila_espera',
+  };
+}
+
+function normalizePatientOperationalStatusInput(value) {
+  const normalized = normalizeOptionalText(value);
+  return normalized ? normalized.toLowerCase() : null;
+}
+
+function validateCreatePatientStatusInputs(body) {
+  const hasStatus = hasOwn(body, 'status');
+  const hasJourneyStatus = hasOwn(body, 'status_jornada');
+  const requestedStatus = normalizePatientOperationalStatusInput(body?.status);
+  const requestedJourneyStatus = normalizeJourneyStatus(body?.status_jornada);
+  const conflicts = [];
+
+  if (hasStatus && requestedStatus && requestedStatus !== 'pre_cadastro') {
+    conflicts.push('status deve ser pre_cadastro na criacao do cadastro.');
+  }
+
+  if (hasJourneyStatus && requestedJourneyStatus && requestedJourneyStatus !== 'em_fila_espera') {
+    conflicts.push('status_jornada deve ser em_fila_espera na criacao do cadastro.');
+  }
+
+  if (hasStatus && !requestedStatus) {
+    conflicts.push('status invalido');
+  }
+
+  if (hasJourneyStatus && !requestedJourneyStatus) {
+    conflicts.push('status_jornada invalido');
+  }
+
+  return {
+    ok: conflicts.length === 0,
+    conflicts,
   };
 }
 
@@ -204,7 +238,17 @@ router.post('/', async (req, res) => {
     });
   }
 
+  const createStatusValidation = validateCreatePatientStatusInputs(req.body);
+  if (!createStatusValidation.ok) {
+    return res.status(400).json({
+      success: false,
+      message: createStatusValidation.conflicts[0],
+    });
+  }
+
   const payload = buildPatientPayload(req.body);
+  payload.status = 'pre_cadastro';
+  payload.status_jornada = 'em_fila_espera';
 
   if (!payload.name) {
     return res.status(400).json({
@@ -331,6 +375,25 @@ router.post('/', async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao criar paciente:', error);
+
+    if (error?.code === 'INVALID_JOURNEY_TRANSITION' || error?.code === 'JOURNEY_STATUS_MISSING') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        current_status: error.currentStatus || null,
+        target_status: error.nextStatus || null,
+        allowed_statuses: Array.isArray(error.allowedStatuses) ? error.allowedStatuses : [],
+      });
+    }
+
+    if (error?.code === 'INVALID_JOURNEY_STATUS' || error?.code === 'INVALID_PATIENT_ID' || error?.code === 'INVALID_USER_ID') {
+      return res.status(400).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
 
     if (error?.code === '23505') {
       return res.status(409).json({
@@ -526,6 +589,26 @@ router.put('/:id', async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao atualizar paciente:', error);
+
+    if (error?.code === 'INVALID_JOURNEY_TRANSITION' || error?.code === 'JOURNEY_STATUS_MISSING') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        current_status: error.currentStatus || null,
+        target_status: error.nextStatus || null,
+        allowed_statuses: Array.isArray(error.allowedStatuses) ? error.allowedStatuses : [],
+      });
+    }
+
+    if (error?.code === 'INVALID_JOURNEY_STATUS' || error?.code === 'INVALID_PATIENT_ID' || error?.code === 'INVALID_USER_ID') {
+      return res.status(400).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error?.message || 'Erro ao atualizar paciente',

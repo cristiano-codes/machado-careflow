@@ -53,6 +53,26 @@ Paginas em `src/pages`:
 - `PermissionManager`
 - `Configuracoes`
 
+## Jornada institucional
+
+- `status_jornada` e a fonte oficial da jornada institucional.
+- `status` pode existir como camada legada/operacional, mas nao deve dirigir relatorios, filtros ou badges institucionais.
+- Fluxo oficial:
+  - `em_fila_espera`
+  - `entrevista_realizada`
+  - `em_avaliacao`
+  - `em_analise_vaga`
+  - `aprovado`
+  - `matriculado`
+  - `ativo`
+- Ramo alternativo:
+  - `em_analise_vaga -> encaminhado`
+- Evolucoes de acompanhamento:
+  - `ativo -> inativo_assistencial -> ativo -> desligado`
+  - `ativo -> desligado`
+- Durante triagem social, pre-cadastro e agendamento, a crianca continua oficialmente em `em_fila_espera`.
+- Dashboard, filtros e relatorios institucionais devem ler apenas `status_jornada`.
+
 ## Governanca de Usuarios
 
 ### Estados do usuario
@@ -232,7 +252,7 @@ Prefixo: `/api`
 - `/permissions`
 - `/pacientes`
 - `/settings`
-- `/stats`
+- `/stats` - resumo institucional da jornada por `status_jornada` para o dashboard
 - `/activities`
 - `/services`
 - `/pre-appointments`
@@ -245,6 +265,8 @@ Prefixo: `/api`
 
 - O projeto ainda tem `old/` e arquivos locais auxiliares (`schema.sql`, `sistema.dump`, etc.).
 - Se quiser lint focado no codigo ativo, prefira: `npx eslint src tailwind.config.ts`.
+- O painel principal (`src/pages/Dashboard.tsx`) agora exibe apenas indicadores derivados de `status_jornada`, sem fallback silencioso para `status`.
+- A API de dashboard consolida `patients.status_jornada` e informa qualquer registro fora do fluxo oficial como contagem separada.
 
 ## Licenca
 

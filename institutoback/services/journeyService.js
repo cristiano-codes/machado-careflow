@@ -13,6 +13,19 @@ const VALID_JOURNEY_STATUSES = new Set([
   'desligado',
 ]);
 
+const JOURNEY_STATUS_LABELS = Object.freeze({
+  em_fila_espera: 'Em fila de espera',
+  entrevista_realizada: 'Entrevista realizada',
+  em_avaliacao: 'Em avaliacao',
+  em_analise_vaga: 'Em analise de vaga',
+  aprovado: 'Aprovado',
+  encaminhado: 'Encaminhado',
+  matriculado: 'Matriculado',
+  ativo: 'Ativo',
+  inativo_assistencial: 'Inativo assistencial',
+  desligado: 'Desligado',
+});
+
 const JOURNEY_STATUS_FLOW = [
   'em_fila_espera',
   'entrevista_realizada',
@@ -29,6 +42,19 @@ const JOURNEY_STATUS_FLOW = [
 const JOURNEY_STATUS_ORDER = new Map(
   JOURNEY_STATUS_FLOW.map((status, index) => [status, index])
 );
+
+const JOURNEY_STATUS_TRANSITIONS = Object.freeze({
+  em_fila_espera: ['entrevista_realizada'],
+  entrevista_realizada: ['em_avaliacao'],
+  em_avaliacao: ['em_analise_vaga'],
+  em_analise_vaga: ['aprovado', 'encaminhado'],
+  aprovado: ['matriculado'],
+  encaminhado: [],
+  matriculado: ['ativo'],
+  ativo: ['inativo_assistencial', 'desligado'],
+  inativo_assistencial: ['ativo'],
+  desligado: [],
+});
 
 let historySchemaCache = null;
 
@@ -73,6 +99,93 @@ function isJourneyRegression(previousStatus, nextStatus) {
   }
 
   return nextRank < previousRank;
+}
+
+function getAllowedJourneyTransitions(currentStatus) {
+  const normalized = normalizeJourneyStatus(currentStatus);
+  if (!normalized) {
+    return [];
+  }
+
+  return Array.isArray(JOURNEY_STATUS_TRANSITIONS[normalized])
+    ? JOURNEY_STATUS_TRANSITIONS[normalized]
+    : [];
+}
+
+function buildJourneyTransitionError({
+  code,
+  message,
+  currentStatus,
+  nextStatus,
+  allowedStatuses = [],
+}) {
+  const error = new Error(message);
+  error.code = code;
+  error.currentStatus = currentStatus || null;
+  error.nextStatus = nextStatus || null;
+  error.allowedStatuses = Array.isArray(allowedStatuses) ? allowedStatuses : [];
+  error.statusCode = code === 'PATIENT_NOT_FOUND' ? 404 : 409;
+  return error;
+}
+
+function validateJourneyTransition(previousStatus, nextStatus) {
+  const normalizedPreviousStatus = normalizeJourneyStatus(previousStatus);
+  const normalizedNextStatus = normalizeJourneyStatus(nextStatus);
+
+  if (!normalizedNextStatus || !VALID_JOURNEY_STATUSES.has(normalizedNextStatus)) {
+    return {
+      allowed: false,
+      code: 'INVALID_JOURNEY_STATUS',
+      message: 'status_jornada invalido',
+      currentStatus: normalizedPreviousStatus || null,
+      nextStatus: normalizedNextStatus || null,
+      allowedStatuses: [],
+    };
+  }
+
+  if (normalizedPreviousStatus === normalizedNextStatus) {
+    return {
+      allowed: true,
+      changed: false,
+      currentStatus: normalizedPreviousStatus || null,
+      nextStatus: normalizedNextStatus,
+      allowedStatuses: getAllowedJourneyTransitions(normalizedPreviousStatus),
+    };
+  }
+
+  if (!normalizedPreviousStatus) {
+    return {
+      allowed: false,
+      code: 'JOURNEY_STATUS_MISSING',
+      message:
+        'Assistido sem status_jornada atual. Refaça o backfill ou regularize o cadastro antes de transicionar.',
+      currentStatus: null,
+      nextStatus: normalizedNextStatus,
+      allowedStatuses: [],
+    };
+  }
+
+  const allowedStatuses = getAllowedJourneyTransitions(normalizedPreviousStatus);
+  if (!allowedStatuses.includes(normalizedNextStatus)) {
+    return {
+      allowed: false,
+      code: 'INVALID_JOURNEY_TRANSITION',
+      message:
+        `Transicao de jornada nao permitida de "${normalizedPreviousStatus}" para "${normalizedNextStatus}". ` +
+        `Permitidas a partir daqui: ${allowedStatuses.length > 0 ? allowedStatuses.join(', ') : 'nenhuma'}.`,
+      currentStatus: normalizedPreviousStatus,
+      nextStatus: normalizedNextStatus,
+      allowedStatuses,
+    };
+  }
+
+  return {
+    allowed: true,
+    changed: true,
+    currentStatus: normalizedPreviousStatus,
+    nextStatus: normalizedNextStatus,
+    allowedStatuses,
+  };
 }
 
 async function resolveHistorySchema(client) {
@@ -152,15 +265,17 @@ async function transitionPatientStatus({
   const actorUserId = normalizeUserId(userIdInt);
 
   if (!normalizedPatientId) {
-    throw new Error('patientId e obrigatorio');
-  }
-
-  if (!VALID_JOURNEY_STATUSES.has(normalizedStatus)) {
-    throw new Error('status_jornada invalido');
+    throw buildJourneyTransitionError({
+      code: 'INVALID_PATIENT_ID',
+      message: 'patientId e obrigatorio',
+    });
   }
 
   if (actorUserId === null) {
-    throw new Error('userId invalido para registrar historico');
+    throw buildJourneyTransitionError({
+      code: 'INVALID_USER_ID',
+      message: 'userId invalido para registrar historico',
+    });
   }
 
   const client = externalClient || (await pool.connect());
@@ -213,6 +328,11 @@ async function transitionPatientStatus({
       };
     }
 
+    const transitionValidation = validateJourneyTransition(previousStatus, normalizedStatus);
+    if (!transitionValidation.allowed) {
+      throw buildJourneyTransitionError(transitionValidation);
+    }
+
     await client.query(
       `
         UPDATE public.patients
@@ -263,11 +383,17 @@ async function createInitialStatusHistory({
   const actorUserId = normalizeUserId(userIdInt);
 
   if (!normalizedPatientId) {
-    throw new Error('patientId e obrigatorio');
+    throw buildJourneyTransitionError({
+      code: 'INVALID_PATIENT_ID',
+      message: 'patientId e obrigatorio',
+    });
   }
 
   if (actorUserId === null) {
-    throw new Error('userId invalido para registrar historico');
+    throw buildJourneyTransitionError({
+      code: 'INVALID_USER_ID',
+      message: 'userId invalido para registrar historico',
+    });
   }
 
   const client = externalClient || (await pool.connect());
@@ -350,12 +476,16 @@ async function createInitialStatusHistory({
 
 module.exports = {
   VALID_JOURNEY_STATUSES,
+  JOURNEY_STATUS_LABELS,
   JOURNEY_STATUS_FLOW,
+  JOURNEY_STATUS_TRANSITIONS,
   normalizeJourneyStatus,
   normalizeUserId,
   normalizeUserIdInt,
   getJourneyStatusRank,
   isJourneyRegression,
+  getAllowedJourneyTransitions,
+  validateJourneyTransition,
   transitionPatientStatus,
   createInitialStatusHistory,
 };

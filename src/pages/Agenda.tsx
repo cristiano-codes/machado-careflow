@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getJourneyStatusLabel } from "@/components/status";
 import { ProtectedRoute as ModuleProtectedRoute } from "@/components/common/ProtectedRoute";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -106,18 +107,6 @@ function withAccessContextDefaults(
 const ALL_FILTER_VALUE = "all";
 const MISSING_FILTER_VALUE = "__missing__";
 
-const JOURNEY_STATUS_LABELS: Record<string, string> = {
-  em_fila_espera: "Em fila de espera",
-  entrevista_realizada: "Entrevista realizada",
-  em_avaliacao: "Em avaliacao",
-  em_analise_vaga: "Em analise de vaga",
-  aprovado: "Aprovado",
-  encaminhado: "Encaminhado",
-  matriculado: "Matriculado",
-  ativo: "Ativo",
-  inativo_assistencial: "Inativo assistencial",
-  desligado: "Desligado",
-};
 const EVENT_TYPE_LABELS: Record<string, string> = {
   entrevista_social: "Entrevista social",
   avaliacao_multidisciplinar: "Avaliacao multidisciplinar",
@@ -207,13 +196,7 @@ function normalizeAppointmentStatusKey(rawStatus: AgendaStatus | null | undefine
 }
 
 function formatJourneyStatus(rawStatus: string | null | undefined) {
-  const normalized = (rawStatus || "").toString().trim().toLowerCase();
-  if (!normalized) return "Nao informado";
-  if (JOURNEY_STATUS_LABELS[normalized]) return JOURNEY_STATUS_LABELS[normalized];
-  return normalized
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return getJourneyStatusLabel(rawStatus);
 }
 
 function formatInstitutionalField(rawValue: string | null | undefined) {
@@ -1047,7 +1030,8 @@ export default function Agenda() {
                 <p className="text-sm font-medium">Criacao minima (uso controlado)</p>
                 <p className="text-xs text-muted-foreground">
                   Cria agendamento no dia selecionado ({dateParam}) com status padrao agendado.
-                  Use IDs canonicos de assistido e servico.
+                  Use IDs canonicos de assistido e servico. Agendar nao altera o status principal da
+                  jornada.
                 </p>
 
                 <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-4">
@@ -1096,7 +1080,8 @@ export default function Agenda() {
                     {creatingAppointment ? "Criando..." : "Criar agendamento"}
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Regra atual: criacao padrao em agendado; confirmacao deve usar endpoint de status.
+                    Regra atual: criacao padrao em agendado; confirmacao usa endpoint de status do
+                    agendamento, sem mexer no status_jornada.
                   </p>
                 </div>
               </div>

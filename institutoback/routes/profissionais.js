@@ -585,17 +585,17 @@ async function resolveAgendaWritePatientContext({
 }) {
   const normalizedPatientId = normalizeEntityId(patientId);
   const normalizedJourneyStatus = normalizeJourneyStatus(journeyStatusInput);
-  if (normalizedJourneyStatus) {
-    return {
-      patientId: normalizedPatientId,
-      patientName: null,
-      journeyStatus: normalizedJourneyStatus,
-      source: 'request_body_journey_status',
-      found: normalizedPatientId ? null : true,
-    };
-  }
-
   if (!normalizedPatientId) {
+    if (normalizedJourneyStatus) {
+      return {
+        patientId: null,
+        patientName: null,
+        journeyStatus: normalizedJourneyStatus,
+        source: 'request_body_journey_status',
+        found: null,
+      };
+    }
+
     return {
       patientId: null,
       patientName: null,
@@ -3086,6 +3086,34 @@ router.post('/:id/agenda/validate-write', authorizeAgendaRead, async (req, res) 
       serviceNameInput,
       client: pool,
     });
+
+    if (patientId && !patientContext.journeyStatus) {
+      return res.status(409).json({
+        success: false,
+        code: 'patient_journey_status_missing',
+        message:
+          'Nao foi possivel validar a agenda porque o assistido esta sem status_jornada persistido.',
+        patient_id: patientContext.patientId,
+      });
+    }
+
+    if (
+      patientId &&
+      journeyStatusInput &&
+      patientContext.journeyStatus &&
+      journeyStatusInput.toLowerCase() !== patientContext.journeyStatus.toLowerCase()
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_journey_status_mismatch',
+        message:
+          'journey_status informado nao confere com o status_jornada persistido do assistido.',
+        journey_status: patientContext.journeyStatus,
+        requested_journey_status: journeyStatusInput,
+        patient_id: patientContext.patientId,
+      });
+    }
+
     const guard = prepareAgendaWriteGuard({
       journeyStatus: patientContext.journeyStatus,
       serviceName: serviceContext.serviceName,
@@ -3749,11 +3777,37 @@ router.post('/:id/agenda/:appointmentId/status', authorizeAgendaRead, async (req
     const journeyStatusInput = normalizeOptionalText(payload?.journey_status);
     const explicitEventType = normalizeOptionalText(payload?.explicit_event_type);
     const journeyStatus = normalizeJourneyStatus(
-      journeyStatusInput ||
-        appointmentContext?.status_jornada ||
-        appointmentContext?.journey_status ||
-        null
+      appointmentContext?.status_jornada || appointmentContext?.journey_status || null
     );
+
+    if (!journeyStatus) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'patient_journey_status_missing',
+        message:
+          'Nao foi possivel atualizar o status do agendamento porque o assistido esta sem status_jornada persistido.',
+        patient_id: appointmentContext?.patient_id || null,
+      });
+    }
+
+    if (
+      journeyStatusInput &&
+      journeyStatus &&
+      journeyStatusInput.toLowerCase() !== journeyStatus.toLowerCase()
+    ) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({
+        success: false,
+        code: 'agenda_journey_status_mismatch',
+        message:
+          'journey_status informado nao confere com o status_jornada persistido do assistido.',
+        journey_status: journeyStatus,
+        requested_journey_status: journeyStatusInput,
+      });
+    }
 
     const guard = prepareAgendaWriteGuard({
       journeyStatus,

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { getJourneyStatusLabel } from "@/components/status";
 import { usePermissions, useModulePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -62,19 +63,6 @@ type EvaluationFormDraft = {
 
 type ViewMode = "list" | "view" | "create" | "edit";
 
-const JOURNEY_STATUS_LABELS: Record<string, string> = {
-  em_fila_espera: "Em fila de espera",
-  entrevista_realizada: "Entrevista realizada",
-  em_avaliacao: "Em avaliacao multidisciplinar",
-  em_analise_vaga: "Em analise de vaga",
-  aprovado: "Aprovado",
-  encaminhado: "Encaminhado",
-  matriculado: "Matriculado",
-  ativo: "Ativo",
-  inativo_assistencial: "Inativo assistencial",
-  desligado: "Desligado",
-};
-
 const TECH_STATUS_LABELS: Record<EvaluationTechnicalStatus, string> = {
   agendada: "Agendada",
   em_andamento: "Em andamento",
@@ -115,15 +103,8 @@ function coerceDate(value: unknown): string {
   return "";
 }
 
-function normalizeJourneyStatus(rawStatus: string | undefined): string {
-  const normalized = (rawStatus || "").trim().toLowerCase();
-  return normalized || "";
-}
-
 function formatJourneyStatus(rawStatus: string | undefined): string {
-  const normalized = normalizeJourneyStatus(rawStatus);
-  if (!normalized) return "Nao informado";
-  return JOURNEY_STATUS_LABELS[normalized] || normalized;
+  return getJourneyStatusLabel(rawStatus);
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -706,9 +687,9 @@ export default function Avaliacoes() {
       toast({
         title: isEditMode ? "Avaliacao atualizada" : "Avaliacao registrada",
         description: transitionChanged
-          ? "Jornada atualizada para em_avaliacao."
+          ? "Status principal da jornada atualizado para em_avaliacao."
           : regressionPrevented
-            ? "Jornada mais avancada foi preservada sem regressao."
+            ? "Status principal da jornada mais avancado foi preservado sem regressao."
             : result.message || "Registro salvo com sucesso.",
       });
     } catch (error) {
@@ -742,7 +723,7 @@ export default function Avaliacoes() {
         title: "Avaliacao concluida",
         description:
           result.status_transition?.changed === true
-            ? "Avaliacao concluida e jornada confirmada em em_avaliacao."
+            ? "Avaliacao concluida e status principal da jornada mantido em em_avaliacao."
             : result.message || "Avaliacao concluida com sucesso.",
       });
     } catch (error) {
@@ -784,7 +765,7 @@ export default function Avaliacoes() {
         title: "Encaminhado para analise de vaga",
         description:
           result.status_transition?.changed === true
-            ? "Status da jornada atualizado para em_analise_vaga."
+            ? "Status principal da jornada atualizado para em_analise_vaga."
             : result.message || "Encaminhamento realizado com sucesso.",
       });
     } catch (error) {

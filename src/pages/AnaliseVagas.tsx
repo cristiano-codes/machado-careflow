@@ -6,6 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  getJourneyStatusLabel,
+  normalizeJourneyStatus as normalizeOfficialJourneyStatus,
+} from "@/components/status";
 import { useModulePermissions, usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -30,19 +34,6 @@ type SocialInterviewSummary = {
   socialWorker: string;
   parecer: string;
   resultadoTerapeutico: string;
-};
-
-const JOURNEY_STATUS_LABELS: Record<string, string> = {
-  em_fila_espera: "Em fila de espera",
-  entrevista_realizada: "Entrevista realizada",
-  em_avaliacao: "Em avaliacao multidisciplinar",
-  em_analise_vaga: "Em analise de vaga",
-  aprovado: "Aprovado",
-  encaminhado: "Encaminhado",
-  matriculado: "Matriculado",
-  ativo: "Ativo",
-  inativo_assistencial: "Inativo assistencial",
-  desligado: "Desligado",
 };
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -80,14 +71,11 @@ function coerceDate(value: unknown): string {
 }
 
 function normalizeJourneyStatus(rawStatus: string | undefined): string {
-  const normalized = (rawStatus || "").trim().toLowerCase();
-  return normalized || "";
+  return normalizeOfficialJourneyStatus(rawStatus) || "";
 }
 
 function formatJourneyStatus(rawStatus: string | undefined): string {
-  const normalized = normalizeJourneyStatus(rawStatus);
-  if (!normalized) return "Nao informado";
-  return JOURNEY_STATUS_LABELS[normalized] || normalized;
+  return getJourneyStatusLabel(rawStatus);
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -106,9 +94,7 @@ function normalizePatient(dto: unknown): PatientOption | null {
     id,
     nome: coerceString(record.nome || record.name),
     dataNascimento: coerceDate(record.dataNascimento || record.date_of_birth),
-    statusJornada: normalizeJourneyStatus(
-      coerceString(record.status_jornada || record.statusJornada || record.status)
-    ),
+    statusJornada: normalizeJourneyStatus(coerceString(record.status_jornada || record.statusJornada)),
   };
 }
 
@@ -386,7 +372,7 @@ export default function AnaliseVagas() {
         title: "Decisao registrada",
         description:
           result.status_jornada_atual
-            ? `Status da jornada atualizado para ${result.status_jornada_atual}.`
+            ? `Status principal da jornada atualizado para ${result.status_jornada_atual}.`
             : "Decisao salva com sucesso.",
       });
     } catch (error) {
@@ -409,7 +395,7 @@ export default function AnaliseVagas() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Analise de Vaga</h1>
           <p className="text-sm text-muted-foreground">
-            Mesa de decisao do Servico Social com rastreabilidade por status_jornada.
+            Mesa de decisao do Servico Social com rastreabilidade exclusiva por status_jornada.
           </p>
         </div>
         <Button variant="outline" onClick={() => void loadPatients()} disabled={patientsLoading}>
@@ -472,12 +458,14 @@ export default function AnaliseVagas() {
       <div className="grid items-start gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <Card>
-            <CardHeader>
+          <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <UserCheck className="h-4 w-4" />
-                Fila de decisao
+                Escopo da mesa
               </CardTitle>
-              <CardDescription>Assistidos no escopo da analise institucional de vaga.</CardDescription>
+              <CardDescription>
+                Assistidos no escopo da analise institucional de vaga e seu historico de decisao.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {patientsLoading ? (
@@ -488,7 +476,7 @@ export default function AnaliseVagas() {
               ) : null}
               {!patientsLoading && decisionQueue.length === 0 ? (
                 <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                  Nenhum assistido em analise/aprovado/encaminhado/matriculado.
+                  Nenhum assistido no escopo de analise/aprovado/encaminhado/matriculado.
                 </p>
               ) : null}
               {!patientsLoading &&
@@ -521,11 +509,11 @@ export default function AnaliseVagas() {
             </CardHeader>
             <CardContent className="space-y-1 text-sm">
               <p className="flex items-center justify-between">
-                <span>Prontos para decisao</span>
+                <span>Em analise pendente</span>
                 <span className="font-semibold">{pendingDecisionQueue.length}</span>
               </p>
               <p className="text-xs text-muted-foreground">
-                A etapa deve decidir entre aprovado ou encaminhado, mantendo historico auditavel.
+                A etapa decide entre aprovado ou encaminhado, mantendo historico auditavel da jornada.
               </p>
             </CardContent>
           </Card>
@@ -535,7 +523,9 @@ export default function AnaliseVagas() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Contexto institucional</CardTitle>
-              <CardDescription>Dados canônicos do assistido e status principal da jornada.</CardDescription>
+              <CardDescription>
+                Dados canonicos do assistido e status principal da jornada institucional.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {!selectedPatient ? (
@@ -559,7 +549,10 @@ export default function AnaliseVagas() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Insumos para decisao</CardTitle>
-              <CardDescription>Pareceres e consolidacao que sustentam a decisao da vaga.</CardDescription>
+              <CardDescription>
+                Pareceres e consolidacao que sustentam a decisao da vaga sem usar fallback de
+                status legado.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {contextLoading ? (

@@ -4,6 +4,9 @@ const pool = require('../config/pg');
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PRE_APPOINTMENT_OPERATIONAL_STATUS = 'em_fila_espera';
+const PRE_APPOINTMENT_STATUS_NOTE =
+  'Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal.';
 
 function normalizeText(value) {
   if (value === undefined || value === null) return '';
@@ -20,7 +23,7 @@ function normalizeBoolean(value, fallback = false) {
   if (value === null || value === undefined) return fallback;
   const normalized = String(value).trim().toLowerCase();
   if (['true', '1', 'sim', 'yes', 'y'].includes(normalized)) return true;
-  if (['false', '0', 'nao', 'não', 'no', 'n'].includes(normalized)) return false;
+  if (['false', '0', 'nao', 'no', 'n'].includes(normalized)) return false;
   return fallback;
 }
 
@@ -51,7 +54,7 @@ function normalizePhoneDigits(value) {
   return normalizeText(value).replace(/\D/g, '');
 }
 
-// POST - Criar pré-agendamento institucional
+// POST - Criar pre-agendamento institucional
 router.post('/', async (req, res) => {
   const name = normalizeText(req.body?.name);
   const phone = normalizeText(req.body?.phone);
@@ -63,14 +66,14 @@ router.post('/', async (req, res) => {
   if (!name || !phone || !email) {
     return res.status(400).json({
       success: false,
-      message: 'name, phone e email são obrigatórios.',
+      message: 'name, phone e email sao obrigatorios.',
     });
   }
 
   if (services.length < 1) {
     return res.status(400).json({
       success: false,
-      message: 'Selecione pelo menos 1 serviço.',
+      message: 'Selecione pelo menos 1 servico.',
     });
   }
 
@@ -103,7 +106,7 @@ router.post('/', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
-        message: 'Há serviços inválidos ou inativos na solicitação.',
+        message: 'Ha servicos invalidos ou inativos na solicitacao.',
       });
     }
 
@@ -159,7 +162,7 @@ router.post('/', async (req, res) => {
         normalizeBoolean(req.body?.consent_whatsapp, false),
         consentLgpd,
         'pre_agendamento_online',
-        'em_fila_espera',
+        PRE_APPOINTMENT_OPERATIONAL_STATUS,
         normalizeOptionalText(req.body?.notes),
         legacyServiceType,
       ]
@@ -169,11 +172,13 @@ router.post('/', async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Solicitação enviada com sucesso.',
+      status_operacional: PRE_APPOINTMENT_OPERATIONAL_STATUS,
+      status_contexto: PRE_APPOINTMENT_STATUS_NOTE,
+      message: 'Solicitacao enviada com sucesso.',
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Erro ao criar pré-agendamento:', error);
+    console.error('Erro ao criar pre-agendamento:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
@@ -183,7 +188,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET - Buscar pré-agendamentos
+// GET - Buscar pre-agendamentos
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -191,12 +196,18 @@ router.get('/', async (req, res) => {
       ORDER BY created_at DESC
     `);
 
+    const preAppointments = result.rows.map((row) => ({
+      ...row,
+      status_operacional: row.status || null,
+      status_contexto: PRE_APPOINTMENT_STATUS_NOTE,
+    }));
+
     res.json({
       success: true,
-      preAppointments: result.rows,
+      preAppointments,
     });
   } catch (error) {
-    console.error('Erro ao buscar pré-agendamentos:', error);
+    console.error('Erro ao buscar pre-agendamentos:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
@@ -204,7 +215,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET - Consulta pública da solicitação
+// GET - Consulta publica da solicitacao
 router.get('/public-search', async (req, res) => {
   const phone = normalizeText(req.query?.phone);
   const name = normalizeText(req.query?.name);
@@ -266,11 +277,13 @@ router.get('/public-search', async (req, res) => {
       preAppointment: {
         name: row.name,
         status: row.status,
+        status_operacional: row.status,
+        status_contexto: PRE_APPOINTMENT_STATUS_NOTE,
         created_at: row.created_at,
       },
     });
   } catch (error) {
-    console.error('Erro ao consultar pré-agendamento público:', error);
+    console.error('Erro ao consultar pre-agendamento publico:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
@@ -279,3 +292,4 @@ router.get('/public-search', async (req, res) => {
 });
 
 module.exports = router;
+

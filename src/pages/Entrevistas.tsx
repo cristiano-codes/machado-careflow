@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getJourneyStatusLabel } from "@/components/status";
 import { useModulePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle, FileText, Loader2, Plus, Printer, Save } from "lucide-react";
@@ -119,7 +120,7 @@ type Paciente = {
   referencia: string;
   telefones: string;
   cpf?: string;
-  status?: string;
+  statusOperacional?: string;
   statusJornada?: string;
 };
 
@@ -181,19 +182,6 @@ const ENABLE_MOCK_FALLBACK =
   String(import.meta.env.VITE_ENABLE_ENTREVISTAS_MOCK_FALLBACK || "")
     .trim()
     .toLowerCase() === "true";
-
-const JOURNEY_STATUS_LABELS: Record<string, string> = {
-  em_fila_espera: "Em fila de espera",
-  entrevista_realizada: "Entrevista realizada",
-  em_avaliacao: "Em avaliacao multidisciplinar",
-  em_analise_vaga: "Em analise de vaga",
-  aprovado: "Aprovado",
-  encaminhado: "Encaminhado",
-  matriculado: "Matriculado",
-  ativo: "Ativo",
-  inativo_assistencial: "Inativo assistencial",
-  desligado: "Desligado",
-};
 
 const createEmptyDraft = (paciente?: Paciente): SocialInterviewDraft => ({
   dataEntrevista: new Date().toISOString().slice(0, 10),
@@ -401,14 +389,7 @@ const booleanField = (sources: JsonRecord[], ...keys: string[]) =>
   coerceBoolean(pickFieldValue(sources, ...keys));
 
 const formatJourneyStatus = (rawStatus: string | undefined) => {
-  const normalized = (rawStatus || "").trim().toLowerCase();
-  if (!normalized) return "Nao informado";
-  if (JOURNEY_STATUS_LABELS[normalized]) return JOURNEY_STATUS_LABELS[normalized];
-  return normalized
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return getJourneyStatusLabel(rawStatus);
 };
 
 const normalizePatientFromApi = (dto: PatientApiDto): Paciente | null => {
@@ -434,7 +415,7 @@ const normalizePatientFromApi = (dto: PatientApiDto): Paciente | null => {
     referencia: stringField([source], "referencia"),
     telefones: stringField([source], "telefones", "telefone", "phone", "mobile"),
     cpf: stringField([source], "cpf"),
-    status: stringField([source], "status"),
+    statusOperacional: stringField([source], "status"),
     statusJornada: stringField([source], "status_jornada", "statusJornada"),
   };
 };
@@ -1070,12 +1051,12 @@ export default function Entrevistas() {
             ? "Entrevista atualizada"
             : "Entrevista registrada",
         description: savedAsDraft
-          ? "Status da jornada nao foi alterado porque a entrevista ainda esta em rascunho."
+          ? "Status principal da jornada nao foi alterado porque a entrevista ainda esta em rascunho."
           : regressionPrevented
-            ? "Entrevista concluida sem regressao de jornada; status mais avancado foi preservado."
+            ? "Entrevista concluida sem regressao de jornada; status principal mais avancado foi preservado."
             : transitionChanged
-              ? "Entrevista concluida e status da jornada atualizado para entrevista_realizada."
-              : "Entrevista concluida sem necessidade de nova transicao de status.",
+              ? "Entrevista concluida e status principal da jornada atualizado para entrevista_realizada."
+              : "Entrevista concluida sem necessidade de nova transicao da jornada principal.",
       });
     } catch (error) {
       const message =

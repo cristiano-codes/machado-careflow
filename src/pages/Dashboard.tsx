@@ -1,334 +1,291 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { UserManagement } from "@/components/admin/UserManagement";
-import { useState, useEffect } from "react";
-import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
-import { API_BASE_URL } from "@/services/api";
-import { 
-  Users, 
-  Calendar, 
-  ClipboardList, 
-  DollarSign, 
-  TrendingUp, 
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Activity,
-  Settings,
-  BarChart3
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BarChart3, ClipboardList, Clock, Users, Activity, AlertCircle, TrendingUp } from "lucide-react";
 
-interface StatsData {
-  totalStudents: number;
-  scheduledInterviews: number;
-  pendingEvaluations: number;
-  monthlyRevenue: number;
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
+import { UserManagement } from "@/components/admin/UserManagement";
+import {
+  apiService,
+  DashboardJourneySummaryItem,
+  DashboardStats,
+  JOURNEY_STATUS_FLOW,
+  JOURNEY_STATUS_LABELS,
+} from "@/services/api";
+
+const buildEmptyJourneySummary = (): DashboardJourneySummaryItem[] =>
+  JOURNEY_STATUS_FLOW.map((status) => ({
+    status,
+    label: JOURNEY_STATUS_LABELS[status],
+    total: 0,
+  }));
+
+const defaultStats: DashboardStats = {
+  totalAssistidos: 0,
+  unknownStatusCount: 0,
+  journeyTotals: {
+    em_triagem: 0,
+    em_avaliacao_e_vaga: 0,
+    decisao_vaga: 0,
+    em_acompanhamento: 0,
+    encerrados: 0,
+    em_fluxo_institucional: 0,
+  },
+  journeyStatusSummary: buildEmptyJourneySummary(),
+  updatedAt: null,
+};
+
+function coerceNumber(value: unknown): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : 0;
 }
 
-const defaultStats: StatsData = {
-  totalStudents: 0,
-  scheduledInterviews: 0,
-  pendingEvaluations: 0,
-  monthlyRevenue: 0
-};
+function normalizeDashboardStats(payload: DashboardStats | null | undefined): DashboardStats {
+  if (!payload) return defaultStats;
 
-const recentActivities = [
-  {
-    id: 1,
-    type: "entrevista",
-    description: "Entrevista agendada - Maria Silva",
-    time: "2 horas atrás",
-    status: "scheduled",
-    icon: Calendar
-  },
-  {
-    id: 2,
-    type: "avaliacao",
-    description: "Avaliação concluída - João Santos",
-    time: "4 horas atrás",
-    status: "completed",
-    icon: CheckCircle2
-  },
-  {
-    id: 3,
-    type: "pre-agendamento",
-    description: "Novo contato - Ana Costa",
-    time: "6 horas atrás",
-    status: "pending",
-    icon: Clock
-  },
-  {
-    id: 4,
-    type: "frequencia",
-    description: "Alerta de frequência - Pedro Lima",
-    time: "1 dia atrás",
-    status: "warning",
-    icon: AlertCircle
+  const summaryMap = new Map<string, DashboardJourneySummaryItem>();
+  for (const item of payload.journeyStatusSummary || []) {
+    summaryMap.set(item.status, {
+      status: item.status,
+      label: JOURNEY_STATUS_LABELS[item.status] || item.label || item.status,
+      total: coerceNumber(item.total),
+    });
   }
-];
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "completed":
-      return "text-success";
-    case "warning":
-      return "text-warning";
-    case "pending":
-      return "text-accent";
-    default:
-      return "text-muted-foreground";
-  }
-};
+  return {
+    totalAssistidos: coerceNumber(payload.totalAssistidos),
+    unknownStatusCount: coerceNumber(payload.unknownStatusCount),
+    journeyTotals: {
+      em_triagem: coerceNumber(payload.journeyTotals?.em_triagem),
+      em_avaliacao_e_vaga: coerceNumber(payload.journeyTotals?.em_avaliacao_e_vaga),
+      decisao_vaga: coerceNumber(payload.journeyTotals?.decisao_vaga),
+      em_acompanhamento: coerceNumber(payload.journeyTotals?.em_acompanhamento),
+      encerrados: coerceNumber(payload.journeyTotals?.encerrados),
+      em_fluxo_institucional: coerceNumber(payload.journeyTotals?.em_fluxo_institucional),
+    },
+    journeyStatusSummary: JOURNEY_STATUS_FLOW.map((status) => {
+      const item = summaryMap.get(status);
+      return {
+        status,
+        label: JOURNEY_STATUS_LABELS[status],
+        total: item ? item.total : 0,
+      };
+    }),
+    updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
+  };
+}
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return "sem atualizacao";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "sem atualizacao";
+  return parsed.toLocaleString("pt-BR");
+}
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [stats, setStats] = useState<StatsData>(defaultStats);
-  const [recentActivities, setRecentActivities] = useState<any[]>([]);
-  const { canView: canViewUsers } = useModulePermissions('usuarios');
+  const [activeTab, setActiveTab] = useState("overview");
+  const [stats, setStats] = useState<DashboardStats>(defaultStats);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const { canView: canViewUsers } = useModulePermissions("usuarios");
 
-  useEffect(() => {
-    loadDashboardData();
+  const loadStats = useCallback(async () => {
+    setLoadingStats(true);
+    setStatsError(null);
+
+    try {
+      const data = await apiService.getDashboardStats();
+      if (data.success) {
+        setStats(normalizeDashboardStats(data.stats));
+        return;
+      }
+
+      setStats(defaultStats);
+      setStatsError(data.message || "Nao foi possivel carregar o resumo da jornada.");
+    } catch (error) {
+      console.error("Erro ao carregar estatisticas do dashboard:", error);
+      setStats(defaultStats);
+      setStatsError("Nao foi possivel carregar o resumo da jornada.");
+    } finally {
+      setLoadingStats(false);
+    }
   }, []);
 
-  const loadStats = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/stats`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setStats({
-          totalStudents: data.stats.totalPacientes,
-          scheduledInterviews: data.stats.agendamentosHoje,
-          pendingEvaluations: data.stats.avaliacoesPendentes,
-          monthlyRevenue: data.stats.receitaMensal
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao carregar estatísticas:', error);
-    }
-  };
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
 
-  const loadRecentActivities = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/activities`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setRecentActivities(data.activities.map((activity: any) => ({
-          ...activity,
-          icon: Calendar
-        })));
-      }
-    } catch (error) {
-      console.error('Erro ao carregar atividades recentes:', error);
-    }
-  };
+  const stageCards = useMemo(
+    () => [
+      {
+        title: "Cadastros principais",
+        value: stats.totalAssistidos,
+        description: "Base institucional consolidada por status_jornada.",
+        icon: Users,
+        tone: "text-primary",
+      },
+      {
+        title: "Fila de espera",
+        value: stats.journeyTotals.em_triagem,
+        description: "Triagem social, pre-cadastro e agendamento permanecem aqui.",
+        icon: Clock,
+        tone: "text-accent",
+      },
+      {
+        title: "Avaliação e vaga",
+        value: stats.journeyTotals.em_avaliacao_e_vaga,
+        description: "Inclui em_avaliacao e em_analise_vaga.",
+        icon: ClipboardList,
+        tone: "text-warning",
+      },
+      {
+        title: "Acompanhamento",
+        value: stats.journeyTotals.em_acompanhamento,
+        description: "Matriculado, ativo e inativo assistencial.",
+        icon: Activity,
+        tone: "text-success",
+      },
+    ],
+    [stats]
+  );
 
-  const loadDashboardData = async () => {
-    try {
-      await Promise.all([loadStats(), loadRecentActivities()]);
-    } catch (error) {
-      console.error('Erro ao carregar dados do dashboard:', error);
-    }
-  };
+  const renderOverview = () => (
+    <div className="space-y-4">
+      {statsError && (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 text-warning" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">{statsError}</p>
+                <p className="text-xs text-muted-foreground">
+                  O dashboard continua carregando com valores neutros para nao misturar leitura institucional com fallback silencioso.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {stageCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card key={card.title} className="border-0" style={{ boxShadow: "var(--shadow-soft)" }}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
+                <Icon className={`h-4 w-4 ${card.tone}`} />
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-bold text-foreground">{loadingStats ? "..." : card.value}</div>
+                <p className="text-xs text-muted-foreground">{card.description}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        <Card className="border-0" style={{ boxShadow: "var(--shadow-soft)" }}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Resumo institucional da jornada
+            </CardTitle>
+            <CardDescription>
+              Leitura oficial por <code>status_jornada</code>, sem dependencia de <code>status</code> legado.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {stats.journeyStatusSummary.map((item) => (
+                <div
+                  key={item.status}
+                  className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3"
+                >
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">status_jornada oficial</p>
+                  </div>
+                  <Badge variant={item.total > 0 ? "default" : "secondary"}>{item.total}</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0" style={{ boxShadow: "var(--shadow-soft)" }}>
+          <CardHeader>
+            <CardTitle>Leitura de governanca</CardTitle>
+            <CardDescription>Campos e alertas que ajudam a evitar drift conceitual.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium text-foreground">Fonte institucional</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Todo resumo de jornada deve partir de <code>status_jornada</code>.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium text-foreground">Compatibilidade legada</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                <code>status</code> pode existir para apoio operacional, mas nao deve dirigir dashboard institucional.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium text-foreground">Registros fora do fluxo</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {stats.unknownStatusCount} registro(s) com status_jornada nao oficial foram detectados.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium text-foreground">Ultima atualizacao</p>
+              <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(stats.updatedAt)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'users':
+      case "users":
         return <UserManagement />;
-      case 'overview':
+      case "overview":
       default:
-        return (
-          <div className="space-y-4">
-            {/* Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Assistidos
-                  </CardTitle>
-                  <Users className="h-4 w-4 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{stats.totalStudents}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Total ativo no instituto
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Entrevistas Agendadas
-                  </CardTitle>
-                  <Calendar className="h-4 w-4 text-accent" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{stats.scheduledInterviews}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Próximas 7 dias
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Avaliações Pendentes
-                  </CardTitle>
-                  <ClipboardList className="h-4 w-4 text-warning" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{stats.pendingEvaluations}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Aguardando análise
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Receita Mensal
-                  </CardTitle>
-                  <DollarSign className="h-4 w-4 text-success" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-foreground">
-                    R$ {stats.monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Faturamento do mês
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Charts and Activities */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Weekly Overview */}
-              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                    Visão Semanal
-                  </CardTitle>
-                  <CardDescription>
-                    Atividades da última semana
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Entrevistas realizadas</span>
-                      <span className="font-medium">15</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Avaliações concluídas</span>
-                      <span className="font-medium">23</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Novos pré-cadastros</span>
-                      <span className="font-medium">8</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Taxa de frequência</span>
-                      <span className="font-medium text-success">92%</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Recent Activities */}
-              <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-                <CardHeader>
-                  <CardTitle>Atividades Recentes</CardTitle>
-                  <CardDescription>
-                    Últimas atualizações do sistema
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {recentActivities.map((activity) => (
-                      <div key={activity.id} className="flex items-center gap-3 pb-3 border-b border-border last:border-0 last:pb-0">
-                        <div className={`rounded-full p-2 bg-muted ${getStatusColor(activity.status)}`}>
-                          <activity.icon className="h-3 w-3" />
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <p className="text-sm font-medium text-foreground">
-                            {activity.description}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {activity.time}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Quick Actions */}
-            <Card className="border-0" style={{ boxShadow: 'var(--shadow-soft)' }}>
-              <CardHeader>
-                <CardTitle>Ações Rápidas</CardTitle>
-                <CardDescription>
-                  Acesse rapidamente as funcionalidades mais utilizadas
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-                  <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
-                    <Users className="h-8 w-8 text-primary mb-2" />
-                    <span className="text-sm font-medium">Novo Pré-cadastro</span>
-                  </div>
-                  <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
-                    <Calendar className="h-8 w-8 text-accent mb-2" />
-                    <span className="text-sm font-medium">Agendar Entrevista</span>
-                  </div>
-                  <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
-                    <ClipboardList className="h-8 w-8 text-warning mb-2" />
-                    <span className="text-sm font-medium">Nova Avaliação</span>
-                  </div>
-                  <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
-                    <DollarSign className="h-8 w-8 text-success mb-2" />
-                    <span className="text-sm font-medium">Registro Financeiro</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+        return renderOverview();
     }
   };
+
   return (
     <ProtectedRoute module="dashboard" permission="view">
       <div className="max-w-7xl mx-auto space-y-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Painel Principal</h1>
           <p className="text-muted-foreground text-sm">
-            Visão geral das atividades
+            Visao institucional da jornada por status_jornada.
           </p>
         </div>
+
         <div className="flex gap-2">
-          <Button 
-            variant={activeTab === 'overview' ? 'default' : 'outline'}
-            onClick={() => setActiveTab('overview')}
+          <Button
+            variant={activeTab === "overview" ? "default" : "outline"}
+            onClick={() => setActiveTab("overview")}
             className="flex items-center gap-2"
           >
             <BarChart3 className="w-4 h-4" />
-            Visão Geral
+            Visao Geral
           </Button>
           {canViewUsers && (
-            <Button 
-              variant={activeTab === 'users' ? 'default' : 'outline'}
-              onClick={() => setActiveTab('users')}
+            <Button
+              variant={activeTab === "users" ? "default" : "outline"}
+              onClick={() => setActiveTab("users")}
               className="flex items-center gap-2"
             >
               <Users className="w-4 h-4" />
-              Usuários
+              Usuarios
             </Button>
           )}
         </div>

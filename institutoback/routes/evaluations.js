@@ -658,6 +658,26 @@ router.post('/', authorizeEvaluationsCreate, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao criar avaliacao:', error);
+
+    if (error?.code === 'INVALID_JOURNEY_TRANSITION' || error?.code === 'JOURNEY_STATUS_MISSING') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        current_status: error.currentStatus || null,
+        target_status: error.nextStatus || null,
+        allowed_statuses: Array.isArray(error.allowedStatuses) ? error.allowedStatuses : [],
+      });
+    }
+
+    if (error?.code === 'INVALID_JOURNEY_STATUS' || error?.code === 'INVALID_PATIENT_ID' || error?.code === 'INVALID_USER_ID') {
+      return res.status(400).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error?.message || 'Erro ao criar avaliacao',
@@ -755,6 +775,26 @@ router.put('/:id', authorizeEvaluationsEdit, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao atualizar avaliacao:', error);
+
+    if (error?.code === 'INVALID_JOURNEY_TRANSITION' || error?.code === 'JOURNEY_STATUS_MISSING') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        current_status: error.currentStatus || null,
+        target_status: error.nextStatus || null,
+        allowed_statuses: Array.isArray(error.allowedStatuses) ? error.allowedStatuses : [],
+      });
+    }
+
+    if (error?.code === 'INVALID_JOURNEY_STATUS' || error?.code === 'INVALID_PATIENT_ID' || error?.code === 'INVALID_USER_ID') {
+      return res.status(400).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error?.message || 'Erro ao atualizar avaliacao',
@@ -828,6 +868,26 @@ router.post('/:id/complete', authorizeEvaluationsEdit, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao concluir avaliacao:', error);
+
+    if (error?.code === 'INVALID_JOURNEY_TRANSITION' || error?.code === 'JOURNEY_STATUS_MISSING') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        current_status: error.currentStatus || null,
+        target_status: error.nextStatus || null,
+        allowed_statuses: Array.isArray(error.allowedStatuses) ? error.allowedStatuses : [],
+      });
+    }
+
+    if (error?.code === 'INVALID_JOURNEY_STATUS' || error?.code === 'INVALID_PATIENT_ID' || error?.code === 'INVALID_USER_ID') {
+      return res.status(400).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error?.message || 'Erro ao concluir avaliacao',
@@ -937,6 +997,26 @@ router.post('/:id/send-to-vaga', authorizeEvaluationsAdvance, async (req, res) =
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao enviar avaliacao para analise de vaga:', error);
+
+    if (error?.code === 'INVALID_JOURNEY_TRANSITION' || error?.code === 'JOURNEY_STATUS_MISSING') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        current_status: error.currentStatus || null,
+        target_status: error.nextStatus || null,
+        allowed_statuses: Array.isArray(error.allowedStatuses) ? error.allowedStatuses : [],
+      });
+    }
+
+    if (error?.code === 'INVALID_JOURNEY_STATUS' || error?.code === 'INVALID_PATIENT_ID' || error?.code === 'INVALID_USER_ID') {
+      return res.status(400).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error?.message || 'Erro ao enviar para analise de vaga',

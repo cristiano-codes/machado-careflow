@@ -1,0 +1,812 @@
+# FLUXO OFICIAL DO ATENDIMENTO – REFERÊNCIA COMPLETA PARA O CODEX
+Projeto: Machado CareFlow / AcolherFlow / IDSLM
+Versão de referência: consolidada a partir do fluxo oficial revisado em 19/03/2026 e do estado atual do repositório
+
+### 1. FINALIDADE DESTE DOCUMENTO
+
+Este documento existe para servir como material de referência funcional para o Codex e para qualquer manutenção futura do sistema.
+
+O objetivo é descrever, de forma contínua e sem lacunas, como o atendimento deve funcionar do início ao fim, deixando claro:
+
+- quem faz cada etapa;
+- qual é o status oficial da jornada em cada momento;
+- quais registros precisam existir no sistema;
+- quais transições são válidas;
+- quais regras não podem ser quebradas;
+- como interpretar a diferença entre status operacional e status da jornada.
+
+Este texto deve ser tratado como referência de negócio.
+Quando houver dúvida entre interface, banco, rota, relatório ou automação, a lógica abaixo deve prevalecer.
+
+### 2. PRINCÍPIOS ESTRUTURAIS DO FLUXO
+
+2.1. Regra principal
+
+Todo o atendimento gira em torno de:
+
+- 1 criança = 1 cadastro principal;
+- 1 status principal de jornada;
+- histórico obrigatório de mudanças e etapas.
+
+2.2. Objetivo operacional
+
+O sistema deve permitir que a instituição acompanhe a criança desde o primeiro contato da família até o acompanhamento contínuo, sem perda de rastreabilidade.
+
+2.3. O que o sistema precisa evitar
+
+O fluxo foi desenhado para evitar:
+
+- duplicidade de cadastro;
+- perda de informações entre setores;
+- mistura entre triagem, entrevista, avaliação e matrícula;
+- decisões sem histórico;
+- relatórios inconsistentes;
+- uso confuso de status técnicos e status de negócio.
+
+2.4. Princípio de continuidade
+
+A criança não “troca de cadastro” ao longo do processo.
+O mesmo cadastro acompanha toda a trajetória.
+O que muda é a etapa registrada no histórico e o status principal da jornada.
+
+### 3. REGRA CRÍTICA: STATUS X STATUS_JORNADA
+
+No estado atual do projeto, o sistema mantém dois campos conceitualmente próximos:
+
+- status
+- status_jornada
+
+Para fins de negócio e de fluxo oficial, a referência principal deve ser sempre:
+
+## STATUS_JORNADA
+
+3.1. Como interpretar isso
+
+- status_jornada = etapa oficial da jornada da criança dentro da instituição.
+- status = camada operacional/técnica/legada do cadastro, usada quando necessário por compatibilidade da aplicação.
+
+3.2. Regra para o Codex
+
+Sempre que o Codex implementar, corrigir ou auditar o fluxo institucional, deve considerar que:
+
+- o campo oficial do fluxo é status_jornada;
+- relatórios de jornada devem usar status_jornada;
+- filtros de etapa institucional devem usar status_jornada;
+- regras de avanço e histórico devem usar status_jornada;
+- status não deve substituir o conceito oficial de jornada.
+
+3.3. Caso específico do pré-cadastro
+
+Hoje pode existir, tecnicamente, a combinação:
+
+- status = pre_cadastro
+- status_jornada = em_fila_espera
+
+Essa combinação pode continuar existindo por compatibilidade técnica, mas deve ser interpretada assim:
+
+- a criança ainda está oficialmente em_fila_espera;
+- pre_cadastro não é a etapa oficial da jornada;
+- o pré-cadastro é uma condição operacional do cadastro, não um estágio principal do fluxo institucional.
+
+3.4. Consequência prática
+
+O Codex não deve criar lógica de negócio que trate pre_cadastro como substituto de em_fila_espera.
+Se precisar exibir ambos, a tela deve deixar claro qual é o status oficial da jornada.
+
+### 4. ATORES DO FLUXO E RESPONSABILIDADES
+
+4.1. Recepção
+
+Responsável por:
+
+- realizar o primeiro contato com a família;
+- registrar os dados iniciais da criança e do responsável;
+- verificar se já existe cadastro prévio;
+- inserir a criança na fila de espera;
+- apoiar o agendamento quando houver vaga liberada para entrevista.
+
+4.2. Serviço Social
+
+Responsável por:
+
+- acompanhar a fila de espera;
+- realizar a triagem social inicial;
+- orientar a família sobre o fluxo;
+- decidir a forma de coleta inicial de informações;
+- realizar a entrevista social formal;
+- consolidar informações sociais, familiares, médicas e escolares;
+- participar da análise de vaga;
+- acompanhar frequência crítica e continuidade assistencial.
+
+4.3. Equipe técnica multidisciplinar
+
+Responsável por:
+
+- realizar avaliações técnicas;
+- registrar pareceres no sistema;
+- subsidiar a decisão institucional;
+- colaborar na construção do PIA;
+- acompanhar a evolução da criança após matrícula.
+
+4.4. Coordenação técnica
+
+Responsável por:
+
+- validar tecnicamente a decisão institucional;
+- apoiar a deliberação sobre viabilidade de atendimento;
+- garantir coerência entre capacidade da instituição e perfil do caso.
+
+### 5. FLUXO OFICIAL COMPLETO – DO INÍCIO AO FIM
+
+## ETAPA 1 – ENTRADA INICIAL / PRIMEIRO CONTATO
+
+Setor principal: Recepção
+
+O que acontece:
+
+A família entra em contato com a instituição por telefone, WhatsApp, e-mail ou atendimento presencial.
+A recepção identifica a demanda e registra a entrada inicial da criança.
+
+Dados mínimos esperados nessa etapa:
+
+- nome da criança;
+- nome do responsável;
+- telefone e, se houver, e-mail;
+- data de nascimento da criança;
+- bairro ou região;
+- informação inicial da necessidade apresentada;
+- existência ou não de laudo, encaminhamento ou hipótese diagnóstica;
+- observações iniciais relevantes.
+
+Regras dessa etapa:
+
+- antes de criar novo cadastro, deve haver tentativa de localizar possível cadastro existente;
+- se já existir cadastro da mesma criança, não criar outro;
+- se for novo caso, criar cadastro principal único;
+- registrar a entrada na fila de espera;
+- registrar histórico inicial do caso.
+
+Status oficial da jornada nesta etapa:
+
+em_fila_espera
+
+Observação importante:
+
+O primeiro contato não significa entrevista concluída.
+Também não significa avaliação iniciada.
+É apenas a entrada oficial da demanda no fluxo.
+
+## ETAPA 2 – TRIAGEM SOCIAL INICIAL / PRÉ-CADASTRO OPERACIONAL
+
+Setor principal: Serviço Social
+
+O que acontece:
+
+O Serviço Social acompanha a fila de espera e começa a qualificar os casos já inseridos.
+Entra em contato com a família, confirma dados básicos e orienta sobre o processo.
+Essa coleta inicial pode ocorrer por telefone, WhatsApp ou agendamento presencial, conforme a rotina institucional.
+
+O que pode ser feito aqui:
+
+- confirmar identidade da criança e do responsável;
+- complementar dados básicos do cadastro;
+- verificar documentos, encaminhamentos e laudos existentes;
+- entender a demanda de forma preliminar;
+- orientar a família sobre as próximas etapas;
+- decidir se o pré-cadastro será remoto ou presencial.
+
+Regra central desta etapa:
+
+Mesmo com a triagem social inicial em andamento, a criança continua oficialmente em fila de espera até o avanço formal do fluxo.
+
+Status oficial da jornada nesta etapa:
+
+em_fila_espera
+
+Observação crítica para o Codex:
+
+Esta etapa não deve criar um novo status principal apenas porque houve contato inicial.
+O máximo que pode existir é enriquecimento do cadastro e histórico de triagem, sem alterar o status_jornada oficial.
+
+## ETAPA 3 – AGENDAMENTO DA ENTREVISTA SOCIAL
+
+Setores envolvidos: Recepção e/ou Serviço Social
+
+O que dispara esta etapa:
+
+A instituição passa a ter disponibilidade para seguir com avaliação do caso.
+Essa disponibilidade pode ser liberada pelo Serviço Social, pela coordenação ou pela rotina interna da agenda.
+
+O que acontece:
+
+- a família é contatada;
+- a entrevista social é agendada;
+- data, horário e orientações são informados;
+- o compromisso passa a existir na agenda institucional.
+
+Regra de negócio:
+
+O simples agendamento não muda, por si só, o status oficial da jornada.
+Até a entrevista ser efetivamente realizada, o caso continua oficialmente em em_fila_espera.
+
+Status oficial da jornada nesta etapa:
+
+em_fila_espera
+
+Resultado esperado no sistema:
+
+- agenda atualizada;
+- vínculo entre a criança e a entrevista agendada;
+- registro claro de quem agendou, quando agendou e para qual data.
+
+## ETAPA 4 – ENTREVISTA SOCIAL FORMAL
+
+Setor principal: Serviço Social
+
+O que acontece:
+
+No dia agendado, a assistente social realiza a entrevista social formal com a família e, quando aplicável, com a criança.
+
+Conteúdo esperado do registro:
+
+- histórico familiar;
+- contexto social;
+- situação escolar;
+- histórico médico e terapêutico;
+- documentos apresentados;
+- laudos existentes;
+- rede de apoio familiar e comunitária;
+- equipamentos públicos de referência, como CRAS, escola, unidade de saúde etc.;
+- observações técnicas relevantes.
+
+Regra da etapa:
+
+A entrevista social é o primeiro avanço formal do fluxo depois da fila de espera.
+Somente depois de concluída e registrada o caso sai oficialmente de em_fila_espera.
+
+Status oficial da jornada após conclusão da etapa:
+
+entrevista_realizada
+
+Resultado esperado no sistema:
+
+- entrevista salva e vinculada ao cadastro principal da criança;
+- histórico da jornada atualizado;
+- rastreabilidade de autor, data e conteúdo técnico.
+
+## ETAPA 5 – AVALIAÇÃO MULTIDISCIPLINAR
+
+Setor principal: equipe técnica
+
+Profissionais possíveis:
+
+- Psicologia;
+- Fonoaudiologia;
+- Terapia Ocupacional;
+- Psicopedagogia, quando aplicável;
+- outros profissionais, se o desenho institucional permitir.
+
+O que acontece:
+
+A criança passa por avaliações técnicas, conforme a necessidade do caso e a estrutura disponível.
+Cada profissional registra seu atendimento, observações e parecer técnico no sistema.
+
+Regra desta etapa:
+
+A avaliação multidisciplinar pode ter múltiplos registros, mas a jornada continua representada por um único status principal.
+
+Status oficial da jornada durante esta etapa:
+
+em_avaliacao
+
+Resultado esperado no sistema:
+
+- avaliações registradas por profissional;
+- pareceres vinculados ao cadastro principal da criança;
+- possibilidade de compor leitura multidisciplinar do caso;
+- histórico de lançamentos preservado.
+
+## ETAPA 6 – ANÁLISE DE VAGA / VIABILIDADE INSTITUCIONAL
+
+Setor principal: Serviço Social
+Apoio: coordenação técnica e equipe técnica, quando necessário
+
+O que acontece:
+
+Depois que as avaliações estão registradas, a instituição analisa se consegue ou não absorver o caso.
+
+Pontos de análise:
+
+- compatibilidade do perfil da criança com o serviço ofertado;
+- capacidade técnica da equipe;
+- capacidade física e operacional da instituição;
+- aderência da demanda ao escopo institucional;
+- riscos e limitações relevantes.
+
+Status oficial da jornada nesta etapa:
+
+em_analise_vaga
+
+Resultado esperado no sistema:
+
+- caso pronto para decisão institucional;
+- justificativas de análise registradas;
+- base documental suficiente para decisão final.
+
+## ETAPA 7 – DECISÃO INSTITUCIONAL
+
+Setores envolvidos: Serviço Social + coordenação técnica + equipe técnica, conforme governança interna
+
+A decisão institucional possui dois caminhos possíveis:
+
+## CAMINHO A – APROVAÇÃO
+
+Quando a instituição entende que pode atender a criança:
+
+- é realizada devolutiva para a família;
+- a decisão é comunicada;
+- inicia-se o encaminhamento para matrícula;
+- prepara-se o início do atendimento formal.
+
+Status oficial da jornada nesta situação:
+
+aprovado
+
+## CAMINHO B – ENCAMINHAMENTO EXTERNO
+
+Quando a instituição entende que não pode atender a criança:
+
+- a decisão é registrada;
+- a família é orientada;
+- pode haver encaminhamento para outro serviço compatível.
+
+Status oficial da jornada nesta situação:
+
+encaminhado
+
+Observação crítica para o Codex:
+
+encaminhado é um desfecho alternativo do fluxo decisório, e não uma etapa obrigatória entre aprovado e matriculado.
+Ou seja:
+
+- em_analise_vaga pode ir para aprovado;
+- em_analise_vaga pode ir para encaminhado.
+
+Não deve existir regra que force o caminho aprovado -> encaminhado -> matriculado.
+Isso seria erro de interpretação.
+
+## ETAPA 8 – MATRÍCULA
+
+Setores envolvidos: Serviço Social + equipe institucional responsável pela formalização
+
+Pré-condição:
+
+A criança precisa ter sido aprovada para atendimento.
+
+O que acontece:
+
+- formalização do vínculo institucional;
+- assinatura de documentos necessários;
+- consolidação da entrada oficial da criança como atendida;
+- preparação do início assistencial.
+
+Status oficial da jornada nesta etapa:
+
+matriculado
+
+Resultado esperado no sistema:
+
+- vínculo formal registrado;
+- data de matrícula registrada;
+- criança apta a entrar no acompanhamento contínuo.
+
+## ETAPA 9 – CONSTRUÇÃO DO PIA
+
+Setores envolvidos: Serviço Social + equipe técnica
+
+O que acontece:
+
+Após a matrícula, é construído o PIA – Plano Individual de Atendimento.
+
+Conteúdo esperado do PIA:
+
+- objetivos do acompanhamento;
+- metas assistenciais e/ou terapêuticas;
+- frequência prevista;
+- intervenções com a criança;
+- orientações e intervenções com a família;
+- encaminhamentos complementares;
+- revisões previstas.
+
+Regra da etapa:
+
+O PIA não cria um novo status principal diferente de matriculado por si só.
+Ele faz parte da consolidação do atendimento após a aprovação e matrícula.
+
+Status oficial da jornada nesta etapa:
+
+matriculado
+
+## ETAPA 10 – INÍCIO E ACOMPANHAMENTO CONTÍNUO
+
+Setores envolvidos: equipe de atendimento + Serviço Social + coordenação, quando necessário
+
+O que acontece:
+
+Depois de matriculada, a criança passa a receber acompanhamento contínuo.
+A equipe registra a vida assistencial do caso ao longo do tempo.
+
+Registros típicos dessa fase:
+
+- frequência;
+- evolução clínica, pedagógica ou assistencial;
+- revisões periódicas;
+- ajustes do PIA;
+- atendimentos familiares;
+- eventos relevantes;
+- intercorrências.
+
+Status principais possíveis nesta fase:
+
+ativo
+inativo_assistencial
+desligado
+
+Como interpretar:
+
+- ativo = criança em acompanhamento regular;
+- inativo_assistencial = vínculo não encerrado formalmente, mas sem acompanhamento assistencial ativo naquele momento;
+- desligado = encerramento do vínculo de atendimento.
+
+Regra de atenção assistencial:
+
+Se a frequência ficar abaixo de 70%, o Serviço Social deve entrar em contato com a família para avaliar continuidade, motivo da baixa adesão e necessidade de intervenção.
+
+### 6. TABELA OFICIAL DE STATUS_JORNADA
+
+Abaixo está a tabela de referência do fluxo oficial. Os nomes em snake_case devem ser preservados no código, nas APIs, nos filtros e nas regras de transição.
+
+### 1. em_fila_espera
+   Significado: criança entrou no sistema e aguarda avanço formal.
+   Inclui: entrada inicial, triagem social inicial, pré-cadastro operacional e agendamento ainda não realizado ou ainda não concluído.
+
+### 2. entrevista_realizada
+   Significado: entrevista social formal foi concluída e registrada.
+
+### 3. em_avaliacao
+   Significado: avaliações técnicas multidisciplinares estão em andamento.
+
+### 4. em_analise_vaga
+   Significado: caso está sob análise institucional de viabilidade.
+
+### 5. aprovado
+   Significado: instituição decidiu que pode atender a criança.
+
+### 6. encaminhado
+   Significado: instituição decidiu não absorver o caso e realizou ou registrou o encaminhamento adequado.
+
+### 7. matriculado
+   Significado: vínculo formal do atendimento foi estabelecido.
+
+### 8. ativo
+   Significado: acompanhamento contínuo em andamento.
+
+### 9. inativo_assistencial
+   Significado: acompanhamento não está ativo no momento, sem necessariamente encerrar o histórico.
+
+### 10. desligado
+    Significado: atendimento encerrado.
+
+### 7. REGRAS DE TRANSIÇÃO DA JORNADA
+
+Fluxo principal esperado:
+
+em_fila_espera
+-> entrevista_realizada
+-> em_avaliacao
+-> em_analise_vaga
+-> aprovado
+-> matriculado
+-> ativo
+
+Ramo alternativo de decisão:
+
+em_analise_vaga
+-> encaminhado
+
+Possíveis evoluções posteriores do acompanhamento:
+
+ativo
+-> inativo_assistencial
+-> ativo
+-> desligado
+
+ou
+
+ativo
+-> desligado
+
+Observações importantes:
+
+- o sistema deve manter histórico completo de cada transição;
+- regressão de jornada não deve ocorrer automaticamente;
+- qualquer mudança excepcional precisa ser justificável e auditável;
+- encaminhado e desligado tendem a funcionar como estados de encerramento do percurso, cada um em seu contexto.
+
+### 8. REGRAS DE CADASTRO E ANTIDUPLICIDADE
+
+8.1. Regra geral
+
+Nunca criar dois cadastros principais para a mesma criança.
+
+8.2. Antes de criar novo cadastro, o sistema deve tentar localizar duplicidade por critérios disponíveis, preferencialmente:
+
+- CPF, quando existir;
+- combinação de nome + data de nascimento, quando o CPF não existir.
+
+8.3. Se houver potencial duplicidade
+
+- não criar novo registro automaticamente;
+- sinalizar para conferência;
+- preservar o conceito de cadastro único.
+
+8.4. Histórico separado do cadastro principal
+
+Eventos, entrevistas, avaliações, decisões e PIA devem se vincular ao mesmo cadastro principal.
+Não devem gerar novo paciente.
+
+### 9. REGISTROS MÍNIMOS ESPERADOS POR ETAPA
+
+9.1. Entrada inicial
+
+- identificação básica da criança;
+- identificação do responsável;
+- canal de entrada;
+- observação inicial da demanda;
+- data de entrada;
+- autor do cadastro.
+
+9.2. Triagem social inicial
+
+- tentativas de contato;
+- complementação cadastral;
+- observações preliminares;
+- orientação prestada à família.
+
+9.3. Agendamento da entrevista
+
+- data e hora da entrevista;
+- responsável pelo agendamento;
+- orientações transmitidas;
+- confirmação ou tentativa de confirmação.
+
+9.4. Entrevista social
+
+- formulário ou registro social completo;
+- documentos recebidos;
+- observações técnicas;
+- identificação do profissional responsável.
+
+9.5. Avaliações
+
+- parecer por profissional;
+- data da avaliação;
+- achados relevantes;
+- recomendação técnica.
+
+9.6. Análise de vaga
+
+- justificativa institucional;
+- fatores considerados na decisão;
+- autor ou setor responsável.
+
+9.7. Decisão
+
+- decisão final;
+- data da decisão;
+- responsáveis pela validação;
+- devolutiva à família.
+
+9.8. Matrícula e PIA
+
+- data da matrícula;
+- documentos de formalização;
+- PIA vinculado;
+- metas e frequência definidas.
+
+9.9. Acompanhamento contínuo
+
+- frequência;
+- evolução;
+- revisões do PIA;
+- eventos familiares e assistenciais relevantes;
+- registros de intervenção em caso de baixa adesão.
+
+### 10. COMO O CODEX DEVE INTERPRETAR CADA MÓDULO DO SISTEMA
+
+A organização abaixo serve como referência conceitual. O nome exato da tela pode variar, mas a responsabilidade funcional deve seguir esta lógica.
+
+10.1. Pré-Agendamento / Recepção
+
+Finalidade:
+
+- registrar o primeiro contato;
+- criar ou localizar cadastro principal;
+- inserir a criança na fila de espera;
+- coletar dados iniciais.
+
+Status oficial predominante:
+
+em_fila_espera
+
+10.2. Agenda
+
+Finalidade:
+
+- controlar disponibilidade e compromissos;
+- permitir agendamento da entrevista social;
+- organizar a transição operacional entre fila e entrevista.
+
+Regra:
+
+a agenda organiza o compromisso, mas não substitui o status oficial da jornada.
+
+10.3. Entrevistas
+
+Finalidade:
+
+- registrar a entrevista social formal;
+- consolidar o caso do ponto de vista social;
+- avançar a jornada após conclusão.
+
+Status oficial ao concluir:
+
+entrevista_realizada
+
+10.4. Avaliações
+
+Finalidade:
+
+- registrar avaliações técnicas;
+- produzir pareceres por profissional.
+
+Status oficial predominante:
+
+em_avaliacao
+
+10.5. Análise de Vagas
+
+Finalidade:
+
+- decidir viabilidade institucional;
+- registrar aprovação ou encaminhamento.
+
+Status oficial predominante:
+
+em_analise_vaga
+
+Saídas possíveis:
+
+- aprovado
+- encaminhado
+
+10.6. Matrícula / PIA
+
+Finalidade:
+
+- formalizar vínculo institucional;
+- registrar plano individual de atendimento;
+- preparar acompanhamento.
+
+Status oficial predominante:
+
+matriculado
+
+10.7. Acompanhamento
+
+Finalidade:
+
+- manter vida assistencial do caso;
+- registrar frequência, evolução e continuidade.
+
+Status oficiais possíveis:
+
+- ativo
+- inativo_assistencial
+- desligado
+
+### 11. REGRAS DE AUDITORIA E RASTREABILIDADE
+
+11.1. Toda mudança relevante precisa deixar rastro
+
+O sistema deve preservar histórico de:
+
+- criação do cadastro;
+- transição de status_jornada;
+- entrevista realizada;
+- avaliações registradas;
+- decisão institucional;
+- matrícula;
+- mudanças relevantes de acompanhamento.
+
+11.2. Autor e data
+
+Sempre que possível, os registros devem guardar:
+
+- quem executou a ação;
+- quando executou;
+- o que foi alterado;
+- motivo, quando a regra exigir justificativa.
+
+11.3. O que não pode acontecer
+
+- alteração silenciosa de etapa sem histórico;
+- substituição de cadastro principal por cadastro novo;
+- relatório de jornada baseado apenas em status operacional;
+- tela dizendo uma etapa e banco registrando outra sem explicação.
+
+### 12. REGRAS DE IMPLEMENTAÇÃO PARA O CODEX
+
+Sempre que o Codex trabalhar nesse fluxo, ele deve respeitar as regras abaixo.
+
+12.1. Preservar o cadastro único
+
+Não criar múltiplos pacientes para a mesma criança.
+
+12.2. Tratar status_jornada como fonte de verdade do fluxo
+
+O campo status_jornada é o eixo oficial da jornada institucional.
+
+12.3. Não elevar pré-cadastro a status principal de jornada
+
+Pré-cadastro pode existir como camada operacional, mas não substitui em_fila_espera.
+
+12.4. Não avançar etapa só porque houve agendamento
+
+Agendamento de entrevista não equivale a entrevista realizada.
+
+12.5. Não confundir ramo decisório com sequência linear obrigatória
+
+encaminhado é saída alternativa da análise de vaga, não etapa obrigatória após aprovado.
+
+12.6. Manter histórico obrigatório
+
+Toda transição de status_jornada deve ser auditável.
+
+12.7. Respeitar nomes oficiais dos status em snake_case
+
+Usar exatamente:
+
+- em_fila_espera
+- entrevista_realizada
+- em_avaliacao
+- em_analise_vaga
+- aprovado
+- encaminhado
+- matriculado
+- ativo
+- inativo_assistencial
+- desligado
+
+12.8. Relatórios, filtros e dashboards de jornada
+
+Devem ser baseados em status_jornada, não apenas em status.
+
+### 13. FLUXO RESUMIDO FINAL EM UMA LINHA LÓGICA
+
+Recepção recebe a família -> cria ou localiza cadastro único -> coloca a criança em em_fila_espera -> Serviço Social faz triagem inicial sem mudar o status oficial -> instituição agenda entrevista quando houver vaga -> entrevista social é realizada e o caso vai para entrevista_realizada -> equipe técnica avalia e o caso vai para em_avaliacao -> Serviço Social e coordenação analisam a viabilidade e o caso vai para em_analise_vaga -> a instituição decide entre aprovado ou encaminhado -> se aprovado, ocorre matrícula e construção do PIA em matriculado -> depois a criança entra em acompanhamento contínuo, podendo ficar em ativo, inativo_assistencial ou desligado, sempre com histórico completo de cada etapa.
+
+### 14. FECHAMENTO
+
+Este é o fluxo oficial contínuo que deve orientar:
+
+- ajustes no frontend;
+- ajustes no backend;
+- migrations e validações de banco;
+- regras de API;
+- relatórios;
+- dashboards;
+- automações;
+- auditorias do Codex.
+
+Se algum trecho da aplicação divergir deste documento, a divergência deve ser tratada como ponto de revisão técnica e não como nova regra de negócio automática.
