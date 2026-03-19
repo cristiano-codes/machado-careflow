@@ -90,10 +90,23 @@ if (frontendBuildAvailable) {
 }
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    message: 'Erro interno do servidor',
-    error: process.env.NODE_ENV === 'development' ? err.message : {},
+  console.error(err?.stack || err);
+
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({
+      message: 'JSON invalido no corpo da requisicao',
+      error: process.env.NODE_ENV === 'development' ? err.message : {},
+    });
+  }
+
+  const statusCode =
+    Number.isInteger(err?.status) && err.status >= 400 && err.status < 600
+      ? err.status
+      : 500;
+
+  return res.status(statusCode).json({
+    message: statusCode === 500 ? 'Erro interno do servidor' : err?.message || 'Erro na requisicao',
+    error: process.env.NODE_ENV === 'development' ? err?.message : {},
   });
 });
 

@@ -10,6 +10,10 @@ const {
 
 router.use(authMiddleware);
 
+const UUID_V1_TO_V5_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+let socialInterviewsSchemaCache = null;
+
 const authorizeSocialInterviewsView = authorizeAny([
   ['entrevistas', 'view'],
   ['entrevista_social', 'view'],
@@ -121,6 +125,47 @@ function resolveInterviewDraftFlag(payload) {
   );
 
   return !parecerSocial;
+}
+
+async function resolveSocialInterviewsSchema(client) {
+  if (socialInterviewsSchemaCache) return socialInterviewsSchemaCache;
+
+  const result = await client.query(
+    `
+      SELECT udt_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'social_interviews'
+        AND column_name = 'created_by'
+      LIMIT 1
+    `
+  );
+
+  socialInterviewsSchemaCache = {
+    createdByType: result.rows[0]?.udt_name || null,
+  };
+
+  return socialInterviewsSchemaCache;
+}
+
+function resolveCreatedByValue(userId, createdByType) {
+  if (userId === null || userId === undefined || !createdByType) return null;
+
+  if (createdByType === 'uuid') {
+    if (typeof userId === 'string' && UUID_V1_TO_V5_REGEX.test(userId)) {
+      return userId;
+    }
+    return null;
+  }
+
+  if (['int2', 'int4', 'int8'].includes(createdByType)) {
+    if (typeof userId === 'number' && Number.isInteger(userId) && userId > 0) {
+      return userId;
+    }
+    return null;
+  }
+
+  return String(userId);
 }
 
 function buildInterviewPayload(body, fallbackRow = null) {
@@ -382,6 +427,8 @@ router.post('/', authorizeSocialInterviewsCreate, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const schema = await resolveSocialInterviewsSchema(client);
+    const createdByValue = resolveCreatedByValue(userIdInt, schema.createdByType);
 
     const insertResult = await client.query(
       `
@@ -400,7 +447,7 @@ router.post('/', authorizeSocialInterviewsCreate, async (req, res) => {
         normalized.interviewDate,
         normalized.assistenteSocial,
         JSON.stringify(normalized.payload),
-        userIdInt,
+        createdByValue,
       ]
     );
 

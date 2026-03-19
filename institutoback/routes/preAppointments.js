@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../config/pg');
 
 const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRE_APPOINTMENT_OPERATIONAL_STATUS = 'em_fila_espera';
 const PRE_APPOINTMENT_STATUS_NOTE =
   'Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal.';
