@@ -1,0 +1,390 @@
+{
+  "runId": "20260321205457",
+  "startedAt": "2026-03-21T20:54:57.013Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "screenshots": {
+    "01-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-20260321205457\\01-login.png",
+    "02-pre-cadastro-opcoes": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-20260321205457\\02-pre-cadastro-opcoes.png",
+    "03-manual-salvo": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-20260321205457\\03-manual-salvo.png",
+    "04-busca-novo": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-20260321205457\\04-busca-novo.png"
+  },
+  "setup": {
+    "login": {
+      "status": 200,
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "email": "admin@institutolauir.com.br",
+        "name": "Administrador",
+        "phone": null,
+        "role": "Coordenador Geral",
+        "status": "ativo",
+        "first_access": false,
+        "created_at": "2026-02-03T02:47:32.992Z",
+        "must_change_password": false,
+        "deleted_at": null,
+        "professional_id": null,
+        "can_view_all_professionals": false,
+        "allow_professional_view_others": true,
+        "permissions": [
+          "dashboard:view",
+          "dashboard:create",
+          "dashboard:edit",
+          "dashboard:delete",
+          "dashboard:admin_panel_access",
+          "pre_agendamento:view",
+          "pre_agendamento:create",
+          "pre_agendamento:edit",
+          "pre_agendamento:delete",
+          "pre_agendamento:admin_panel_access",
+          "agenda:view",
+          "agenda:create",
+          "agenda:edit",
+          "agenda:delete",
+          "agenda:admin_panel_access",
+          "pre_cadastro:view",
+          "pre_cadastro:create",
+          "pre_cadastro:edit",
+          "pre_cadastro:delete",
+          "pre_cadastro:admin_panel_access",
+          "entrevistas:view",
+          "entrevistas:create",
+          "entrevistas:edit",
+          "entrevistas:delete",
+          "entrevistas:admin_panel_access",
+          "avaliacoes:view",
+          "avaliacoes:create",
+          "avaliacoes:edit",
+          "avaliacoes:delete",
+          "avaliacoes:admin_panel_access",
+          "analise_vagas:view",
+          "analise_vagas:create",
+          "analise_vagas:edit",
+          "analise_vagas:delete",
+          "analise_vagas:admin_panel_access",
+          "usuarios:view",
+          "usuarios:create",
+          "usuarios:edit",
+          "usuarios:delete",
+          "usuarios:admin_panel_access",
+          "configuracoes:view",
+          "configuracoes:create",
+          "configuracoes:edit",
+          "configuracoes:delete",
+          "configuracoes:admin_panel_access",
+          "admin:view",
+          "admin:create",
+          "admin:edit",
+          "admin:delete",
+          "admin:admin_panel_access"
+        ]
+      }
+    },
+    "testData": {
+      "duplicateName": "SMOKE DUP 20260321205457",
+      "duplicateDob": "2016-04-10",
+      "duplicateCpf": "91809835165",
+      "duplicatePhone": "11990620797",
+      "importNewName": "SMOKE NOVO 20260321205457",
+      "importNewDob": "2017-05-11",
+      "importNewCpf": "92774582947",
+      "importNewPhone": "11980966476",
+      "serviceId": "00000000-0000-0000-0000-000000000201"
+    },
+    "preAppointments": {
+      "importNew": {
+        "id": "3ec7d3ba-2249-42b5-a56e-3308e931a0c0",
+        "name": "SMOKE NOVO 20260321205457"
+      },
+      "duplicate": {
+        "id": "60d9e8c6-113c-4746-9996-320aadba53a0",
+        "name": "SMOKE DUP 20260321205457"
+      }
+    }
+  },
+  "ui": {
+    "manual": {
+      "patientId": "5703ab91-886f-4052-bbef-75562f09c60d",
+      "response": {
+        "status": 201,
+        "url": "https://friendly-insight-production.up.railway.app/api/pacientes",
+        "data": {
+          "success": true,
+          "paciente": {
+            "id": "5703ab91-886f-4052-bbef-75562f09c60d",
+            "nome": "SMOKE DUP 20260321205457",
+            "cpf": "91809835165",
+            "telefone": "11990620797",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          }
+        }
+      }
+    }
+  },
+  "apiChecks": {},
+  "assertions": [
+    {
+      "name": "login admin/admin 200",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "body": {
+          "message": "Login realizado com sucesso",
+          "success": true,
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGUiOiJDb29yZGVuYWRvciBHZXJhbCIsIm11c3RfY2hhbmdlX3Bhc3N3b3JkIjpmYWxzZSwicHJvZmVzc2lvbmFsX2lkIjpudWxsLCJjYW5fdmlld19hbGxfcHJvZmVzc2lvbmFscyI6ZmFsc2UsInBlcm1pc3Npb25zIjpbImRhc2hib2FyZDp2aWV3IiwiZGFzaGJvYXJkOmNyZWF0ZSIsImRhc2hib2FyZDplZGl0IiwiZGFzaGJvYXJkOmRlbGV0ZSIsImRhc2hib2FyZDphZG1pbl9wYW5lbF9hY2Nlc3MiLCJwcmVfYWdlbmRhbWVudG86dmlldyIsInByZV9hZ2VuZGFtZW50bzpjcmVhdGUiLCJwcmVfYWdlbmRhbWVudG86ZWRpdCIsInByZV9hZ2VuZGFtZW50bzpkZWxldGUiLCJwcmVfYWdlbmRhbWVudG86YWRtaW5fcGFuZWxfYWNjZXNzIiwiYWdlbmRhOnZpZXciLCJhZ2VuZGE6Y3JlYXRlIiwiYWdlbmRhOmVkaXQiLCJhZ2VuZGE6ZGVsZXRlIiwiYWdlbmRhOmFkbWluX3BhbmVsX2FjY2VzcyIsInByZV9jYWRhc3Rybzp2aWV3IiwicHJlX2NhZGFzdHJvOmNyZWF0ZSIsInByZV9jYWRhc3RybzplZGl0IiwicHJlX2NhZGFzdHJvOmRlbGV0ZSIsInByZV9jYWRhc3RybzphZG1pbl9wYW5lbF9hY2Nlc3MiLCJlbnRyZXZpc3Rhczp2aWV3IiwiZW50cmV2aXN0YXM6Y3JlYXRlIiwiZW50cmV2aXN0YXM6ZWRpdCIsImVudHJldmlzdGFzOmRlbGV0ZSIsImVudHJldmlzdGFzOmFkbWluX3BhbmVsX2FjY2VzcyIsImF2YWxpYWNvZXM6dmlldyIsImF2YWxpYWNvZXM6Y3JlYXRlIiwiYXZhbGlhY29lczplZGl0IiwiYXZhbGlhY29lczpkZWxldGUiLCJhdmFsaWFjb2VzOmFkbWluX3BhbmVsX2FjY2VzcyIsImFuYWxpc2VfdmFnYXM6dmlldyIsImFuYWxpc2VfdmFnYXM6Y3JlYXRlIiwiYW5hbGlzZV92YWdhczplZGl0IiwiYW5hbGlzZV92YWdhczpkZWxldGUiLCJhbmFsaXNlX3ZhZ2FzOmFkbWluX3BhbmVsX2FjY2VzcyIsInVzdWFyaW9zOnZpZXciLCJ1c3VhcmlvczpjcmVhdGUiLCJ1c3VhcmlvczplZGl0IiwidXN1YXJpb3M6ZGVsZXRlIiwidXN1YXJpb3M6YWRtaW5fcGFuZWxfYWNjZXNzIiwiY29uZmlndXJhY29lczp2aWV3IiwiY29uZmlndXJhY29lczpjcmVhdGUiLCJjb25maWd1cmFjb2VzOmVkaXQiLCJjb25maWd1cmFjb2VzOmRlbGV0ZSIsImNvbmZpZ3VyYWNvZXM6YWRtaW5fcGFuZWxfYWNjZXNzIiwiYWRtaW46dmlldyIsImFkbWluOmNyZWF0ZSIsImFkbWluOmVkaXQiLCJhZG1pbjpkZWxldGUiLCJhZG1pbjphZG1pbl9wYW5lbF9hY2Nlc3MiXSwiaWF0IjoxNzc0MTI2NDk4LCJleHAiOjE3NzQyMTI4OTh9.Em2CB7j01IZD8BiDPgyZU_LUrVIbK7-jzORLzIv6hfU",
+          "user": {
+            "id": 1,
+            "username": "admin",
+            "email": "admin@institutolauir.com.br",
+            "name": "Administrador",
+            "phone": null,
+            "role": "Coordenador Geral",
+            "status": "ativo",
+            "first_access": false,
+            "created_at": "2026-02-03T02:47:32.992Z",
+            "must_change_password": false,
+            "deleted_at": null,
+            "professional_id": null,
+            "can_view_all_professionals": false,
+            "allow_professional_view_others": true,
+            "permissions": [
+              "dashboard:view",
+              "dashboard:create",
+              "dashboard:edit",
+              "dashboard:delete",
+              "dashboard:admin_panel_access",
+              "pre_agendamento:view",
+              "pre_agendamento:create",
+              "pre_agendamento:edit",
+              "pre_agendamento:delete",
+              "pre_agendamento:admin_panel_access",
+              "agenda:view",
+              "agenda:create",
+              "agenda:edit",
+              "agenda:delete",
+              "agenda:admin_panel_access",
+              "pre_cadastro:view",
+              "pre_cadastro:create",
+              "pre_cadastro:edit",
+              "pre_cadastro:delete",
+              "pre_cadastro:admin_panel_access",
+              "entrevistas:view",
+              "entrevistas:create",
+              "entrevistas:edit",
+              "entrevistas:delete",
+              "entrevistas:admin_panel_access",
+              "avaliacoes:view",
+              "avaliacoes:create",
+              "avaliacoes:edit",
+              "avaliacoes:delete",
+              "avaliacoes:admin_panel_access",
+              "analise_vagas:view",
+              "analise_vagas:create",
+              "analise_vagas:edit",
+              "analise_vagas:delete",
+              "analise_vagas:admin_panel_access",
+              "usuarios:view",
+              "usuarios:create",
+              "usuarios:edit",
+              "usuarios:delete",
+              "usuarios:admin_panel_access",
+              "configuracoes:view",
+              "configuracoes:create",
+              "configuracoes:edit",
+              "configuracoes:delete",
+              "configuracoes:admin_panel_access",
+              "admin:view",
+              "admin:create",
+              "admin:edit",
+              "admin:delete",
+              "admin:admin_panel_access"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "token presente",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "services 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "services ativos >0",
+      "ok": true,
+      "details": {
+        "total": 8
+      }
+    },
+    {
+      "name": "create pre-appointment 200",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "status_operacional": "em_fila_espera",
+          "status_contexto": "Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal.",
+          "message": "Solicitacao enviada com sucesso."
+        }
+      }
+    },
+    {
+      "name": "create pre-appointment 200",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "status_operacional": "em_fila_espera",
+          "status_contexto": "Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal.",
+          "message": "Solicitacao enviada com sucesso."
+        }
+      }
+    },
+    {
+      "name": "eligible 200",
+      "ok": true,
+      "details": {
+        "name": "SMOKE NOVO 20260321205457",
+        "status": 200,
+        "body": {
+          "success": true,
+          "total": 1,
+          "preAppointments": [
+            {
+              "id": "3ec7d3ba-2249-42b5-a56e-3308e931a0c0",
+              "name": "SMOKE NOVO 20260321205457",
+              "cpf": "92774582947",
+              "phone": "11980966476",
+              "email": "novo.20260321205457@smoke.local",
+              "date_of_birth": "2017-05-11T00:00:00.000Z",
+              "responsible_name": "Resp Novo 20260321205457",
+              "status": "em_fila_espera",
+              "preferred_date": null,
+              "created_at": "2026-03-21T20:54:58.829Z",
+              "converted_to_patient_id": null,
+              "converted_at": null,
+              "status_operacional": "em_fila_espera",
+              "status_contexto": "Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "eligible found by name",
+      "ok": true,
+      "details": {
+        "name": "SMOKE NOVO 20260321205457",
+        "total": 1
+      }
+    },
+    {
+      "name": "eligible 200",
+      "ok": true,
+      "details": {
+        "name": "SMOKE DUP 20260321205457",
+        "status": 200,
+        "body": {
+          "success": true,
+          "total": 1,
+          "preAppointments": [
+            {
+              "id": "60d9e8c6-113c-4746-9996-320aadba53a0",
+              "name": "SMOKE DUP 20260321205457",
+              "cpf": "91809835165",
+              "phone": "11990620797",
+              "email": "dup.20260321205457@smoke.local",
+              "date_of_birth": "2016-04-10T00:00:00.000Z",
+              "responsible_name": "Resp Dup 20260321205457",
+              "status": "em_fila_espera",
+              "preferred_date": null,
+              "created_at": "2026-03-21T20:54:59.050Z",
+              "converted_to_patient_id": null,
+              "converted_at": null,
+              "status_operacional": "em_fila_espera",
+              "status_contexto": "Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "eligible found by name",
+      "ok": true,
+      "details": {
+        "name": "SMOKE DUP 20260321205457",
+        "total": 1
+      }
+    },
+    {
+      "name": "opcao manual visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "opcao importar visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "manual pacientes post 2xx",
+      "ok": true,
+      "details": {
+        "status": 201,
+        "url": "https://friendly-insight-production.up.railway.app/api/pacientes",
+        "data": {
+          "success": true,
+          "paciente": {
+            "id": "5703ab91-886f-4052-bbef-75562f09c60d",
+            "nome": "SMOKE DUP 20260321205457",
+            "cpf": "91809835165",
+            "telefone": "11990620797",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          }
+        }
+      }
+    },
+    {
+      "name": "manual patient id presente",
+      "ok": true,
+      "details": {
+        "success": true,
+        "paciente": {
+          "id": "5703ab91-886f-4052-bbef-75562f09c60d",
+          "nome": "SMOKE DUP 20260321205457",
+          "cpf": "91809835165",
+          "telefone": "11990620797",
+          "email": null,
+          "dataNascimento": "0410-12-20T00:00:00.000Z",
+          "status": "pre_cadastro",
+          "status_jornada": "em_fila_espera"
+        }
+      }
+    }
+  ],
+  "errors": [
+    {
+      "message": "Waiting failed: 45000ms exceeded",
+      "stack": "TimeoutError: Waiting failed: 45000ms exceeded\n    at new WaitTask (C:\\projeto\\machado-careflow\\institutoback\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\common\\WaitTask.js:48:34)\n    at IsolatedWorld.waitForFunction (C:\\projeto\\machado-careflow\\institutoback\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\api\\Realm.js:25:26)\n    at CdpFrame.waitForFunction (C:\\projeto\\machado-careflow\\institutoback\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\api\\Frame.js:571:43)\n    at CdpFrame.<anonymous> (C:\\projeto\\machado-careflow\\institutoback\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\util\\decorators.js:109:27)\n    at CdpPage.waitForFunction (C:\\projeto\\machado-careflow\\institutoback\\node_modules\\puppeteer-core\\lib\\cjs\\puppeteer\\api\\Page.js:1434:37)\n    at C:\\projeto\\machado-careflow\\temp_smoke_published.cjs:238:16"
+    }
+  ],
+  "status": "error",
+  "finishedAt": "2026-03-21T20:56:37.783Z"
+}

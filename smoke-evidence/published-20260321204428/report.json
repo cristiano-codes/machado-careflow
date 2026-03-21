@@ -1,0 +1,102 @@
+{
+  "runId": "20260321204428",
+  "startedAt": "2026-03-21T20:44:28.389Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "screenshots": {},
+  "setup": {
+    "login": {
+      "status": 200,
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "role": "Coordenador Geral"
+      }
+    },
+    "testData": {
+      "duplicateName": "SMOKE DUP 20260321204428",
+      "duplicateDob": "2016-04-10",
+      "duplicateCpf": "91155733749",
+      "duplicatePhone": "11996726295",
+      "importNewName": "SMOKE NOVO 20260321204428",
+      "importNewDob": "2017-05-11",
+      "importNewCpf": "92870557945",
+      "importNewPhone": "11985223439",
+      "serviceId": "00000000-0000-0000-0000-000000000201"
+    }
+  },
+  "ui": {},
+  "apiChecks": {},
+  "assertions": [
+    {
+      "name": "Login API admin/admin deve retornar 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "Token JWT presente",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "GET /services?active=true deve retornar 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "Deve existir ao menos 1 servico ativo",
+      "ok": true,
+      "details": {
+        "total": 8
+      }
+    },
+    {
+      "name": "POST /pre-appointments deve retornar 200",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "status_operacional": "em_fila_espera",
+          "status_contexto": "Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal.",
+          "message": "Solicitacao enviada com sucesso."
+        }
+      }
+    },
+    {
+      "name": "POST /pre-appointments deve retornar 200",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "status_operacional": "em_fila_espera",
+          "status_contexto": "Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal.",
+          "message": "Solicitacao enviada com sucesso."
+        }
+      }
+    },
+    {
+      "name": "GET /pre-appointments/eligible deve retornar 200",
+      "ok": false,
+      "details": {
+        "status": 500,
+        "query": "SMOKE NOVO 20260321204428"
+      }
+    }
+  ],
+  "errors": [
+    {
+      "message": "ASSERTION FAILED: GET /pre-appointments/eligible deve retornar 200 | {\"status\":500,\"query\":\"SMOKE NOVO 20260321204428\"}",
+      "stack": "Error: ASSERTION FAILED: GET /pre-appointments/eligible deve retornar 200 | {\"status\":500,\"query\":\"SMOKE NOVO 20260321204428\"}\n    at addAssertion (C:\\projeto\\machado-careflow\\temp_smoke_published.cjs:27:11)\n    at findEligibleIdByName (C:\\projeto\\machado-careflow\\temp_smoke_published.cjs:211:7)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async C:\\projeto\\machado-careflow\\temp_smoke_published.cjs:221:22"
+    }
+  ],
+  "finishedAt": "2026-03-21T20:44:30.629Z",
+  "status": "error"
+}
