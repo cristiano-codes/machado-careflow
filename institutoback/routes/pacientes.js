@@ -10,6 +10,9 @@ const {
   createInitialStatusHistory,
 } = require('../services/journeyService');
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 router.use(authMiddleware);
 
 function normalizeCpf(value) {
@@ -34,6 +37,17 @@ function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj || {}, key);
 }
 
+function normalizeUuid(value) {
+  const text = normalizeOptionalText(value);
+  if (!text) return null;
+  return UUID_REGEX.test(text) ? text : null;
+}
+
+function normalizeIdAsText(value) {
+  const normalized = normalizeOptionalText(value);
+  return normalized ? normalized : null;
+}
+
 function mapPatientResponse(row) {
   return {
     id: row.id,
@@ -49,6 +63,57 @@ function mapPatientResponse(row) {
 
 function resolveLoggedUserIdInt(req) {
   return normalizeUserIdInt(req.user?.id);
+}
+
+function isPreAppointmentConverted(row) {
+  if (!row || typeof row !== 'object') return false;
+
+  const convertedToPatientId = normalizeOptionalText(row.converted_to_patient_id);
+  if (convertedToPatientId) return true;
+
+  if (row.converted_at) return true;
+
+  const status = normalizeOptionalText(row.status);
+  return status ? status.toLowerCase() === 'converted' : false;
+}
+
+async function lockPreAppointmentForConversion(client, preAppointmentId) {
+  const result = await client.query(
+    `
+      SELECT
+        id::text AS id,
+        status,
+        converted_to_patient_id::text AS converted_to_patient_id,
+        converted_at
+      FROM public.pre_appointments
+      WHERE id = $1
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [preAppointmentId]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function markPreAppointmentAsConverted({
+  client,
+  preAppointmentId,
+  patientId,
+  convertedBy,
+}) {
+  await client.query(
+    `
+      UPDATE public.pre_appointments
+      SET status = 'converted',
+          converted_to_patient_id = $2,
+          converted_at = NOW(),
+          converted_by = $3,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [preAppointmentId, patientId, convertedBy]
+  );
 }
 
 function buildPatientPayload(body, existing = null) {
@@ -196,6 +261,28 @@ async function findDuplicatePatient({
   return null;
 }
 
+async function getPatientById(client, patientId) {
+  const result = await client.query(
+    `
+      SELECT
+        id::text AS id,
+        name AS "nome",
+        cpf,
+        phone AS "telefone",
+        email,
+        date_of_birth AS "dataNascimento",
+        status,
+        status_jornada
+      FROM public.patients
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [patientId]
+  );
+
+  return result.rows[0] || null;
+}
+
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
@@ -273,9 +360,67 @@ router.post('/', async (req, res) => {
     });
   }
 
+  const sourcePreAppointmentIdProvided = hasOwn(req.body, 'source_pre_appointment_id');
+  const sourcePreAppointmentId = sourcePreAppointmentIdProvided
+    ? normalizeUuid(req.body?.source_pre_appointment_id)
+    : null;
+  if (sourcePreAppointmentIdProvided && !sourcePreAppointmentId) {
+    return res.status(400).json({
+      success: false,
+      message: 'source_pre_appointment_id invalido. Use UUID.',
+    });
+  }
+
+  const linkExistingPatientIdProvided = hasOwn(req.body, 'link_existing_patient_id');
+  const linkExistingPatientId = linkExistingPatientIdProvided
+    ? normalizeIdAsText(req.body?.link_existing_patient_id)
+    : null;
+  if (linkExistingPatientIdProvided && !linkExistingPatientId) {
+    return res.status(400).json({
+      success: false,
+      message: 'link_existing_patient_id invalido.',
+    });
+  }
+
+  if (linkExistingPatientId && !sourcePreAppointmentId) {
+    return res.status(400).json({
+      success: false,
+      message: 'link_existing_patient_id so pode ser usado com source_pre_appointment_id.',
+    });
+  }
+
+  const convertedBy = normalizeIdAsText(req.user?.id);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    if (sourcePreAppointmentId) {
+      const sourcePreAppointment = await lockPreAppointmentForConversion(
+        client,
+        sourcePreAppointmentId
+      );
+
+      if (!sourcePreAppointment) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          message: 'Pre-agendamento de origem nao encontrado.',
+        });
+      }
+
+      if (isPreAppointmentConverted(sourcePreAppointment)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          code: 'pre_appointment_already_converted',
+          source_pre_appointment_id: sourcePreAppointmentId,
+          converted_to_patient_id:
+            normalizeIdAsText(sourcePreAppointment.converted_to_patient_id) || null,
+          message: 'Este pre-agendamento ja foi convertido e nao pode gerar novo cadastro.',
+        });
+      }
+    }
 
     const duplicateId = await findDuplicatePatient({
       client,
@@ -285,10 +430,61 @@ router.post('/', async (req, res) => {
     });
 
     if (duplicateId) {
+      const duplicateIdText = String(duplicateId).trim();
+      const duplicateIdComparison = duplicateIdText.toLowerCase();
+      const linkExistingComparison = linkExistingPatientId
+        ? linkExistingPatientId.toLowerCase()
+        : null;
+
+      if (sourcePreAppointmentId) {
+        if (!linkExistingPatientId || linkExistingComparison !== duplicateIdComparison) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            existing_patient_id: duplicateIdText,
+            source_pre_appointment_id: sourcePreAppointmentId,
+            requires_link_confirmation: true,
+            message:
+              'Assistido ja cadastrado (CPF ou nome + data de nascimento). Confirme a vinculacao para converter o pre-agendamento sem duplicar.',
+          });
+        }
+
+        const existingPatient = await getPatientById(client, duplicateIdText);
+        if (!existingPatient) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({
+            success: false,
+            message: 'Cadastro existente nao encontrado para vinculacao.',
+          });
+        }
+
+        await markPreAppointmentAsConverted({
+          client,
+          preAppointmentId: sourcePreAppointmentId,
+          patientId: duplicateIdText,
+          convertedBy,
+        });
+
+        await client.query('COMMIT');
+
+        return res.status(200).json({
+          success: true,
+          paciente: mapPatientResponse(existingPatient),
+          linked_existing_patient: true,
+          source_pre_appointment_id: sourcePreAppointmentId,
+          pre_appointment_conversion: {
+            pre_appointment_id: sourcePreAppointmentId,
+            converted_to_patient_id: duplicateIdText,
+            linked_existing_patient: true,
+          },
+          message: 'Pre-agendamento convertido com vinculacao ao cadastro ja existente.',
+        });
+      }
+
       await client.query('ROLLBACK');
       return res.status(409).json({
         success: false,
-        existing_patient_id: duplicateId,
+        existing_patient_id: duplicateIdText,
         message: 'Assistido ja cadastrado (CPF ou nome + data de nascimento).',
       });
     }
@@ -366,11 +562,30 @@ router.post('/', async (req, res) => {
       client,
     });
 
+    if (sourcePreAppointmentId) {
+      await markPreAppointmentAsConverted({
+        client,
+        preAppointmentId: sourcePreAppointmentId,
+        patientId: insertResult.rows[0].id,
+        convertedBy,
+      });
+    }
+
     await client.query('COMMIT');
 
     return res.status(201).json({
       success: true,
       paciente: mapPatientResponse(insertResult.rows[0]),
+      ...(sourcePreAppointmentId
+        ? {
+            source_pre_appointment_id: sourcePreAppointmentId,
+            pre_appointment_conversion: {
+              pre_appointment_id: sourcePreAppointmentId,
+              converted_to_patient_id: insertResult.rows[0].id,
+              linked_existing_patient: false,
+            },
+          }
+        : {}),
     });
   } catch (error) {
     await client.query('ROLLBACK');

@@ -1,12 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/pg');
+const authMiddleware = require('../middleware/auth');
+const { authorizeAny } = require('../middleware/authorize');
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRE_APPOINTMENT_OPERATIONAL_STATUS = 'em_fila_espera';
 const PRE_APPOINTMENT_STATUS_NOTE =
   'Status do pre-agendamento e operacional; nao altera status_jornada do cadastro principal.';
+const authorizePreAppointmentsLookup = authorizeAny([
+  ['pre_cadastro', 'view'],
+  ['pre_agendamento', 'view'],
+]);
 
 function normalizeText(value) {
   if (value === undefined || value === null) return '';
@@ -34,6 +40,18 @@ function normalizeDate(value) {
   return text;
 }
 
+function normalizeCpf(value) {
+  const digits = normalizeText(value).replace(/\D/g, '');
+  return digits.length > 0 ? digits : null;
+}
+
+function normalizeLimit(value, fallback = 20) {
+  const raw = Number.parseInt(normalizeText(value), 10);
+  if (!Number.isFinite(raw) || raw < 1) return fallback;
+  if (raw > 100) return 100;
+  return raw;
+}
+
 function normalizeServices(rawServices) {
   if (!Array.isArray(rawServices)) return [];
   const seen = new Set();
@@ -54,11 +72,26 @@ function normalizePhoneDigits(value) {
   return normalizeText(value).replace(/\D/g, '');
 }
 
+function mapPreAppointmentRow(row) {
+  const convertedToPatientId =
+    row?.converted_to_patient_id === undefined || row?.converted_to_patient_id === null
+      ? null
+      : String(row.converted_to_patient_id);
+
+  return {
+    ...row,
+    converted_to_patient_id: convertedToPatientId,
+    status_operacional: row?.status || null,
+    status_contexto: PRE_APPOINTMENT_STATUS_NOTE,
+  };
+}
+
 // POST - Criar pre-agendamento institucional
 router.post('/', async (req, res) => {
   const name = normalizeText(req.body?.name);
   const phone = normalizeText(req.body?.phone);
   const email = normalizeText(req.body?.email);
+  const cpf = normalizeCpf(req.body?.cpf);
   const dateOfBirth = normalizeDate(req.body?.date_of_birth);
   const services = normalizeServices(req.body?.services);
   const consentLgpd = normalizeBoolean(req.body?.consent_lgpd, false);
@@ -116,6 +149,7 @@ router.post('/', async (req, res) => {
       `
         INSERT INTO pre_appointments (
           name,
+          cpf,
           phone,
           email,
           date_of_birth,
@@ -138,12 +172,13 @@ router.post('/', async (req, res) => {
           notes,
           service_type
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11,
-          $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12,
+          $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
         )
       `,
       [
         name,
+        cpf,
         phone,
         email,
         dateOfBirth,
@@ -196,19 +231,121 @@ router.get('/', async (req, res) => {
       ORDER BY created_at DESC
     `);
 
-    const preAppointments = result.rows.map((row) => ({
-      ...row,
-      status_operacional: row.status || null,
-      status_contexto: PRE_APPOINTMENT_STATUS_NOTE,
-    }));
-
     res.json({
       success: true,
-      preAppointments,
+      preAppointments: result.rows.map(mapPreAppointmentRow),
     });
   } catch (error) {
     console.error('Erro ao buscar pre-agendamentos:', error);
     res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+    });
+  }
+});
+
+// GET - Buscar pre-agendamentos elegiveis para importacao no pre-cadastro
+router.get('/eligible', authMiddleware, authorizePreAppointmentsLookup, async (req, res) => {
+  const q = normalizeOptionalText(req.query?.q);
+  const childName = normalizeOptionalText(req.query?.child_name);
+  const responsibleName = normalizeOptionalText(req.query?.responsible_name);
+  const phoneDigits = normalizePhoneDigits(req.query?.phone);
+  const cpfDigits = normalizeCpf(req.query?.cpf);
+  const date = normalizeDate(req.query?.date);
+  const limit = normalizeLimit(req.query?.limit, 20);
+
+  const whereClauses = [
+    `pa.converted_at IS NULL`,
+    `NULLIF(BTRIM(COALESCE(pa.converted_to_patient_id::text, '')), '') IS NULL`,
+    `LOWER(COALESCE(pa.status, '')) <> 'converted'`,
+    `LOWER(COALESCE(pa.status, '')) <> 'cancelled'`,
+  ];
+  const params = [];
+
+  if (q) {
+    params.push(`%${q}%`);
+    const qParam = `$${params.length}`;
+    whereClauses.push(
+      `(
+        pa.name ILIKE ${qParam}
+        OR COALESCE(pa.responsible_name, '') ILIKE ${qParam}
+        OR COALESCE(pa.phone, '') ILIKE ${qParam}
+        OR COALESCE(pa.email, '') ILIKE ${qParam}
+        OR COALESCE(pa.cpf, '') ILIKE ${qParam}
+      )`
+    );
+  }
+
+  if (childName) {
+    params.push(`%${childName}%`);
+    whereClauses.push(`pa.name ILIKE $${params.length}`);
+  }
+
+  if (responsibleName) {
+    params.push(`%${responsibleName}%`);
+    whereClauses.push(`COALESCE(pa.responsible_name, '') ILIKE $${params.length}`);
+  }
+
+  if (phoneDigits) {
+    params.push(`%${phoneDigits}%`);
+    whereClauses.push(
+      `regexp_replace(COALESCE(pa.phone, ''), '\\D', '', 'g') LIKE $${params.length}`
+    );
+  }
+
+  if (cpfDigits) {
+    params.push(`%${cpfDigits}%`);
+    whereClauses.push(
+      `regexp_replace(COALESCE(pa.cpf, ''), '\\D', '', 'g') LIKE $${params.length}`
+    );
+  }
+
+  if (date) {
+    params.push(date);
+    const dateParam = `$${params.length}`;
+    whereClauses.push(
+      `(
+        pa.date_of_birth = ${dateParam}
+        OR pa.preferred_date = ${dateParam}
+        OR DATE(pa.created_at) = ${dateParam}
+      )`
+    );
+  }
+
+  params.push(limit);
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT
+          pa.id::text AS id,
+          pa.name,
+          pa.cpf,
+          pa.phone,
+          pa.email,
+          pa.date_of_birth,
+          pa.responsible_name,
+          pa.status,
+          pa.preferred_date,
+          pa.created_at,
+          pa.converted_to_patient_id::text AS converted_to_patient_id,
+          pa.converted_at
+        FROM pre_appointments pa
+        WHERE ${whereClauses.join('\n          AND ')}
+        ORDER BY pa.created_at DESC
+        LIMIT $${params.length}
+      `,
+      params
+    );
+
+    return res.json({
+      success: true,
+      total: result.rows.length,
+      preAppointments: result.rows.map(mapPreAppointmentRow),
+    });
+  } catch (error) {
+    console.error('Erro ao buscar pre-agendamentos elegiveis:', error);
+    return res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
     });
@@ -284,6 +421,50 @@ router.get('/public-search', async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao consultar pre-agendamento publico:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+    });
+  }
+});
+
+// GET - Detalhe interno de pre-agendamento para importacao
+router.get('/:id', authMiddleware, authorizePreAppointmentsLookup, async (req, res) => {
+  const preAppointmentId = normalizeText(req.params?.id);
+  if (!UUID_REGEX.test(preAppointmentId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'ID de pre-agendamento invalido.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT
+          pa.*,
+          pa.id::text AS id,
+          pa.converted_to_patient_id::text AS converted_to_patient_id
+        FROM pre_appointments pa
+        WHERE pa.id = $1
+        LIMIT 1
+      `,
+      [preAppointmentId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pre-agendamento nao encontrado.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      preAppointment: mapPreAppointmentRow(result.rows[0]),
+    });
+  } catch (error) {
+    console.error('Erro ao buscar detalhe de pre-agendamento:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',

@@ -128,13 +128,53 @@ export type PatientCreatePayload = {
   notes?: string | null;
   status_jornada?: string | null;
   status?: string | null;
+  source_pre_appointment_id?: string | null;
+  link_existing_patient_id?: string | null;
+};
+
+export type PatientPreAppointmentConversionInfo = {
+  pre_appointment_id?: string | null;
+  converted_to_patient_id?: string | null;
+  linked_existing_patient?: boolean;
 };
 
 export type PatientCreateResponse = {
   success: boolean;
   paciente?: PatientDTO;
   existing_patient_id?: string;
+  linked_existing_patient?: boolean;
+  source_pre_appointment_id?: string;
+  pre_appointment_conversion?: PatientPreAppointmentConversionInfo;
   message?: string;
+};
+
+export type PreAppointmentImportRecord = {
+  id: string;
+  name: string;
+  cpf?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  date_of_birth?: string | null;
+  responsible_name?: string | null;
+  referred_by?: string | null;
+  how_heard?: string | null;
+  cid?: string | null;
+  notes?: string | null;
+  status?: string | null;
+  preferred_date?: string | null;
+  created_at?: string | null;
+  converted_to_patient_id?: string | null;
+  converted_at?: string | null;
+};
+
+export type PreAppointmentSearchFilters = {
+  q?: string | null;
+  child_name?: string | null;
+  responsible_name?: string | null;
+  phone?: string | null;
+  cpf?: string | null;
+  date?: string | null;
+  limit?: number | null;
 };
 
 type PatientRecordLike = {
@@ -155,6 +195,25 @@ type PatientRecordLike = {
   statusJornada?: string | null;
   journey_status?: string | null;
   journeyStatus?: string | null;
+};
+
+type PreAppointmentRecordLike = {
+  id?: string | number | null;
+  name?: string | null;
+  cpf?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  date_of_birth?: string | null;
+  responsible_name?: string | null;
+  referred_by?: string | null;
+  how_heard?: string | null;
+  cid?: string | null;
+  notes?: string | null;
+  status?: string | null;
+  preferred_date?: string | null;
+  created_at?: string | null;
+  converted_to_patient_id?: string | number | null;
+  converted_at?: string | null;
 };
 
 function normalizePatientRecord(raw: unknown): PatientDTO | null {
@@ -195,6 +254,60 @@ function normalizePatientList(raw: unknown): PatientDTO[] {
   return list
     .map((item) => normalizePatientRecord(item))
     .filter((item): item is PatientDTO => item !== null);
+}
+
+function normalizePreAppointmentRecord(raw: unknown): PreAppointmentImportRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const payload = raw as PreAppointmentRecordLike;
+  if (payload.id === null || payload.id === undefined) return null;
+
+  const convertedToPatientId =
+    payload.converted_to_patient_id === null || payload.converted_to_patient_id === undefined
+      ? null
+      : String(payload.converted_to_patient_id);
+
+  return {
+    id: String(payload.id),
+    name: coerceStatusText(payload.name) ?? "",
+    cpf: coerceStatusText(payload.cpf),
+    phone: coerceStatusText(payload.phone),
+    email: coerceStatusText(payload.email),
+    date_of_birth: coerceStatusText(payload.date_of_birth),
+    responsible_name: coerceStatusText(payload.responsible_name),
+    referred_by: coerceStatusText(payload.referred_by),
+    how_heard: coerceStatusText(payload.how_heard),
+    cid: coerceStatusText(payload.cid),
+    notes: coerceStatusText(payload.notes),
+    status: coerceStatusText(payload.status),
+    preferred_date: coerceStatusText(payload.preferred_date),
+    created_at: coerceStatusText(payload.created_at),
+    converted_to_patient_id: convertedToPatientId,
+    converted_at: coerceStatusText(payload.converted_at),
+  };
+}
+
+function normalizePreAppointmentList(raw: unknown): PreAppointmentImportRecord[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => normalizePreAppointmentRecord(item))
+      .filter((item): item is PreAppointmentImportRecord => item !== null);
+  }
+
+  if (raw && typeof raw === "object") {
+    const payload = raw as Record<string, unknown>;
+    const list = Array.isArray(payload.preAppointments)
+      ? payload.preAppointments
+      : Array.isArray(payload.items)
+        ? payload.items
+        : [];
+
+    return list
+      .map((item) => normalizePreAppointmentRecord(item))
+      .filter((item): item is PreAppointmentImportRecord => item !== null);
+  }
+
+  return [];
 }
 
 export type SocialInterviewDTO = {
@@ -345,6 +458,8 @@ export type DashboardStatsResponse = {
 export type ApiRequestError = Error & {
   status?: number;
   existing_patient_id?: string | null;
+  requires_link_confirmation?: boolean;
+  source_pre_appointment_id?: string | null;
   payload?: Record<string, unknown>;
 };
 
@@ -1952,6 +2067,60 @@ class ApiService {
     );
   }
 
+  // ---------- PRE-AGENDAMENTOS ----------
+  async getEligiblePreAppointments(
+    filters?: PreAppointmentSearchFilters
+  ): Promise<PreAppointmentImportRecord[]> {
+    const params = new URLSearchParams();
+
+    if (this.toNonEmptyString(filters?.q)) params.set("q", String(filters?.q).trim());
+    if (this.toNonEmptyString(filters?.child_name)) {
+      params.set("child_name", String(filters?.child_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.responsible_name)) {
+      params.set("responsible_name", String(filters?.responsible_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.phone)) {
+      params.set("phone", String(filters?.phone).trim());
+    }
+    if (this.toNonEmptyString(filters?.cpf)) params.set("cpf", String(filters?.cpf).trim());
+    if (this.toNonEmptyString(filters?.date)) params.set("date", String(filters?.date).trim());
+    if (typeof filters?.limit === "number" && Number.isFinite(filters.limit) && filters.limit > 0) {
+      params.set("limit", String(Math.min(Math.floor(filters.limit), 100)));
+    }
+
+    const query = params.toString().length > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_BASE_URL}/pre-appointments/eligible${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const raw = await this.parseResponseOrThrow<unknown>(
+      response,
+      "Falha ao buscar pre-agendamentos elegiveis"
+    );
+
+    return normalizePreAppointmentList(raw);
+  }
+
+  async getPreAppointmentById(id: string): Promise<PreAppointmentImportRecord | null> {
+    const normalizedId = this.toNonEmptyString(id);
+    if (!normalizedId) return null;
+
+    const response = await fetch(
+      `${API_BASE_URL}/pre-appointments/${encodeURIComponent(normalizedId)}`,
+      {
+        headers: this.getAuthHeaders(),
+      }
+    );
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar pre-agendamento"
+    );
+
+    return normalizePreAppointmentRecord(raw.preAppointment ?? null);
+  }
+
   // ---------- PACIENTES ----------
   async createPatient(payload: PatientCreatePayload): Promise<PatientCreateResponse> {
     const response = await fetch(`${API_BASE_URL}/pacientes`, {
@@ -1973,15 +2142,44 @@ class ApiService {
       error.status = response.status;
       error.existing_patient_id =
         typeof data.existing_patient_id === "string" ? data.existing_patient_id : null;
+      error.requires_link_confirmation = data.requires_link_confirmation === true;
+      error.source_pre_appointment_id =
+        typeof data.source_pre_appointment_id === "string"
+          ? data.source_pre_appointment_id
+          : null;
       error.payload = data;
       throw error;
     }
+
+    const conversionPayload =
+      data.pre_appointment_conversion &&
+      typeof data.pre_appointment_conversion === "object"
+        ? (data.pre_appointment_conversion as Record<string, unknown>)
+        : null;
 
     return {
       success: data.success === true,
       paciente: normalizePatientRecord(data.paciente ?? null) ?? undefined,
       existing_patient_id:
         typeof data.existing_patient_id === "string" ? data.existing_patient_id : undefined,
+      linked_existing_patient: data.linked_existing_patient === true,
+      source_pre_appointment_id:
+        typeof data.source_pre_appointment_id === "string"
+          ? data.source_pre_appointment_id
+          : undefined,
+      pre_appointment_conversion: conversionPayload
+        ? {
+            pre_appointment_id:
+              typeof conversionPayload.pre_appointment_id === "string"
+                ? conversionPayload.pre_appointment_id
+                : null,
+            converted_to_patient_id:
+              typeof conversionPayload.converted_to_patient_id === "string"
+                ? conversionPayload.converted_to_patient_id
+                : null,
+            linked_existing_patient: conversionPayload.linked_existing_patient === true,
+          }
+        : undefined,
       message: typeof data.message === "string" ? data.message : undefined,
     };
   }

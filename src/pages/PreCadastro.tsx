@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { Info, Loader2, UserPlus } from "lucide-react";
+import { Info, Loader2, Search, UserPlus } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   apiService,
   type ApiRequestError,
+  type PatientCreateResponse,
+  type PreAppointmentImportRecord,
   type PatientCreatePayload,
 } from "@/services/api";
 
@@ -37,6 +41,26 @@ const INITIAL_FORM: PreCadastroFormState = {
   cpf: "",
 };
 
+type EntryMode = "manual" | "import";
+
+type PreAppointmentSearchState = {
+  q: string;
+  child_name: string;
+  responsible_name: string;
+  phone: string;
+  cpf: string;
+  date: string;
+};
+
+const INITIAL_PRE_APPOINTMENT_SEARCH: PreAppointmentSearchState = {
+  q: "",
+  child_name: "",
+  responsible_name: "",
+  phone: "",
+  cpf: "",
+  date: "",
+};
+
 function toOptionalTrimmed(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -47,8 +71,41 @@ function normalizeCpf(value: string): string | null {
   return digits.length > 0 ? digits : null;
 }
 
-function buildInitialNotes(form: PreCadastroFormState): string | null {
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleString("pt-BR");
+}
+
+function resolveReferralSourceFromPreAppointment(record: PreAppointmentImportRecord) {
+  return toOptionalTrimmed(record.referred_by || "") || toOptionalTrimmed(record.how_heard || "");
+}
+
+function mapPreAppointmentToPreCadastroForm(record: PreAppointmentImportRecord): PreCadastroFormState {
+  return {
+    child_name: record.name || "",
+    date_of_birth: record.date_of_birth || "",
+    responsible_name: record.responsible_name || "",
+    phone: record.phone || "",
+    email: record.email || "",
+    referral_source: resolveReferralSourceFromPreAppointment(record) || "",
+    cid_investigation: record.cid || "",
+    notes: record.notes || "",
+    cpf: record.cpf || "",
+  };
+}
+
+function buildInitialNotes(
+  form: PreCadastroFormState,
+  sourcePreAppointmentId?: string | null
+): string | null {
   const lines: string[] = [];
+
+  const sourceId = toOptionalTrimmed(sourcePreAppointmentId || "");
+  if (sourceId) {
+    lines.push(`Origem: pre-agendamento #${sourceId}`);
+  }
 
   const responsibleName = toOptionalTrimmed(form.responsible_name);
   if (responsibleName) {
@@ -78,7 +135,16 @@ function buildInitialNotes(form: PreCadastroFormState): string | null {
 }
 
 export default function PreCadastro() {
+  const [entryMode, setEntryMode] = useState<EntryMode>("manual");
   const [form, setForm] = useState<PreCadastroFormState>(INITIAL_FORM);
+  const [preAppointmentSearch, setPreAppointmentSearch] = useState<PreAppointmentSearchState>(
+    INITIAL_PRE_APPOINTMENT_SEARCH
+  );
+  const [searchingPreAppointments, setSearchingPreAppointments] = useState(false);
+  const [loadingPreAppointment, setLoadingPreAppointment] = useState(false);
+  const [preAppointments, setPreAppointments] = useState<PreAppointmentImportRecord[]>([]);
+  const [selectedPreAppointment, setSelectedPreAppointment] =
+    useState<PreAppointmentImportRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -91,9 +157,21 @@ export default function PreCadastro() {
 
   const resetForm = () => {
     setForm(INITIAL_FORM);
+    setSelectedPreAppointment(null);
+  };
+
+  const updatePreAppointmentSearchField = <K extends keyof PreAppointmentSearchState>(
+    field: K,
+    value: PreAppointmentSearchState[K]
+  ) => {
+    setPreAppointmentSearch((prev) => ({ ...prev, [field]: value }));
   };
 
   const validateForm = () => {
+    if (entryMode === "import" && !selectedPreAppointment?.id) {
+      throw new Error("Selecione um pre-agendamento para importar.");
+    }
+
     if (!form.child_name.trim()) {
       throw new Error("Informe o nome da crianca.");
     }
@@ -106,6 +184,96 @@ export default function PreCadastro() {
     if (!form.phone.trim()) {
       throw new Error("Informe o telefone principal.");
     }
+  };
+
+  const loadEligiblePreAppointments = async () => {
+    try {
+      setSearchingPreAppointments(true);
+      const records = await apiService.getEligiblePreAppointments({
+        q: preAppointmentSearch.q || null,
+        child_name: preAppointmentSearch.child_name || null,
+        responsible_name: preAppointmentSearch.responsible_name || null,
+        phone: preAppointmentSearch.phone || null,
+        cpf: preAppointmentSearch.cpf || null,
+        date: preAppointmentSearch.date || null,
+        limit: 30,
+      });
+      setPreAppointments(records);
+    } catch (error) {
+      toast({
+        title: "Importacao",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel buscar pre-agendamentos elegiveis.",
+        variant: "destructive",
+      });
+    } finally {
+      setSearchingPreAppointments(false);
+    }
+  };
+
+  const handleSearchPreAppointments = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await loadEligiblePreAppointments();
+  };
+
+  const handleSelectPreAppointment = async (preAppointmentId: string) => {
+    try {
+      setLoadingPreAppointment(true);
+      const record = await apiService.getPreAppointmentById(preAppointmentId);
+      if (!record) {
+        throw new Error("Pre-agendamento nao encontrado.");
+      }
+
+      setSelectedPreAppointment(record);
+      setForm(mapPreAppointmentToPreCadastroForm(record));
+      toast({
+        title: "Dados importados",
+        description: `Formulario preenchido com o pre-agendamento #${record.id}.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Importacao",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel importar os dados do pre-agendamento.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPreAppointment(false);
+    }
+  };
+
+  const handleSuccessfulSave = (
+    response: PatientCreateResponse,
+    sourcePreAppointmentId: string | null
+  ) => {
+    const patientId = response.paciente?.id || "";
+
+    if (response.linked_existing_patient) {
+      toast({
+        title: "Pre-agendamento convertido",
+        description: `Solicitacao vinculada ao cadastro existente (ID ${patientId}).`,
+      });
+    } else if (sourcePreAppointmentId) {
+      toast({
+        title: "Pre-cadastro salvo",
+        description: `Cadastro principal criado e pre-agendamento convertido (ID ${patientId}).`,
+      });
+    } else {
+      toast({
+        title: "Pre-cadastro salvo",
+        description: `Assistido cadastrado no cadastro principal e mantido em fila de espera (ID ${patientId}).`,
+      });
+    }
+
+    if (sourcePreAppointmentId) {
+      setPreAppointments((prev) => prev.filter((item) => item.id !== sourcePreAppointmentId));
+    }
+
+    resetForm();
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -122,14 +290,20 @@ export default function PreCadastro() {
       return;
     }
 
+    const sourcePreAppointmentId =
+      entryMode === "import" ? selectedPreAppointment?.id || null : null;
+
     const payload: PatientCreatePayload = {
       name: form.child_name.trim(),
       date_of_birth: form.date_of_birth,
       cpf: normalizeCpf(form.cpf),
       phone: form.phone.trim(),
       email: toOptionalTrimmed(form.email),
-      notes: buildInitialNotes(form),
+      notes: buildInitialNotes(form, sourcePreAppointmentId),
       status_jornada: "em_fila_espera",
+      ...(sourcePreAppointmentId
+        ? { source_pre_appointment_id: sourcePreAppointmentId }
+        : {}),
     };
 
     try {
@@ -140,17 +314,58 @@ export default function PreCadastro() {
         throw new Error(response.message || "Nao foi possivel salvar o pre-cadastro.");
       }
 
-      toast({
-        title: "Pre-cadastro salvo",
-        description: `Assistido cadastrado no cadastro principal e mantido em fila de espera (ID ${response.paciente.id}).`,
-      });
-
-      resetForm();
+      handleSuccessfulSave(response, sourcePreAppointmentId);
     } catch (error) {
       const typedError = error as ApiRequestError;
       const duplicateId = typedError?.existing_patient_id || undefined;
 
-      if (typedError?.status === 409) {
+      if (
+        typedError?.status === 409 &&
+        sourcePreAppointmentId &&
+        duplicateId &&
+        typedError.requires_link_confirmation
+      ) {
+        const shouldLinkExisting = window.confirm(
+          `Ja existe um cadastro para esta crianca (ID ${duplicateId}). Deseja vincular este pre-agendamento ao cadastro existente?`
+        );
+
+        if (!shouldLinkExisting) {
+          toast({
+            title: "Vinculacao pendente",
+            description: "Nenhuma alteracao foi realizada.",
+          });
+          return;
+        }
+
+        try {
+          const linkedResponse = await apiService.createPatient({
+            ...payload,
+            link_existing_patient_id: duplicateId,
+          });
+
+          if (!linkedResponse.success || !linkedResponse.paciente?.id) {
+            throw new Error(
+              linkedResponse.message || "Nao foi possivel vincular ao cadastro existente."
+            );
+          }
+
+          handleSuccessfulSave(linkedResponse, sourcePreAppointmentId);
+          return;
+        } catch (linkError) {
+          const linkTypedError = linkError as ApiRequestError;
+          toast({
+            title: "Erro ao vincular",
+            description:
+              linkTypedError instanceof Error
+                ? linkTypedError.message
+                : "Nao foi possivel vincular ao cadastro existente.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      if (typedError?.status === 409 && duplicateId) {
         toast({
           title: "Cadastro duplicado",
           description: duplicateId
@@ -192,6 +407,191 @@ export default function PreCadastro() {
           <strong>em_fila_espera</strong>.
         </AlertDescription>
       </Alert>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Forma de entrada</CardTitle>
+          <CardDescription>
+            Escolha entre cadastro manual ou importacao de uma solicitacao ja registrada.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RadioGroup
+            className="grid grid-cols-1 gap-3 md:grid-cols-2"
+            value={entryMode}
+            onValueChange={(value) => {
+              const nextMode: EntryMode = value === "import" ? "import" : "manual";
+              setEntryMode(nextMode);
+              if (nextMode === "manual") {
+                setSelectedPreAppointment(null);
+              }
+            }}
+          >
+            <label
+              htmlFor="entry-mode-manual"
+              className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"
+            >
+              <RadioGroupItem id="entry-mode-manual" value="manual" />
+              <span>Novo pre-cadastro</span>
+            </label>
+            <label
+              htmlFor="entry-mode-import"
+              className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"
+            >
+              <RadioGroupItem id="entry-mode-import" value="import" />
+              <span>Importar do pre-agendamento</span>
+            </label>
+          </RadioGroup>
+        </CardContent>
+      </Card>
+
+      {entryMode === "import" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Buscar pre-agendamento
+            </CardTitle>
+            <CardDescription>
+              Busque por nome da crianca, responsavel, telefone, CPF, data ou termo livre.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <form onSubmit={handleSearchPreAppointments} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="search-q">Busca geral</Label>
+                  <Input
+                    id="search-q"
+                    value={preAppointmentSearch.q}
+                    onChange={(event) => updatePreAppointmentSearchField("q", event.target.value)}
+                    placeholder="Nome, telefone, responsavel..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search-child">Nome da crianca</Label>
+                  <Input
+                    id="search-child"
+                    value={preAppointmentSearch.child_name}
+                    onChange={(event) =>
+                      updatePreAppointmentSearchField("child_name", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search-responsible">Nome do responsavel</Label>
+                  <Input
+                    id="search-responsible"
+                    value={preAppointmentSearch.responsible_name}
+                    onChange={(event) =>
+                      updatePreAppointmentSearchField("responsible_name", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search-phone">Telefone</Label>
+                  <Input
+                    id="search-phone"
+                    value={preAppointmentSearch.phone}
+                    onChange={(event) =>
+                      updatePreAppointmentSearchField("phone", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search-cpf">CPF</Label>
+                  <Input
+                    id="search-cpf"
+                    value={preAppointmentSearch.cpf}
+                    onChange={(event) => updatePreAppointmentSearchField("cpf", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search-date">Data</Label>
+                  <Input
+                    id="search-date"
+                    type="date"
+                    value={preAppointmentSearch.date}
+                    onChange={(event) =>
+                      updatePreAppointmentSearchField("date", event.target.value)
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setPreAppointmentSearch(INITIAL_PRE_APPOINTMENT_SEARCH);
+                    setPreAppointments([]);
+                  }}
+                  disabled={searchingPreAppointments}
+                >
+                  Limpar busca
+                </Button>
+                <Button type="submit" disabled={searchingPreAppointments}>
+                  {searchingPreAppointments ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Buscando...
+                    </>
+                  ) : (
+                    "Buscar"
+                  )}
+                </Button>
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              {preAppointments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum pre-agendamento carregado. Use a busca para localizar registros pendentes.
+                </p>
+              ) : (
+                preAppointments.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col gap-2 rounded-md border p-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium">{item.name || "Sem nome"}</p>
+                      <p className="text-muted-foreground">
+                        Responsavel: {item.responsible_name || "-"} | Telefone: {item.phone || "-"}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Criado em: {formatDateTime(item.created_at)} | Status: {item.status || "-"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleSelectPreAppointment(item.id)}
+                      disabled={loadingPreAppointment || submitting}
+                    >
+                      {loadingPreAppointment ? "Importando..." : "Importar"}
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {selectedPreAppointment ? (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle className="flex flex-wrap items-center gap-2">
+            Origem da ficha
+            <Badge variant="secondary">Pre-Agendamento #{selectedPreAppointment.id}</Badge>
+          </AlertTitle>
+          <AlertDescription>
+            Dados carregados a partir da solicitacao selecionada. Revise e edite antes de salvar.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Card>
@@ -332,7 +732,7 @@ export default function PreCadastro() {
                 Salvando...
               </>
             ) : (
-              "Salvar e entrar na fila"
+              entryMode === "import" ? "Salvar e converter solicitacao" : "Salvar e entrar na fila"
             )}
           </Button>
         </div>
