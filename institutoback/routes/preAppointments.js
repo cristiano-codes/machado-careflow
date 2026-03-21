@@ -26,9 +26,21 @@ async function ensurePreAppointmentsConversionColumns() {
         ALTER TABLE public.pre_appointments
           ADD COLUMN IF NOT EXISTS cpf text,
           ADD COLUMN IF NOT EXISTS status text,
-          ADD COLUMN IF NOT EXISTS converted_to_patient_id integer,
+          ADD COLUMN IF NOT EXISTS converted_to_patient_id text,
           ADD COLUMN IF NOT EXISTS converted_at timestamp,
-          ADD COLUMN IF NOT EXISTS converted_by integer
+          ADD COLUMN IF NOT EXISTS converted_by text
+      `);
+
+      await pool.query(`
+        ALTER TABLE public.pre_appointments
+          ALTER COLUMN converted_to_patient_id TYPE text
+          USING converted_to_patient_id::text
+      `);
+
+      await pool.query(`
+        ALTER TABLE public.pre_appointments
+          ALTER COLUMN converted_by TYPE text
+          USING converted_by::text
       `);
 
       await pool.query(`
