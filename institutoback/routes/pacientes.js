@@ -13,6 +13,38 @@ const {
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+let preAppointmentsConversionColumnsReady = false;
+let preAppointmentsConversionColumnsPromise = null;
+
+async function ensurePreAppointmentsConversionColumns() {
+  if (preAppointmentsConversionColumnsReady) return;
+
+  if (!preAppointmentsConversionColumnsPromise) {
+    preAppointmentsConversionColumnsPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE public.pre_appointments
+          ADD COLUMN IF NOT EXISTS cpf text,
+          ADD COLUMN IF NOT EXISTS status text,
+          ADD COLUMN IF NOT EXISTS converted_to_patient_id integer,
+          ADD COLUMN IF NOT EXISTS converted_at timestamp,
+          ADD COLUMN IF NOT EXISTS converted_by integer
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_pre_appointments_converted_to_patient_id
+          ON public.pre_appointments (converted_to_patient_id)
+      `);
+
+      preAppointmentsConversionColumnsReady = true;
+    })().catch((error) => {
+      preAppointmentsConversionColumnsPromise = null;
+      throw error;
+    });
+  }
+
+  await preAppointmentsConversionColumnsPromise;
+}
+
 router.use(authMiddleware);
 
 function normalizeCpf(value) {
@@ -390,6 +422,16 @@ router.post('/', async (req, res) => {
   }
 
   const convertedBy = normalizeIdAsText(req.user?.id);
+
+  try {
+    await ensurePreAppointmentsConversionColumns();
+  } catch (schemaError) {
+    console.error('Erro ao garantir colunas de conversao em pre_appointments:', schemaError);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+    });
+  }
 
   const client = await pool.connect();
   try {
