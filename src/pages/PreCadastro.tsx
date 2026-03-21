@@ -78,6 +78,27 @@ function formatDateTime(value: string | null | undefined) {
   return parsed.toLocaleString("pt-BR");
 }
 
+function normalizeDateForInput(value: string | null | undefined) {
+  const text = toOptionalTrimmed(value || "");
+  if (!text) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const leadingDate = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (leadingDate?.[1]) {
+    return leadingDate[1];
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
 function resolveReferralSourceFromPreAppointment(record: PreAppointmentImportRecord) {
   return toOptionalTrimmed(record.referred_by || "") || toOptionalTrimmed(record.how_heard || "");
 }
@@ -85,7 +106,7 @@ function resolveReferralSourceFromPreAppointment(record: PreAppointmentImportRec
 function mapPreAppointmentToPreCadastroForm(record: PreAppointmentImportRecord): PreCadastroFormState {
   return {
     child_name: record.name || "",
-    date_of_birth: record.date_of_birth || "",
+    date_of_birth: normalizeDateForInput(record.date_of_birth),
     responsible_name: record.responsible_name || "",
     phone: record.phone || "",
     email: record.email || "",
