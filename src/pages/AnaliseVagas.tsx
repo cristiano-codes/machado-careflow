@@ -3,8 +3,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import {
   getJourneyStatusLabel,
@@ -16,6 +18,7 @@ import {
   apiService,
   type EvaluationDTO,
   type SocialInterviewDTO,
+  type VagaEligiblePatientRecord,
   type VagaDecisionValue,
 } from "@/services/api";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Send, UserCheck } from "lucide-react";
@@ -25,8 +28,38 @@ type JsonRecord = Record<string, unknown>;
 type PatientOption = {
   id: string;
   nome: string;
+  cpf: string;
+  telefone: string;
   dataNascimento: string;
   statusJornada: string;
+};
+
+type VagaEligibleOption = {
+  id: string;
+  nome: string;
+  dataNascimento: string;
+  statusJornada: string;
+  responsibleName: string;
+  contatoPrincipal: string;
+  cid: string;
+  necessidadePrincipal: string;
+  readyForVaga: boolean;
+  hasCompletedEvaluation: boolean;
+  hasSocialInterview: boolean;
+  sentToVagaAt: string;
+  eligibilityIndicator: string;
+  observacaoResumida: string;
+};
+
+type EligibilityFiltersState = {
+  q: string;
+  statusJornada: string;
+  readyForVaga: string;
+  hasSocialInterview: string;
+  hasCompletedEvaluation: string;
+  sentToVaga: string;
+  specialty: string;
+  cid: string;
 };
 
 type SocialInterviewSummary = {
@@ -93,9 +126,60 @@ function normalizePatient(dto: unknown): PatientOption | null {
   return {
     id,
     nome: coerceString(record.nome || record.name),
+    cpf: coerceString(record.cpf),
+    telefone: coerceString(record.telefone || record.phone || record.mobile),
     dataNascimento: coerceDate(record.dataNascimento || record.date_of_birth),
     statusJornada: normalizeJourneyStatus(coerceString(record.status_jornada || record.statusJornada)),
   };
+}
+
+function normalizeEligiblePatient(dto: VagaEligiblePatientRecord): VagaEligibleOption {
+  return {
+    id: coerceString(dto.id),
+    nome: coerceString(dto.nome),
+    dataNascimento: coerceDate(dto.data_nascimento),
+    statusJornada: normalizeJourneyStatus(coerceString(dto.status_jornada)),
+    responsibleName: coerceString(dto.responsible_name),
+    contatoPrincipal: coerceString(dto.contato_principal || dto.telefone || dto.celular),
+    cid: coerceString(dto.cid),
+    necessidadePrincipal: coerceString(dto.necessidade_principal),
+    readyForVaga: dto.ready_for_vaga === true,
+    hasCompletedEvaluation: dto.has_completed_evaluation === true,
+    hasSocialInterview: dto.has_social_interview === true,
+    sentToVagaAt: coerceString(dto.sent_to_vaga_at),
+    eligibilityIndicator: coerceString(dto.eligibility_indicator),
+    observacaoResumida: coerceString(dto.observacao_resumida),
+  };
+}
+
+function parseTriState(value: string): boolean | undefined {
+  if (value === "sim") return true;
+  if (value === "nao") return false;
+  return undefined;
+}
+
+function formatAge(value: string): string {
+  if (!value) return "-";
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return "-";
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  const birthdayNotPassed =
+    today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day);
+  if (birthdayNotPassed) age -= 1;
+  return age >= 0 ? `${age}a` : "-";
+}
+
+function formatEligibilityIndicator(value: string): string {
+  if (value === "em_analise_vaga") return "Em analise de vaga";
+  if (value === "enviado_para_analise") return "Enviado para analise";
+  if (value === "pronto_para_envio") return "Pronto para envio";
+  if (value === "avaliacao_em_andamento") return "Avaliacao em andamento";
+  if (value === "aguardando_insumos") return "Aguardando insumos";
+  return "Nao classificado";
 }
 
 function normalizeTechnicalStatus(rawStatus: unknown): string {
@@ -163,6 +247,17 @@ function getJourneyBadgeVariant(status: string) {
   return "secondary";
 }
 
+const INITIAL_ELIGIBILITY_FILTERS: EligibilityFiltersState = {
+  q: "",
+  statusJornada: "all",
+  readyForVaga: "all",
+  hasSocialInterview: "all",
+  hasCompletedEvaluation: "all",
+  sentToVaga: "all",
+  specialty: "",
+  cid: "",
+};
+
 export default function AnaliseVagas() {
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
@@ -170,16 +265,25 @@ export default function AnaliseVagas() {
 
   const [patients, setPatients] = useState<PatientOption[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState("");
+  const [eligiblePatients, setEligiblePatients] = useState<VagaEligibleOption[]>([]);
+  const [eligibilityFilters, setEligibilityFilters] = useState<EligibilityFiltersState>(
+    INITIAL_ELIGIBILITY_FILTERS
+  );
+  const [appliedEligibilityFilters, setAppliedEligibilityFilters] =
+    useState<EligibilityFiltersState>(INITIAL_ELIGIBILITY_FILTERS);
+  const [eligibilityTotal, setEligibilityTotal] = useState(0);
   const [evaluations, setEvaluations] = useState<EvaluationDTO[]>([]);
   const [socialInterviewSummary, setSocialInterviewSummary] = useState<SocialInterviewSummary | null>(
     null
   );
 
   const [patientsLoading, setPatientsLoading] = useState(false);
+  const [eligibleLoading, setEligibleLoading] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
   const [savingDecision, setSavingDecision] = useState(false);
 
   const [patientsError, setPatientsError] = useState<string | null>(null);
+  const [eligibleError, setEligibleError] = useState<string | null>(null);
   const [contextError, setContextError] = useState<string | null>(null);
 
   const [decisionValue, setDecisionValue] = useState<VagaDecisionValue>("aprovado");
@@ -207,8 +311,8 @@ export default function AnaliseVagas() {
   );
 
   const selectedPatient = useMemo(
-    () => decisionQueue.find((patient) => patient.id === selectedPatientId) || null,
-    [decisionQueue, selectedPatientId]
+    () => patients.find((patient) => patient.id === selectedPatientId) || null,
+    [patients, selectedPatientId]
   );
 
   const metrics = useMemo(() => {
@@ -302,6 +406,66 @@ export default function AnaliseVagas() {
     }
   }, [toast]);
 
+  const loadEligiblePatients = useCallback(
+    async (filters: EligibilityFiltersState) => {
+      setEligibleLoading(true);
+      setEligibleError(null);
+      try {
+        const response = await apiService.getVagaEligiblePatients({
+          q: filters.q || null,
+          status_jornada: filters.statusJornada !== "all" ? filters.statusJornada : null,
+          ready_for_vaga: parseTriState(filters.readyForVaga),
+          has_social_interview: parseTriState(filters.hasSocialInterview),
+          has_completed_evaluation: parseTriState(filters.hasCompletedEvaluation),
+          sent_to_vaga: parseTriState(filters.sentToVaga),
+          specialty: filters.specialty || null,
+          cid: filters.cid || null,
+          limit: 80,
+          offset: 0,
+        });
+
+        const normalized = response.items
+          .map((item) => normalizeEligiblePatient(item))
+          .filter((item) => item.id.length > 0);
+
+        setEligiblePatients(normalized);
+        setEligibilityTotal(response.total);
+      } catch (error) {
+        setEligiblePatients([]);
+        setEligibilityTotal(0);
+        setEligibleError("Nao foi possivel carregar a lista filtravel de elegiveis.");
+        toast({
+          title: "Analise de vaga",
+          description:
+            error instanceof Error ? error.message : "Falha ao carregar elegiveis para vaga.",
+          variant: "destructive",
+        });
+      } finally {
+        setEligibleLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const updateEligibilityFilter = <K extends keyof EligibilityFiltersState>(
+    key: K,
+    value: EligibilityFiltersState[K]
+  ) => {
+    setEligibilityFilters((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const handleApplyEligibilityFilters = () => {
+    setAppliedEligibilityFilters(eligibilityFilters);
+  };
+
+  const handleClearEligibilityFilters = () => {
+    setEligibilityFilters(INITIAL_ELIGIBILITY_FILTERS);
+    setAppliedEligibilityFilters(INITIAL_ELIGIBILITY_FILTERS);
+  };
+
   const loadPatientContext = useCallback(
     async (patientId: string) => {
       if (!patientId) {
@@ -343,6 +507,10 @@ export default function AnaliseVagas() {
   }, [loadPatients]);
 
   useEffect(() => {
+    void loadEligiblePatients(appliedEligibilityFilters);
+  }, [appliedEligibilityFilters, loadEligiblePatients]);
+
+  useEffect(() => {
     if (!selectedPatientId) {
       setEvaluations([]);
       setSocialInterviewSummary(null);
@@ -365,6 +533,7 @@ export default function AnaliseVagas() {
       });
 
       await loadPatients();
+      await loadEligiblePatients(appliedEligibilityFilters);
       await loadPatientContext(selectedPatient.id);
       setDecisionJustification("");
 
@@ -398,8 +567,15 @@ export default function AnaliseVagas() {
             Mesa de decisao do Servico Social com rastreabilidade exclusiva por status_jornada.
           </p>
         </div>
-        <Button variant="outline" onClick={() => void loadPatients()} disabled={patientsLoading}>
-          {patientsLoading ? (
+        <Button
+          variant="outline"
+          onClick={() => {
+            void loadPatients();
+            void loadEligiblePatients(appliedEligibilityFilters);
+          }}
+          disabled={patientsLoading || eligibleLoading}
+        >
+          {patientsLoading || eligibleLoading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -454,6 +630,251 @@ export default function AnaliseVagas() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Lista filtravel de elegiveis por vaga</CardTitle>
+          <CardDescription>
+            Localize casos por criterio operacional e selecione um assistido para abrir o contexto da
+            analise.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2 xl:col-span-2">
+              <Label htmlFor="eligible-q">Busca geral</Label>
+              <Input
+                id="eligible-q"
+                value={eligibilityFilters.q}
+                onChange={(event) => updateEligibilityFilter("q", event.target.value)}
+                placeholder="Nome, responsavel, telefone, CPF, CID ou necessidade"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eligible-status">Status da jornada</Label>
+              <Select
+                value={eligibilityFilters.statusJornada}
+                onValueChange={(value) => updateEligibilityFilter("statusJornada", value)}
+              >
+                <SelectTrigger id="eligible-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="em_fila_espera">Em fila de espera</SelectItem>
+                  <SelectItem value="entrevista_realizada">Entrevista realizada</SelectItem>
+                  <SelectItem value="em_avaliacao">Em avaliacao</SelectItem>
+                  <SelectItem value="em_analise_vaga">Em analise de vaga</SelectItem>
+                  <SelectItem value="aprovado">Aprovado</SelectItem>
+                  <SelectItem value="encaminhado">Encaminhado</SelectItem>
+                  <SelectItem value="matriculado">Matriculado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eligible-ready">Pronto para vaga</Label>
+              <Select
+                value={eligibilityFilters.readyForVaga}
+                onValueChange={(value) => updateEligibilityFilter("readyForVaga", value)}
+              >
+                <SelectTrigger id="eligible-ready">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Nao</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eligible-eval">Avaliacao concluida</Label>
+              <Select
+                value={eligibilityFilters.hasCompletedEvaluation}
+                onValueChange={(value) => updateEligibilityFilter("hasCompletedEvaluation", value)}
+              >
+                <SelectTrigger id="eligible-eval">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Nao</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eligible-interview">Entrevista social</Label>
+              <Select
+                value={eligibilityFilters.hasSocialInterview}
+                onValueChange={(value) => updateEligibilityFilter("hasSocialInterview", value)}
+              >
+                <SelectTrigger id="eligible-interview">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Nao</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eligible-sent">Enviado para analise</Label>
+              <Select
+                value={eligibilityFilters.sentToVaga}
+                onValueChange={(value) => updateEligibilityFilter("sentToVaga", value)}
+              >
+                <SelectTrigger id="eligible-sent">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Nao</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eligible-specialty">Especialidade/necessidade</Label>
+              <Input
+                id="eligible-specialty"
+                value={eligibilityFilters.specialty}
+                onChange={(event) => updateEligibilityFilter("specialty", event.target.value)}
+                placeholder="Ex.: psicologia, TO, fono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eligible-cid">CID/Hipotese</Label>
+              <Input
+                id="eligible-cid"
+                value={eligibilityFilters.cid}
+                onChange={(event) => updateEligibilityFilter("cid", event.target.value)}
+                placeholder="Ex.: F84, F90"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={handleApplyEligibilityFilters} disabled={eligibleLoading}>
+              {eligibleLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Buscar
+            </Button>
+            <Button variant="outline" onClick={handleClearEligibilityFilters} disabled={eligibleLoading}>
+              Limpar
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {eligibilityTotal} registro(s) elegivel(is)
+            </span>
+          </div>
+
+          {eligibleError ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Falha ao carregar elegiveis</AlertTitle>
+              <AlertDescription>{eligibleError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {eligibleLoading ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando lista filtravel...
+            </p>
+          ) : null}
+
+          {!eligibleLoading && eligiblePatients.length === 0 ? (
+            <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Nenhum caso encontrado para os filtros informados.
+            </p>
+          ) : null}
+
+          {!eligibleLoading && eligiblePatients.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Crianca</TableHead>
+                    <TableHead>Responsavel/Contato</TableHead>
+                    <TableHead>Necessidade</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Prontidao</TableHead>
+                    <TableHead className="text-right">Acao</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {eligiblePatients.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      className={selectedPatientId === item.id ? "bg-muted/40" : ""}
+                    >
+                      <TableCell>
+                        <p className="font-medium">{item.nome || "Assistido"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(item.dataNascimento)} ({formatAge(item.dataNascimento)})
+                        </p>
+                        {item.cid ? (
+                          <p className="text-xs text-muted-foreground">CID: {item.cid}</p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <p>{item.responsibleName || "-"}</p>
+                        <p className="text-xs text-muted-foreground">{item.contatoPrincipal || "-"}</p>
+                      </TableCell>
+                      <TableCell>
+                        <p>{item.necessidadePrincipal || "-"}</p>
+                        {item.observacaoResumida ? (
+                          <p className="line-clamp-2 text-xs text-muted-foreground">
+                            {item.observacaoResumida}
+                          </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getJourneyBadgeVariant(item.statusJornada)}>
+                          {formatJourneyStatus(item.statusJornada)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Badge
+                            variant={
+                              item.readyForVaga
+                                ? "default"
+                                : item.hasCompletedEvaluation
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {formatEligibilityIndicator(item.eligibilityIndicator)}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground">
+                            Entrevista: {item.hasSocialInterview ? "Sim" : "Nao"} | Avaliacao:{" "}
+                            {item.hasCompletedEvaluation ? "Sim" : "Nao"}
+                          </p>
+                          {item.sentToVagaAt ? (
+                            <p className="text-xs text-muted-foreground">
+                              Enviado: {formatDate(item.sentToVagaAt)}
+                            </p>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant={selectedPatientId === item.id ? "default" : "outline"}
+                          onClick={() => setSelectedPatientId(item.id)}
+                        >
+                          Selecionar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <div className="grid items-start gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="space-y-4">

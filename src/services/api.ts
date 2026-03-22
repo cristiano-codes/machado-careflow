@@ -177,6 +177,57 @@ export type PreAppointmentSearchFilters = {
   limit?: number | null;
 };
 
+export type VagaEligiblePatientFilters = {
+  q?: string | null;
+  child_name?: string | null;
+  responsible_name?: string | null;
+  phone?: string | null;
+  cpf?: string | null;
+  status_jornada?: string | null;
+  specialty?: string | null;
+  cid?: string | null;
+  age_min?: number | null;
+  age_max?: number | null;
+  ready_for_vaga?: boolean | null;
+  has_social_interview?: boolean | null;
+  has_completed_evaluation?: boolean | null;
+  sent_to_vaga?: boolean | null;
+  limit?: number | null;
+  offset?: number | null;
+};
+
+export type VagaEligiblePatientRecord = {
+  id: string;
+  nome: string;
+  cpf?: string | null;
+  telefone?: string | null;
+  celular?: string | null;
+  email?: string | null;
+  data_nascimento?: string | null;
+  status?: string | null;
+  status_jornada?: string | null;
+  responsible_name?: string | null;
+  contato_principal?: string | null;
+  cid?: string | null;
+  necessidade_principal?: string | null;
+  completed_evaluation_count?: number;
+  has_completed_evaluation?: boolean;
+  has_consolidation_ready?: boolean;
+  has_social_interview?: boolean;
+  latest_social_interview_date?: string | null;
+  sent_to_vaga_at?: string | null;
+  ready_for_vaga?: boolean;
+  eligibility_indicator?: string | null;
+  observacao_resumida?: string | null;
+};
+
+export type VagaEligiblePatientListResponse = {
+  items: VagaEligiblePatientRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 type PatientRecordLike = {
   id?: string | number | null;
   patient_id?: string | number | null;
@@ -214,6 +265,36 @@ type PreAppointmentRecordLike = {
   created_at?: string | null;
   converted_to_patient_id?: string | number | null;
   converted_at?: string | null;
+};
+
+type VagaEligiblePatientRecordLike = {
+  id?: string | number | null;
+  nome?: string | null;
+  name?: string | null;
+  cpf?: string | null;
+  telefone?: string | null;
+  phone?: string | null;
+  celular?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  data_nascimento?: string | null;
+  date_of_birth?: string | null;
+  status?: string | null;
+  status_jornada?: string | null;
+  responsible_name?: string | null;
+  responsavel?: string | null;
+  contato_principal?: string | null;
+  cid?: string | null;
+  necessidade_principal?: string | null;
+  completed_evaluation_count?: number | string | null;
+  has_completed_evaluation?: boolean | string | number | null;
+  has_consolidation_ready?: boolean | string | number | null;
+  has_social_interview?: boolean | string | number | null;
+  latest_social_interview_date?: string | null;
+  sent_to_vaga_at?: string | null;
+  ready_for_vaga?: boolean | string | number | null;
+  eligibility_indicator?: string | null;
+  observacao_resumida?: string | null;
 };
 
 function normalizePatientRecord(raw: unknown): PatientDTO | null {
@@ -308,6 +389,54 @@ function normalizePreAppointmentList(raw: unknown): PreAppointmentImportRecord[]
   }
 
   return [];
+}
+
+function toBoolean(value: unknown): boolean {
+  if (value === true) return true;
+  if (value === false) return false;
+  if (typeof value === "number") return value === 1;
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return ["1", "true", "t", "sim", "yes", "y"].includes(normalized);
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeVagaEligiblePatientRecord(raw: unknown): VagaEligiblePatientRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const payload = raw as VagaEligiblePatientRecordLike;
+  if (payload.id === null || payload.id === undefined) return null;
+
+  return {
+    id: String(payload.id),
+    nome: coerceStatusText(payload.nome) ?? coerceStatusText(payload.name) ?? "",
+    cpf: coerceStatusText(payload.cpf),
+    telefone: coerceStatusText(payload.telefone) ?? coerceStatusText(payload.phone),
+    celular: coerceStatusText(payload.celular) ?? coerceStatusText(payload.mobile),
+    email: coerceStatusText(payload.email),
+    data_nascimento:
+      coerceStatusText(payload.data_nascimento) ?? coerceStatusText(payload.date_of_birth),
+    status: coerceStatusText(payload.status),
+    status_jornada: resolveOfficialJourneyStatus(payload),
+    responsible_name:
+      coerceStatusText(payload.responsible_name) ?? coerceStatusText(payload.responsavel),
+    contato_principal: coerceStatusText(payload.contato_principal),
+    cid: coerceStatusText(payload.cid),
+    necessidade_principal: coerceStatusText(payload.necessidade_principal),
+    completed_evaluation_count: toNumber(payload.completed_evaluation_count, 0),
+    has_completed_evaluation: toBoolean(payload.has_completed_evaluation),
+    has_consolidation_ready: toBoolean(payload.has_consolidation_ready),
+    has_social_interview: toBoolean(payload.has_social_interview),
+    latest_social_interview_date: coerceStatusText(payload.latest_social_interview_date),
+    sent_to_vaga_at: coerceStatusText(payload.sent_to_vaga_at),
+    ready_for_vaga: toBoolean(payload.ready_for_vaga),
+    eligibility_indicator: coerceStatusText(payload.eligibility_indicator),
+    observacao_resumida: coerceStatusText(payload.observacao_resumida),
+  };
 }
 
 export type SocialInterviewDTO = {
@@ -2190,6 +2319,87 @@ class ApiService {
     });
     const data = await response.json();
     return normalizePatientList(data);
+  }
+
+  async getVagaEligiblePatients(
+    filters?: VagaEligiblePatientFilters
+  ): Promise<VagaEligiblePatientListResponse> {
+    const params = new URLSearchParams();
+
+    if (this.toNonEmptyString(filters?.q)) params.set("q", String(filters?.q).trim());
+    if (this.toNonEmptyString(filters?.child_name)) {
+      params.set("child_name", String(filters?.child_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.responsible_name)) {
+      params.set("responsible_name", String(filters?.responsible_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.phone)) {
+      params.set("phone", String(filters?.phone).trim());
+    }
+    if (this.toNonEmptyString(filters?.cpf)) params.set("cpf", String(filters?.cpf).trim());
+    if (this.toNonEmptyString(filters?.status_jornada)) {
+      params.set("status_jornada", String(filters?.status_jornada).trim());
+    }
+    if (this.toNonEmptyString(filters?.specialty)) {
+      params.set("specialty", String(filters?.specialty).trim());
+    }
+    if (this.toNonEmptyString(filters?.cid)) params.set("cid", String(filters?.cid).trim());
+
+    if (typeof filters?.age_min === "number" && Number.isFinite(filters.age_min)) {
+      params.set("age_min", String(Math.max(0, Math.floor(filters.age_min))));
+    }
+    if (typeof filters?.age_max === "number" && Number.isFinite(filters.age_max)) {
+      params.set("age_max", String(Math.max(0, Math.floor(filters.age_max))));
+    }
+
+    if (typeof filters?.ready_for_vaga === "boolean") {
+      params.set("ready_for_vaga", filters.ready_for_vaga ? "true" : "false");
+    }
+    if (typeof filters?.has_social_interview === "boolean") {
+      params.set("has_social_interview", filters.has_social_interview ? "true" : "false");
+    }
+    if (typeof filters?.has_completed_evaluation === "boolean") {
+      params.set(
+        "has_completed_evaluation",
+        filters.has_completed_evaluation ? "true" : "false"
+      );
+    }
+    if (typeof filters?.sent_to_vaga === "boolean") {
+      params.set("sent_to_vaga", filters.sent_to_vaga ? "true" : "false");
+    }
+
+    if (typeof filters?.limit === "number" && Number.isFinite(filters.limit) && filters.limit > 0) {
+      params.set("limit", String(Math.min(Math.floor(filters.limit), 100)));
+    }
+    if (
+      typeof filters?.offset === "number" &&
+      Number.isFinite(filters.offset) &&
+      filters.offset >= 0
+    ) {
+      params.set("offset", String(Math.floor(filters.offset)));
+    }
+
+    const query = params.toString().length > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_BASE_URL}/pacientes/vaga-elegiveis${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar lista elegivel para vaga"
+    );
+
+    const rawItems = Array.isArray(raw.items) ? raw.items : [];
+    const items = rawItems
+      .map((item) => normalizeVagaEligiblePatientRecord(item))
+      .filter((item): item is VagaEligiblePatientRecord => item !== null);
+
+    return {
+      items,
+      total: toNumber(raw.total, items.length),
+      limit: toNumber(raw.limit, items.length || 20),
+      offset: toNumber(raw.offset, 0),
+    };
   }
 
   // ---------- ENTREVISTAS SOCIAIS ----------

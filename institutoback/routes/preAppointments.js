@@ -14,50 +14,6 @@ const authorizePreAppointmentsLookup = authorizeAny([
   ['pre_agendamento', 'view'],
 ]);
 
-let preAppointmentsConversionColumnsReady = false;
-let preAppointmentsConversionColumnsPromise = null;
-
-async function ensurePreAppointmentsConversionColumns() {
-  if (preAppointmentsConversionColumnsReady) return;
-
-  if (!preAppointmentsConversionColumnsPromise) {
-    preAppointmentsConversionColumnsPromise = (async () => {
-      await pool.query(`
-        ALTER TABLE public.pre_appointments
-          ADD COLUMN IF NOT EXISTS cpf text,
-          ADD COLUMN IF NOT EXISTS status text,
-          ADD COLUMN IF NOT EXISTS converted_to_patient_id text,
-          ADD COLUMN IF NOT EXISTS converted_at timestamp,
-          ADD COLUMN IF NOT EXISTS converted_by text
-      `);
-
-      await pool.query(`
-        ALTER TABLE public.pre_appointments
-          ALTER COLUMN converted_to_patient_id TYPE text
-          USING converted_to_patient_id::text
-      `);
-
-      await pool.query(`
-        ALTER TABLE public.pre_appointments
-          ALTER COLUMN converted_by TYPE text
-          USING converted_by::text
-      `);
-
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_pre_appointments_converted_to_patient_id
-          ON public.pre_appointments (converted_to_patient_id)
-      `);
-
-      preAppointmentsConversionColumnsReady = true;
-    })().catch((error) => {
-      preAppointmentsConversionColumnsPromise = null;
-      throw error;
-    });
-  }
-
-  await preAppointmentsConversionColumnsPromise;
-}
-
 function normalizeText(value) {
   if (value === undefined || value === null) return '';
   return String(value).trim();
@@ -359,8 +315,6 @@ router.get('/eligible', authMiddleware, authorizePreAppointmentsLookup, async (r
   params.push(limit);
 
   try {
-    await ensurePreAppointmentsConversionColumns();
-
     const result = await pool.query(
       `
         SELECT
@@ -485,8 +439,6 @@ router.get('/:id', authMiddleware, authorizePreAppointmentsLookup, async (req, r
   }
 
   try {
-    await ensurePreAppointmentsConversionColumns();
-
     const result = await pool.query(
       `
         SELECT

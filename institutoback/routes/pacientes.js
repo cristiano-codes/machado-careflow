@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
+const { authorizeAny } = require('../middleware/authorize');
 const pool = require('../config/pg');
 const {
   VALID_JOURNEY_STATUSES,
@@ -13,49 +14,11 @@ const {
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-let preAppointmentsConversionColumnsReady = false;
-let preAppointmentsConversionColumnsPromise = null;
-
-async function ensurePreAppointmentsConversionColumns() {
-  if (preAppointmentsConversionColumnsReady) return;
-
-  if (!preAppointmentsConversionColumnsPromise) {
-    preAppointmentsConversionColumnsPromise = (async () => {
-      await pool.query(`
-        ALTER TABLE public.pre_appointments
-          ADD COLUMN IF NOT EXISTS cpf text,
-          ADD COLUMN IF NOT EXISTS status text,
-          ADD COLUMN IF NOT EXISTS converted_to_patient_id text,
-          ADD COLUMN IF NOT EXISTS converted_at timestamp,
-          ADD COLUMN IF NOT EXISTS converted_by text
-      `);
-
-      await pool.query(`
-        ALTER TABLE public.pre_appointments
-          ALTER COLUMN converted_to_patient_id TYPE text
-          USING converted_to_patient_id::text
-      `);
-
-      await pool.query(`
-        ALTER TABLE public.pre_appointments
-          ALTER COLUMN converted_by TYPE text
-          USING converted_by::text
-      `);
-
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_pre_appointments_converted_to_patient_id
-          ON public.pre_appointments (converted_to_patient_id)
-      `);
-
-      preAppointmentsConversionColumnsReady = true;
-    })().catch((error) => {
-      preAppointmentsConversionColumnsPromise = null;
-      throw error;
-    });
-  }
-
-  await preAppointmentsConversionColumnsPromise;
-}
+const authorizeVagaEligibilityLookup = authorizeAny([
+  ['analise_vagas', 'view'],
+  ['vagas', 'view'],
+  ['avaliacoes', 'view'],
+]);
 
 router.use(authMiddleware);
 
@@ -69,6 +32,26 @@ function normalizeDate(value) {
   if (!text) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
   return text;
+}
+
+function normalizeDigits(value) {
+  return (value || '').toString().replace(/\D/g, '');
+}
+
+function normalizeBooleanQuery(value) {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'sim', 'yes', 'y', 't'].includes(normalized)) return true;
+  if (['0', 'false', 'nao', 'não', 'no', 'n', 'f'].includes(normalized)) return false;
+  return null;
+}
+
+function normalizeInteger(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isInteger(parsed)) return fallback;
+  if (parsed < min) return min;
+  if (parsed > max) return max;
+  return parsed;
 }
 
 function normalizeOptionalText(value) {
@@ -360,6 +343,325 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/vaga-elegiveis', authorizeVagaEligibilityLookup, async (req, res) => {
+  const q = normalizeOptionalText(req.query?.q);
+  const childName = normalizeOptionalText(req.query?.child_name);
+  const responsibleName = normalizeOptionalText(req.query?.responsible_name);
+  const cpfDigits = normalizeCpf(req.query?.cpf);
+  const phoneDigits = normalizeDigits(req.query?.phone);
+  const cid = normalizeOptionalText(req.query?.cid);
+  const specialty = normalizeOptionalText(req.query?.specialty);
+  const journeyStatusFilter = normalizeJourneyStatus(req.query?.status_jornada);
+  const readyForVaga = normalizeBooleanQuery(req.query?.ready_for_vaga);
+  const hasSocialInterview = normalizeBooleanQuery(req.query?.has_social_interview);
+  const hasCompletedEvaluation = normalizeBooleanQuery(req.query?.has_completed_evaluation);
+  const sentToVaga = normalizeBooleanQuery(req.query?.sent_to_vaga);
+  const limit = normalizeInteger(req.query?.limit, 20, { min: 1, max: 100 });
+  const offset = normalizeInteger(req.query?.offset, 0, { min: 0, max: 5000 });
+  const ageMin = normalizeInteger(req.query?.age_min, null, { min: 0, max: 120 });
+  const ageMax = normalizeInteger(req.query?.age_max, null, { min: 0, max: 120 });
+
+  if (journeyStatusFilter && !VALID_JOURNEY_STATUSES.has(journeyStatusFilter)) {
+    return res.status(400).json({
+      success: false,
+      message: 'status_jornada invalido para filtro',
+    });
+  }
+
+  if (ageMin !== null && ageMax !== null && ageMin > ageMax) {
+    return res.status(400).json({
+      success: false,
+      message: 'age_min nao pode ser maior que age_max',
+    });
+  }
+
+  const params = [];
+  const whereClauses = [];
+
+  if (q) {
+    params.push(`%${q}%`);
+    const qParam = `$${params.length}`;
+    whereClauses.push(
+      `(
+        p.name ILIKE ${qParam}
+        OR COALESCE(origin.responsible_name, '') ILIKE ${qParam}
+        OR COALESCE(p.phone, '') ILIKE ${qParam}
+        OR COALESCE(p.mobile, '') ILIKE ${qParam}
+        OR COALESCE(p.cpf, '') ILIKE ${qParam}
+        OR COALESCE(origin.cid, '') ILIKE ${qParam}
+        OR COALESCE(eval.primary_need, '') ILIKE ${qParam}
+      )`
+    );
+  }
+
+  if (childName) {
+    params.push(`%${childName}%`);
+    whereClauses.push(`p.name ILIKE $${params.length}`);
+  }
+
+  if (responsibleName) {
+    params.push(`%${responsibleName}%`);
+    whereClauses.push(`COALESCE(origin.responsible_name, '') ILIKE $${params.length}`);
+  }
+
+  if (cpfDigits) {
+    params.push(`%${cpfDigits}%`);
+    whereClauses.push(
+      `(
+        regexp_replace(COALESCE(p.cpf, ''), '\\D', '', 'g') LIKE $${params.length}
+        OR regexp_replace(COALESCE(origin.origin_cpf, ''), '\\D', '', 'g') LIKE $${params.length}
+      )`
+    );
+  }
+
+  if (phoneDigits) {
+    params.push(`%${phoneDigits}%`);
+    whereClauses.push(
+      `(
+        regexp_replace(COALESCE(p.phone, ''), '\\D', '', 'g') LIKE $${params.length}
+        OR regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') LIKE $${params.length}
+        OR regexp_replace(COALESCE(origin.responsible_phone, ''), '\\D', '', 'g') LIKE $${params.length}
+      )`
+    );
+  }
+
+  if (journeyStatusFilter) {
+    params.push(journeyStatusFilter);
+    whereClauses.push(`LOWER(COALESCE(p.status_jornada, '')) = $${params.length}`);
+  }
+
+  if (cid) {
+    params.push(`%${cid}%`);
+    whereClauses.push(`COALESCE(origin.cid, '') ILIKE $${params.length}`);
+  }
+
+  if (specialty) {
+    params.push(`%${specialty}%`);
+    const specialtyParam = `$${params.length}`;
+    whereClauses.push(
+      `(
+        COALESCE(eval.primary_need, '') ILIKE ${specialtyParam}
+        OR COALESCE(origin.service_type, '') ILIKE ${specialtyParam}
+      )`
+    );
+  }
+
+  if (readyForVaga !== null) {
+    params.push(readyForVaga);
+    whereClauses.push(
+      `(COALESCE(eval.completed_individual_count, 0) > 0 AND COALESCE(eval.has_consolidation_ready, false) = true) = $${params.length}`
+    );
+  }
+
+  if (hasSocialInterview !== null) {
+    params.push(hasSocialInterview);
+    whereClauses.push(
+      `(COALESCE(interview.completed_social_interview_count, 0) > 0) = $${params.length}`
+    );
+  }
+
+  if (hasCompletedEvaluation !== null) {
+    params.push(hasCompletedEvaluation);
+    whereClauses.push(`(COALESCE(eval.completed_individual_count, 0) > 0) = $${params.length}`);
+  }
+
+  if (sentToVaga !== null) {
+    params.push(sentToVaga);
+    whereClauses.push(`(eval.latest_sent_to_vaga_at IS NOT NULL) = $${params.length}`);
+  }
+
+  if (ageMin !== null) {
+    params.push(ageMin);
+    whereClauses.push(`DATE_PART('year', AGE(CURRENT_DATE, p.date_of_birth)) >= $${params.length}`);
+  }
+
+  if (ageMax !== null) {
+    params.push(ageMax);
+    whereClauses.push(`DATE_PART('year', AGE(CURRENT_DATE, p.date_of_birth)) <= $${params.length}`);
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join('\n      AND ')}` : '';
+  params.push(limit);
+  const limitParam = `$${params.length}`;
+  params.push(offset);
+  const offsetParam = `$${params.length}`;
+
+  try {
+    const result = await pool.query(
+      `
+        WITH evaluation_summary AS (
+          SELECT
+            e.patient_id::text AS patient_id,
+            COUNT(*) FILTER (
+              WHERE COALESCE(e.is_stage_consolidation, false) = false
+                AND LOWER(COALESCE(e.status, '')) IN ('completed', 'concluida')
+            )::int AS completed_individual_count,
+            BOOL_OR(
+              COALESCE(e.is_stage_consolidation, false) = true
+              AND COALESCE(e.checklist_ready_for_vaga, false) = true
+              AND LOWER(COALESCE(e.status, '')) IN ('completed', 'concluida')
+            ) AS has_consolidation_ready,
+            MAX(e.sent_to_vaga_at) FILTER (
+              WHERE COALESCE(e.is_stage_consolidation, false) = true
+            ) AS latest_sent_to_vaga_at,
+            (
+              ARRAY_REMOVE(
+                ARRAY_AGG(
+                  CASE
+                    WHEN COALESCE(e.is_stage_consolidation, false) = false
+                      THEN NULLIF(BTRIM(e.type), '')
+                    ELSE NULL
+                  END
+                  ORDER BY e.end_date DESC NULLS LAST, e.updated_at DESC NULLS LAST, e.created_at DESC NULLS LAST
+                ),
+                NULL
+              )
+            )[1] AS primary_need
+          FROM public.evaluations e
+          GROUP BY e.patient_id::text
+        ),
+        interview_summary AS (
+          SELECT
+            s.patient_id::text AS patient_id,
+            COUNT(*) FILTER (WHERE COALESCE(s.is_draft, false) = false)::int AS completed_social_interview_count,
+            MAX(s.interview_date) FILTER (WHERE COALESCE(s.is_draft, false) = false) AS latest_social_interview_date
+          FROM public.social_interviews s
+          GROUP BY s.patient_id::text
+        ),
+        pre_appointment_origin AS (
+          SELECT
+            pa.converted_to_patient_id::text AS patient_id,
+            (
+              ARRAY_REMOVE(
+                ARRAY_AGG(NULLIF(BTRIM(pa.responsible_name), '') ORDER BY pa.created_at DESC NULLS LAST),
+                NULL
+              )
+            )[1] AS responsible_name,
+            (
+              ARRAY_REMOVE(
+                ARRAY_AGG(NULLIF(BTRIM(pa.phone), '') ORDER BY pa.created_at DESC NULLS LAST),
+                NULL
+              )
+            )[1] AS responsible_phone,
+            (
+              ARRAY_REMOVE(
+                ARRAY_AGG(NULLIF(BTRIM(pa.cpf), '') ORDER BY pa.created_at DESC NULLS LAST),
+                NULL
+              )
+            )[1] AS origin_cpf,
+            (
+              ARRAY_REMOVE(
+                ARRAY_AGG(NULLIF(BTRIM(pa.cid), '') ORDER BY pa.created_at DESC NULLS LAST),
+                NULL
+              )
+            )[1] AS cid,
+            (
+              ARRAY_REMOVE(
+                ARRAY_AGG(NULLIF(BTRIM(pa.service_type), '') ORDER BY pa.created_at DESC NULLS LAST),
+                NULL
+              )
+            )[1] AS service_type,
+            (
+              ARRAY_REMOVE(
+                ARRAY_AGG(NULLIF(BTRIM(pa.notes), '') ORDER BY pa.created_at DESC NULLS LAST),
+                NULL
+              )
+            )[1] AS notes
+          FROM public.pre_appointments pa
+          WHERE NULLIF(BTRIM(COALESCE(pa.converted_to_patient_id::text, '')), '') IS NOT NULL
+          GROUP BY pa.converted_to_patient_id::text
+        )
+        SELECT
+          p.id::text AS id,
+          p.name AS nome,
+          p.cpf,
+          p.phone AS telefone,
+          p.mobile AS celular,
+          p.email,
+          p.date_of_birth AS data_nascimento,
+          p.status,
+          p.status_jornada,
+          origin.responsible_name,
+          COALESCE(
+            NULLIF(BTRIM(origin.responsible_phone), ''),
+            NULLIF(BTRIM(p.phone), ''),
+            NULLIF(BTRIM(p.mobile), '')
+          ) AS contato_principal,
+          origin.cid,
+          COALESCE(eval.primary_need, origin.service_type) AS necessidade_principal,
+          COALESCE(eval.completed_individual_count, 0) AS completed_evaluation_count,
+          COALESCE(eval.completed_individual_count, 0) > 0 AS has_completed_evaluation,
+          COALESCE(eval.has_consolidation_ready, false) AS has_consolidation_ready,
+          COALESCE(interview.completed_social_interview_count, 0) > 0 AS has_social_interview,
+          interview.latest_social_interview_date,
+          eval.latest_sent_to_vaga_at AS sent_to_vaga_at,
+          (
+            COALESCE(eval.completed_individual_count, 0) > 0
+            AND COALESCE(eval.has_consolidation_ready, false) = true
+          ) AS ready_for_vaga,
+          CASE
+            WHEN LOWER(COALESCE(p.status_jornada, '')) = 'em_analise_vaga'
+              THEN 'em_analise_vaga'
+            WHEN COALESCE(eval.completed_individual_count, 0) > 0
+              AND COALESCE(eval.has_consolidation_ready, false) = true
+              AND eval.latest_sent_to_vaga_at IS NOT NULL
+              THEN 'enviado_para_analise'
+            WHEN COALESCE(eval.completed_individual_count, 0) > 0
+              AND COALESCE(eval.has_consolidation_ready, false) = true
+              THEN 'pronto_para_envio'
+            WHEN COALESCE(eval.completed_individual_count, 0) > 0
+              THEN 'avaliacao_em_andamento'
+            ELSE 'aguardando_insumos'
+          END AS eligibility_indicator,
+          COALESCE(
+            NULLIF(BTRIM(origin.notes), ''),
+            NULLIF(BTRIM(p.notes), '')
+          ) AS observacao_resumida,
+          COUNT(*) OVER()::int AS total_count
+        FROM public.patients p
+        LEFT JOIN evaluation_summary eval
+          ON eval.patient_id = p.id::text
+        LEFT JOIN interview_summary interview
+          ON interview.patient_id = p.id::text
+        LEFT JOIN pre_appointment_origin origin
+          ON origin.patient_id = p.id::text
+        ${whereSql}
+        ORDER BY
+          (
+            COALESCE(eval.completed_individual_count, 0) > 0
+            AND COALESCE(eval.has_consolidation_ready, false) = true
+          ) DESC,
+          eval.latest_sent_to_vaga_at DESC NULLS LAST,
+          p.updated_at DESC NULLS LAST,
+          p.created_at DESC NULLS LAST
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
+      `,
+      params
+    );
+
+    const total = result.rows[0]?.total_count ? Number(result.rows[0].total_count) : 0;
+    const items = result.rows.map((row) => {
+      const { total_count, ...payload } = row;
+      return payload;
+    });
+
+    return res.json({
+      success: true,
+      total,
+      limit,
+      offset,
+      items,
+    });
+  } catch (error) {
+    console.error('Erro ao listar pacientes elegiveis para vaga:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao listar pacientes elegiveis para vaga',
+    });
+  }
+});
+
 router.post('/', async (req, res) => {
   const userIdInt = resolveLoggedUserIdInt(req);
   if (userIdInt === null) {
@@ -434,16 +736,6 @@ router.post('/', async (req, res) => {
   }
 
   const convertedBy = normalizeIdAsText(req.user?.id);
-
-  try {
-    await ensurePreAppointmentsConversionColumns();
-  } catch (schemaError) {
-    console.error('Erro ao garantir colunas de conversao em pre_appointments:', schemaError);
-    return res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor',
-    });
-  }
 
   const client = await pool.connect();
   try {
