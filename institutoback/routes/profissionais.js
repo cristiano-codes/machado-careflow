@@ -77,6 +77,14 @@ function normalizeDateParam(value) {
   return text;
 }
 
+function daysBetweenInclusive(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  const diffMs = end.getTime() - start.getTime();
+  if (Number.isNaN(diffMs)) return null;
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1;
+}
+
 function normalizeOptionalText(value) {
   const text = (value || '').toString().trim();
   return text || null;
@@ -2778,6 +2786,239 @@ router.get('/me', authorizeAgendaRead, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Erro ao carregar contexto do profissional logado',
+    });
+  }
+});
+
+// Agenda visual por intervalo (dia/semana/mes/lista)
+router.get('/agenda/range', authorizeAgendaRead, async (req, res) => {
+  const dateFrom = normalizeDateParam(req.query?.date_from || req.query?.dateFrom);
+  const dateTo = normalizeDateParam(req.query?.date_to || req.query?.dateTo);
+  const requestedProfessionalId = normalizeEntityId(
+    req.query?.professional_id || req.query?.professionalId
+  );
+
+  if (!dateFrom || !dateTo) {
+    return res.status(400).json({
+      success: false,
+      message: 'Parametros date_from e date_to sao obrigatorios (YYYY-MM-DD).',
+    });
+  }
+
+  if (dateFrom > dateTo) {
+    return res.status(400).json({
+      success: false,
+      message: 'date_from nao pode ser maior que date_to.',
+    });
+  }
+
+  const rangeDays = daysBetweenInclusive(dateFrom, dateTo);
+  if (!rangeDays || rangeDays > 62) {
+    return res.status(400).json({
+      success: false,
+      message: 'Intervalo maximo permitido para agenda visual e de 62 dias.',
+    });
+  }
+
+  try {
+    const accessContext = await resolveAgendaAccessContext(req.user, pool);
+    const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+    const writeEnforcement = resolveAgendaWriteEnforcementMode();
+
+    if (
+      requestedProfessionalId &&
+      !canAccessAgendaWriteTarget(accessContext, requestedProfessionalId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'Acesso negado: voce nao pode visualizar agenda de outro profissional.',
+      });
+    }
+
+    let targetProfessionalIds = [];
+    if (requestedProfessionalId) {
+      targetProfessionalIds = [requestedProfessionalId];
+    } else if (
+      accessContext.linkedProfessionalId &&
+      !accessContext.canViewOtherProfessionals
+    ) {
+      targetProfessionalIds = [String(accessContext.linkedProfessionalId)];
+    } else {
+      const professionalsResult = await pool.query(
+        `
+          SELECT p.id::text AS id
+          FROM public.professionals p
+          ORDER BY p.created_at DESC
+        `
+      );
+      targetProfessionalIds = professionalsResult.rows
+        .map((row) => normalizeEntityId(row?.id))
+        .filter(Boolean);
+    }
+
+    if (targetProfessionalIds.length === 0) {
+      return res.json({
+        success: true,
+        date_from: dateFrom,
+        date_to: dateTo,
+        professionals: [],
+        appointments: [],
+        scope: buildAgendaScopePayload(agendaReadAccess, {
+          professional_id: accessContext.linkedProfessionalId,
+          can_view_all_professionals: accessContext.canViewOtherProfessionals,
+          allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+        }),
+      });
+    }
+
+    const professionalRows = await pool.query(
+      `
+        SELECT
+          p.id::text AS id,
+          COALESCE(
+            u.name,
+            p.email,
+            p.funcao,
+            p.specialty,
+            'Profissional ' || p.id::text
+          ) AS professional_name,
+          COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+          p.specialty AS professional_specialty
+        FROM public.professionals p
+        LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+        LEFT JOIN public.users u
+          ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+        WHERE p.id::text = ANY($1::text[])
+        ORDER BY professional_name ASC, p.id::text ASC
+      `,
+      [targetProfessionalIds]
+    );
+
+    const hasStatusJornada = await hasPatientsStatusJornadaColumn(pool);
+    const patientJourneyProjection = hasStatusJornada
+      ? 'pa.status_jornada AS status_jornada, pa.status_jornada AS journey_status,'
+      : 'NULL::text AS status_jornada, NULL::text AS journey_status,';
+
+    const appointmentsResult = await pool.query(
+      `
+        SELECT
+          a.id::text AS id,
+          a.id::text AS appointment_id,
+          a.professional_id::text AS professional_id,
+          COALESCE(
+            u.name,
+            p.email,
+            p.funcao,
+            p.specialty,
+            'Profissional ' || p.id::text
+          ) AS professional_name,
+          COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+          p.specialty AS professional_specialty,
+          a.appointment_date,
+          to_char(a.appointment_time, 'HH24:MI') AS appointment_time,
+          a.status AS appointment_status,
+          a.status,
+          a.notes,
+          pa.id::text AS patient_id,
+          pa.name AS patient_name,
+          ${patientJourneyProjection}
+          s.id::text AS service_id,
+          s.name AS service_name,
+          COALESCE(pr.nome, p.specialty, p.funcao, NULL) AS sector_responsible,
+          COALESCE(
+            u.name,
+            p.email,
+            p.funcao,
+            p.specialty,
+            NULL
+          ) AS responsible_name
+        FROM public.appointments a
+        JOIN public.patients pa ON pa.id = a.patient_id
+        JOIN public.professionals p ON p.id = a.professional_id
+        LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+        LEFT JOIN public.users u
+          ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+        LEFT JOIN public.services s ON s.id = a.service_id
+        WHERE a.professional_id::text = ANY($1::text[])
+          AND a.appointment_date BETWEEN $2::date AND $3::date
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC, professional_name ASC;
+      `,
+      [targetProfessionalIds, dateFrom, dateTo]
+    );
+
+    const appointments = appointmentsResult.rows.map((row) => {
+      const journeyStatus = normalizeJourneyStatus(
+        row?.status_jornada || row?.journey_status || null
+      );
+      const institutionalContext = buildAgendaInstitutionalContext({
+        journeyStatus,
+        serviceName: row?.service_name || null,
+      });
+      const writeValidation = prepareAgendaWriteValidation({
+        journeyStatus,
+        serviceName: row?.service_name || null,
+        explicitEventType: institutionalContext.event_type_institutional,
+        enforcementMode: writeEnforcement.configuredMode,
+      });
+
+      return {
+        ...row,
+        ...institutionalContext,
+        write_validation_ready: true,
+        write_validation_mode: writeValidation.mode || writeEnforcement.configuredMode,
+        write_validation_effective_mode:
+          writeValidation.effectiveMode || writeEnforcement.effectiveMode,
+        write_validation_rollout_phase:
+          writeValidation.rolloutPhase || writeEnforcement.rolloutPhase,
+        write_validation_hard_block_enabled: writeValidation.hardBlockGloballyEnabled === true,
+        write_validation_legacy_mode_alias: writeValidation.legacyModeAlias || null,
+        write_validation_level: writeValidation.level || null,
+        write_validation_action: writeValidation.action || null,
+        write_validation_code: writeValidation.code || null,
+        write_validation_message: writeValidation.message || null,
+        write_validation_supported_levels:
+          Array.isArray(writeValidation.supportedLevels) &&
+          writeValidation.supportedLevels.length > 0
+            ? writeValidation.supportedLevels
+            : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+        write_validation_would_block: writeValidation.wouldBlockWhenEnforced === true,
+        write_validation_blocking_active: writeValidation.blockingActive === true,
+        write_validation_enforcement_ready: writeValidation.enforcementReady === true,
+        write_validation_should_warn: writeValidation.shouldWarn,
+        write_validation_should_block: writeValidation.shouldBlock,
+      };
+    });
+
+    const writeValidationSummary = summarizeWriteValidation(appointments);
+
+    return res.json({
+      success: true,
+      date_from: dateFrom,
+      date_to: dateTo,
+      professionals: professionalRows.rows,
+      appointments,
+      scope: buildAgendaScopePayload(agendaReadAccess, {
+        professional_id: accessContext.linkedProfessionalId,
+        can_view_all_professionals: accessContext.canViewOtherProfessionals,
+        allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+        write_validation_summary: {
+          mode: writeEnforcement.configuredMode,
+          effective_mode: writeEnforcement.effectiveMode,
+          rollout_phase: writeEnforcement.rolloutPhase,
+          hard_block_enabled: writeEnforcement.hardBlockGloballyEnabled === true,
+          legacy_mode_alias: writeEnforcement.legacyModeAlias || null,
+          ...writeValidationSummary,
+          blocking_active: writeEnforcement.blockingActive,
+          enforcement_ready: true,
+        },
+      }),
+    });
+  } catch (error) {
+    console.error('Erro ao buscar agenda por intervalo:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao buscar agenda por intervalo.',
     });
   }
 });

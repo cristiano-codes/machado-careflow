@@ -1464,6 +1464,29 @@ export type ProfessionalAgendaResponse = {
   message?: string;
 };
 
+export type AgendaRangeProfessional = {
+  id: string;
+  professional_name?: string | null;
+  professional_role?: string | null;
+  professional_specialty?: string | null;
+};
+
+export type AgendaRangeResponse = {
+  success: boolean;
+  appointments: AgendaAppointmentItem[];
+  professionals: AgendaRangeProfessional[];
+  date_from: string;
+  date_to: string;
+  scope?: AgendaScopeContext | null;
+  message?: string;
+};
+
+export type ServiceOption = {
+  id: string;
+  name: string;
+  active?: boolean;
+};
+
 export type ProfessionalLinkRequestStatus = "pending" | "approved" | "rejected";
 
 export type ProfessionalLinkRequest = {
@@ -2495,6 +2518,32 @@ class ApiService {
   }
 
   // ---------- PROFISSIONAIS ----------
+  async getServices(activeOnly = true): Promise<ServiceOption[]> {
+    const query = activeOnly ? "?active=true" : "";
+    const response = await fetch(`${API_BASE_URL}/services${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar servicos"
+    );
+    const rawServices = Array.isArray(data?.services) ? data.services : [];
+    return rawServices
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const payload = item as Record<string, unknown>;
+        const id = this.toNonEmptyString(payload.id);
+        const name = this.toNonEmptyString(payload.name);
+        if (!id || !name) return null;
+        return {
+          id,
+          name,
+          active: payload.active === true,
+        } as ServiceOption;
+      })
+      .filter((item): item is ServiceOption => item !== null);
+  }
+
   async getProfessionals(options?: string | { date?: string; forAgenda?: boolean }) {
     const date = typeof options === "string" ? options : options?.date;
     const forAgenda =
@@ -2572,6 +2621,75 @@ class ApiService {
       agenda,
       scope,
       message,
+    };
+  }
+
+  async getAgendaRange(params: {
+    date_from: string;
+    date_to: string;
+    professional_id?: string | null;
+  }): Promise<AgendaRangeResponse> {
+    const dateFrom = this.toNonEmptyString(params?.date_from);
+    const dateTo = this.toNonEmptyString(params?.date_to);
+    if (!dateFrom || !dateTo) {
+      throw new Error("Periodo invalido para carregar agenda");
+    }
+
+    const query = new URLSearchParams();
+    query.set("date_from", dateFrom);
+    query.set("date_to", dateTo);
+    const professionalId = this.toNonEmptyString(params?.professional_id);
+    if (professionalId) {
+      query.set("professional_id", professionalId);
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/profissionais/agenda/range?${query.toString()}`,
+      {
+        headers: this.getAuthHeaders(),
+      }
+    );
+
+    const data = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar agenda do periodo"
+    );
+
+    const appointments = Array.isArray(data?.appointments)
+      ? data.appointments
+          .map((item) => this.parseAgendaAppointmentItem(item))
+          .filter((item): item is AgendaAppointmentItem => item !== null)
+      : [];
+
+    const professionals = Array.isArray(data?.professionals)
+      ? data.professionals
+          .map((item) => {
+            if (!item || typeof item !== "object") return null;
+            const payload = item as Record<string, unknown>;
+            const id = this.toNonEmptyString(payload.id);
+            if (!id) return null;
+            return {
+              id,
+              professional_name: this.toNonEmptyString(
+                payload.professional_name ?? payload.user_name
+              ),
+              professional_role: this.toNonEmptyString(
+                payload.professional_role ?? payload.role_nome
+              ),
+              professional_specialty: this.toNonEmptyString(payload.professional_specialty),
+            } as AgendaRangeProfessional;
+          })
+          .filter((item): item is AgendaRangeProfessional => item !== null)
+      : [];
+
+    return {
+      success: data?.success === true,
+      appointments,
+      professionals,
+      date_from: this.toNonEmptyString(data?.date_from) || dateFrom,
+      date_to: this.toNonEmptyString(data?.date_to) || dateTo,
+      scope: this.parseAgendaScopeContext(data?.scope ?? null),
+      message: this.toNonEmptyString(data?.message),
     };
   }
 
