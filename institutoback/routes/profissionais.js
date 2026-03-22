@@ -102,7 +102,7 @@ function normalizeAppointmentStatus(value) {
   if (['scheduled', 'agendado'].includes(normalized)) return 'scheduled';
   if (['confirmed', 'confirmado'].includes(normalized)) return 'confirmed';
   if (['completed', 'concluido'].includes(normalized)) return 'completed';
-  if (['cancelled', 'cancelado'].includes(normalized)) return 'cancelled';
+  if (['cancelled', 'canceled', 'cancelado'].includes(normalized)) return 'cancelled';
   return null;
 }
 
@@ -126,6 +126,29 @@ function mapAppointmentStatusActionToTarget(action) {
   if (action === 'confirm') return 'confirmed';
   if (action === 'cancel') return 'cancelled';
   return null;
+}
+
+function resolveStatusWriteCandidates(targetStatus) {
+  if (targetStatus === 'confirmed') {
+    return ['confirmed', 'confirmado'];
+  }
+  if (targetStatus === 'cancelled') {
+    return ['cancelled', 'cancelado', 'canceled'];
+  }
+  return [targetStatus];
+}
+
+function isStatusWriteCompatibilityError(error) {
+  const code = (error?.code || '').toString().trim();
+  if (['22P02', '23514', '42804'].includes(code)) {
+    return true;
+  }
+  const message = (error?.message || '').toString().toLowerCase();
+  if (!message) return false;
+  return (
+    message.includes('status') &&
+    (message.includes('constraint') || message.includes('enum') || message.includes('violates'))
+  );
 }
 
 function getAllowedCreateAppointmentStatuses() {
@@ -3680,7 +3703,7 @@ router.post('/:id/agenda', authorizeAgendaRead, async (req, res) => {
         WHERE a.professional_id::text = $1
           AND a.appointment_date = $2::date
           AND a.appointment_time = $3::time
-          AND COALESCE(LOWER(a.status), '') NOT IN ('cancelled', 'cancelado')
+          AND COALESCE(LOWER(a.status), '') NOT IN ('cancelled', 'cancelado', 'canceled')
         LIMIT 1
       `,
       [String(id), appointmentDate, appointmentTime]
@@ -4140,26 +4163,48 @@ router.post('/:id/agenda/:appointmentId/status', authorizeAgendaRead, async (req
 
     const finalStatus = targetStatus;
     if (currentStatus !== targetStatus) {
-      const updateResult = await client.query(
-        `
-          UPDATE public.appointments
-          SET status = $1
-          WHERE id::text = $2
-            AND professional_id::text = $3
-          RETURNING id::text AS appointment_id
-        `,
-        [targetStatus, appointmentContext.appointment_id, String(id)]
-      );
+      const statusCandidates = resolveStatusWriteCandidates(targetStatus);
+      let updated = false;
+      let statusWriteError = null;
 
-      if (updateResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        transactionStarted = false;
-        return res.status(409).json({
-          success: false,
-          code: 'agenda_status_update_conflict',
-          message: 'Nao foi possivel atualizar status devido a conflito de concorrencia.',
-          ...responseBase,
-        });
+      for (let index = 0; index < statusCandidates.length; index += 1) {
+        const candidate = statusCandidates[index];
+        try {
+          const updateResult = await client.query(
+            `
+              UPDATE public.appointments
+              SET status = $1
+              WHERE id::text = $2
+                AND professional_id::text = $3
+              RETURNING id::text AS appointment_id
+            `,
+            [candidate, appointmentContext.appointment_id, String(id)]
+          );
+
+          if (updateResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            transactionStarted = false;
+            return res.status(409).json({
+              success: false,
+              code: 'agenda_status_update_conflict',
+              message: 'Nao foi possivel atualizar status devido a conflito de concorrencia.',
+              ...responseBase,
+            });
+          }
+
+          updated = true;
+          break;
+        } catch (error) {
+          statusWriteError = error;
+          const isLastCandidate = index === statusCandidates.length - 1;
+          if (!isStatusWriteCompatibilityError(error) || isLastCandidate) {
+            throw error;
+          }
+        }
+      }
+
+      if (!updated && statusWriteError) {
+        throw statusWriteError;
       }
     }
 

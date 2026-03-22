@@ -95,6 +95,25 @@ function toIsoDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeDateKey(value: string | null | undefined) {
+  const text = (value || "").toString().trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const prefixed = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (prefixed?.[1]) return prefixed[1];
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return toIsoDate(parsed);
+}
+
+function formatDateBr(value: string | null | undefined) {
+  const normalized = normalizeDateKey(value);
+  if (!normalized) return "-";
+  const parsed = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return normalized;
+  return parsed.toLocaleDateString("pt-BR");
+}
+
 function parseTimeToMinutes(value: string | null | undefined): number | null {
   const text = (value || "").trim();
   if (!/^\d{2}:\d{2}$/.test(text)) return null;
@@ -116,7 +135,7 @@ function normalizeStatus(value: AgendaAppointmentStatus | null | undefined) {
   if (["scheduled", "agendado"].includes(key)) return "agendado";
   if (["confirmed", "confirmado"].includes(key)) return "confirmado";
   if (["completed", "concluido"].includes(key)) return "concluido";
-  if (["cancelled", "cancelado"].includes(key)) return "cancelado";
+  if (["cancelled", "canceled", "cancelado"].includes(key)) return "cancelado";
   if (["rescheduled", "remarcado"].includes(key)) return "remarcado";
   return key;
 }
@@ -231,8 +250,8 @@ function matchServiceHint(services: ServiceOption[], hint: string) {
 
 function sortByDateTime(items: AgendaAppointmentItem[]) {
   return [...items].sort((a, b) => {
-    const left = `${a.appointment_date || ""} ${normalizeTime(a.appointment_time) || "00:00"}`;
-    const right = `${b.appointment_date || ""} ${normalizeTime(b.appointment_time) || "00:00"}`;
+    const left = `${normalizeDateKey(a.appointment_date) || ""} ${normalizeTime(a.appointment_time) || "00:00"}`;
+    const right = `${normalizeDateKey(b.appointment_date) || ""} ${normalizeTime(b.appointment_time) || "00:00"}`;
     return left.localeCompare(right);
   });
 }
@@ -550,7 +569,7 @@ export default function Agenda() {
           item.responsible_name,
           item.notes,
           item.appointment_time,
-          item.appointment_date,
+          normalizeDateKey(item.appointment_date),
         ]
           .filter(Boolean)
           .join(" ")
@@ -590,7 +609,7 @@ export default function Agenda() {
   const slotsByDate = useMemo(() => {
     const map = new Map<string, AgendaAppointmentItem[]>();
     for (const item of filteredAppointments) {
-      const date = (item.appointment_date || "").trim();
+      const date = normalizeDateKey(item.appointment_date);
       const time = resolveSlotKey(item.appointment_time, slots);
       const key = `${date}|${time}`;
       if (!date || !time) continue;
@@ -629,7 +648,7 @@ export default function Agenda() {
   const eventsByDateProfSlot = useMemo(() => {
     const map = new Map<string, AgendaAppointmentItem[]>();
     for (const item of filteredAppointments) {
-      const date = (item.appointment_date || "").trim();
+      const date = normalizeDateKey(item.appointment_date);
       const time = resolveSlotKey(item.appointment_time, slots);
       const pid = item.professional_id === null || item.professional_id === undefined ? "__none__" : String(item.professional_id);
       if (!date || !time) continue;
@@ -644,7 +663,7 @@ export default function Agenda() {
   const conflictMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of filteredAppointments) {
-      const date = (item.appointment_date || "").trim();
+      const date = normalizeDateKey(item.appointment_date);
       const time = normalizeTime(item.appointment_time);
       const pid = item.professional_id === null || item.professional_id === undefined ? "" : String(item.professional_id);
       const status = normalizeStatus(item.appointment_status ?? item.status);
@@ -721,7 +740,8 @@ export default function Agenda() {
           : response.appointment?.id
             ? String(response.appointment.id)
             : null;
-        const linkedAt = `${response.appointment?.appointment_date || date}T${normalizeTime(response.appointment?.appointment_time) || time}:00`;
+        const linkedDate = normalizeDateKey(response.appointment?.appointment_date) || date;
+        const linkedAt = `${linkedDate}T${normalizeTime(response.appointment?.appointment_time) || time}:00`;
         try {
           await apiService.patchSocialTriage(patientId, {
             action_type: "vinculacao_agenda",
@@ -828,7 +848,7 @@ export default function Agenda() {
       patientId: pid || current.patientId,
       professionalId: profId || current.professionalId,
       serviceId: serviceId || current.serviceId,
-      date: item.appointment_date || current.date,
+      date: normalizeDateKey(item.appointment_date) || current.date,
       time: normalizeTime(item.appointment_time) || current.time,
       notes: (item.appointment_id || item.id)
         ? `Remarcacao sugerida do agendamento ${item.appointment_id || item.id}.`
@@ -855,7 +875,7 @@ export default function Agenda() {
   const renderEventBlock = (item: AgendaAppointmentItem, compact = false) => {
     const status = normalizeStatus(item.appointment_status ?? item.status);
     const palette = resolveAgendaEventPalette(item);
-    const date = (item.appointment_date || "").trim();
+    const date = normalizeDateKey(item.appointment_date);
     const time = normalizeTime(item.appointment_time);
     const professionalId = item.professional_id === null || item.professional_id === undefined ? "" : String(item.professional_id);
     const conflict = Boolean(date && time && professionalId && (conflictMap.get(`${date}|${time}|${professionalId}`) || 0) > 1);
@@ -1014,7 +1034,7 @@ export default function Agenda() {
                       <TableBody>
                         {filteredAppointments.map((item) => (
                           <TableRow key={`list-${item.id}`}>
-                            <TableCell>{item.appointment_date ? new Date(`${item.appointment_date}T00:00:00`).toLocaleDateString("pt-BR") : "-"}</TableCell>
+                            <TableCell>{formatDateBr(item.appointment_date)}</TableCell>
                             <TableCell>{normalizeTime(item.appointment_time) || "-"}</TableCell>
                             <TableCell className="font-medium">{item.patient_name || "-"}</TableCell>
                             <TableCell>{profName(item)}</TableCell>
@@ -1033,7 +1053,7 @@ export default function Agenda() {
                       <div className="grid grid-cols-7">
                         {monthDays.map((day) => {
                           const key = toIsoDate(day);
-                          const dayItems = filteredAppointments.filter((item) => item.appointment_date === key);
+                          const dayItems = filteredAppointments.filter((item) => normalizeDateKey(item.appointment_date) === key);
                           const inMonth = day.getMonth() === cursorDate.getMonth();
                           return (
                             <div key={key} className={cn("min-h-[140px] border-r border-b p-2 last:border-r-0", !inMonth && "bg-muted/20") }>
@@ -1178,7 +1198,7 @@ export default function Agenda() {
                 <div className="grid gap-2 md:grid-cols-2">
                   <div><p className="text-xs text-muted-foreground">Crianca/Assistido</p><p className="text-sm font-medium">{selectedEvent.patient_name || "-"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Profissional</p><p className="text-sm font-medium">{profName(selectedEvent)}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Data/Hora</p><p className="text-sm font-medium">{selectedEvent.appointment_date ? new Date(`${selectedEvent.appointment_date}T00:00:00`).toLocaleDateString("pt-BR") : "-"} {normalizeTime(selectedEvent.appointment_time) || "--:--"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Data/Hora</p><p className="text-sm font-medium">{formatDateBr(selectedEvent.appointment_date)} {normalizeTime(selectedEvent.appointment_time) || "--:--"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Contato</p><p className="text-sm font-medium">{loadingPatient ? "Carregando..." : patientPhone || "Nao informado"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Origem</p><p className="text-sm font-medium">{selectedEvent.event_type_institutional || "-"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Responsavel operacional</p><p className="text-sm font-medium">{selectedEvent.responsible_name || "-"}</p></div>
