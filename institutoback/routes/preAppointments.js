@@ -275,7 +275,7 @@ router.post('/', async (req, res) => {
 
     const legacyServiceType = activeServicesResult.rows[0]?.name || 'servico_institucional';
 
-    await client.query(
+    const insertResult = await client.query(
       `
         INSERT INTO pre_appointments (
           name,
@@ -305,6 +305,7 @@ router.post('/', async (req, res) => {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12,
           $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
         )
+        RETURNING id::text AS id
       `,
       [
         name,
@@ -337,6 +338,7 @@ router.post('/', async (req, res) => {
 
     return res.json({
       success: true,
+      pre_appointment_id: insertResult.rows[0]?.id || null,
       status_operacional: PRE_APPOINTMENT_OPERATIONAL_STATUS,
       status_contexto: PRE_APPOINTMENT_STATUS_NOTE,
       message: 'Solicitacao enviada com sucesso.',

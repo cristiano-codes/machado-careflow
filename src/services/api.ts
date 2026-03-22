@@ -132,6 +132,36 @@ export type PatientCreatePayload = {
   link_existing_patient_id?: string | null;
 };
 
+export type PatientUpdatePayload = {
+  name?: string | null;
+  date_of_birth?: string | null;
+  cpf?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  notes?: string | null;
+  status_jornada?: string | null;
+};
+
+export type PatientDetailDTO = PatientDTO & {
+  rg?: string | null;
+  mobile?: string | null;
+  address?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  profession?: string | null;
+  marital_status?: string | null;
+  education?: string | null;
+  insurance_plan?: string | null;
+  insurance_number?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type PatientPreAppointmentConversionInfo = {
   pre_appointment_id?: string | null;
   converted_to_patient_id?: string | null;
@@ -235,6 +265,126 @@ export type PreAppointmentTriageUpdatePayload = {
   append_note?: boolean;
 };
 
+export type SocialTriageStatus =
+  | "novo"
+  | "sem_contato"
+  | "tentativa_contato"
+  | "aguardando_retorno"
+  | "em_atendimento_social"
+  | "pre_cadastro_em_andamento"
+  | "aguardando_documentos"
+  | "apto_para_agendamento"
+  | "entrevista_agendada"
+  | "pausa_operacional";
+
+export type SocialTriagePriority = "normal" | "prioritario" | "urgente";
+
+export type SocialTriageQueueFilters = {
+  q?: string | null;
+  child_name?: string | null;
+  responsible_name?: string | null;
+  phone?: string | null;
+  neighborhood?: string | null;
+  triagem_responsavel?: string | null;
+  triagem_status?: SocialTriageStatus | string | null;
+  triagem_prioridade?: SocialTriagePriority | string | null;
+  has_report?: boolean | null;
+  service_type?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+  interview_scheduled?: boolean | null;
+  sort?: "oldest" | "newest" | "priority" | "name" | "next_action" | string | null;
+  limit?: number | null;
+  offset?: number | null;
+};
+
+export type SocialTriageQueueSummary = {
+  total_em_fila: number;
+  novos_casos: number;
+  sem_contato: number;
+  em_andamento: number;
+  apto_para_agendamento: number;
+  entrevista_agendada: number;
+};
+
+export type SocialTriageQueueItem = {
+  patient_id: string;
+  child_name: string;
+  date_of_birth?: string | null;
+  age_years?: number | null;
+  responsible_name?: string | null;
+  main_phone?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  entry_channel?: string | null;
+  entry_created_at?: string | null;
+  service_interest?: string | null;
+  requested_service_ids?: string[];
+  has_report?: boolean;
+  cid?: string | null;
+  status_jornada?: string | null;
+  triagem_status?: SocialTriageStatus | string | null;
+  triagem_prioridade?: SocialTriagePriority | string | null;
+  triagem_responsavel_id?: string | null;
+  triagem_responsavel_nome?: string | null;
+  triagem_last_contact_at?: string | null;
+  triagem_next_action_at?: string | null;
+  triagem_notes_summary?: string | null;
+  entrevista_agendada?: boolean;
+  linked_appointment_id?: string | null;
+  linked_appointment_at?: string | null;
+  appointment_date?: string | null;
+  appointment_time?: string | null;
+  appointment_status?: string | null;
+  appointment_service_name?: string | null;
+  next_suggested_action?: string | null;
+};
+
+export type SocialTriageQueueResponse = {
+  items: SocialTriageQueueItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  sort: "oldest" | "newest" | "priority" | "name" | "next_action";
+  summary: SocialTriageQueueSummary;
+};
+
+export type SocialTriageHistoryItem = {
+  id: string;
+  action_type?: string | null;
+  field_name?: string | null;
+  old_value?: string | null;
+  new_value?: string | null;
+  note?: string | null;
+  metadata?: Record<string, unknown>;
+  acted_by?: string | null;
+  acted_by_name?: string | null;
+  acted_at?: string | null;
+};
+
+export type SocialTriageHistoryResponse = {
+  patient_id: string;
+  total: number;
+  items: SocialTriageHistoryItem[];
+};
+
+export type SocialTriagePatchPayload = {
+  action_type?: string | null;
+  note?: string | null;
+  triagem_status?: SocialTriageStatus | string | null;
+  triagem_prioridade?: SocialTriagePriority | string | null;
+  triagem_responsavel_id?: string | null;
+  triagem_responsavel_nome?: string | null;
+  triagem_last_contact_at?: string | null;
+  triagem_next_action_at?: string | null;
+  triagem_notes_summary?: string | null;
+  entrevista_agendada_flag?: boolean | null;
+  linked_appointment_id?: string | null;
+  linked_appointment_at?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
 export type VagaEligiblePatientFilters = {
   q?: string | null;
   child_name?: string | null;
@@ -304,6 +454,23 @@ type PatientRecordLike = {
   statusJornada?: string | null;
   journey_status?: string | null;
   journeyStatus?: string | null;
+  rg?: string | null;
+  mobile?: string | null;
+  address?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  profession?: string | null;
+  marital_status?: string | null;
+  education?: string | null;
+  insurance_plan?: string | null;
+  insurance_number?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 type PreAppointmentRecordLike = {
@@ -334,6 +501,53 @@ type PreAppointmentQueueRecordLike = PreAppointmentRecordLike & {
   requested_services?: string | null;
   observacao_resumida?: string | null;
   converted_by?: string | number | null;
+};
+
+type SocialTriageQueueItemLike = {
+  patient_id?: string | number | null;
+  child_name?: string | null;
+  date_of_birth?: string | null;
+  age_years?: number | string | null;
+  responsible_name?: string | null;
+  main_phone?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  entry_channel?: string | null;
+  entry_created_at?: string | null;
+  service_interest?: string | null;
+  requested_service_ids?: unknown;
+  has_report?: boolean | string | number | null;
+  cid?: string | null;
+  status_jornada?: string | null;
+  triagem_status?: string | null;
+  triagem_prioridade?: string | null;
+  triagem_responsavel_id?: string | number | null;
+  triagem_responsavel_nome?: string | null;
+  triagem_last_contact_at?: string | null;
+  triagem_next_action_at?: string | null;
+  triagem_notes_summary?: string | null;
+  entrevista_agendada?: boolean | string | number | null;
+  linked_appointment_id?: string | number | null;
+  linked_appointment_at?: string | null;
+  appointment_date?: string | null;
+  appointment_time?: string | null;
+  appointment_status?: string | null;
+  appointment_service_name?: string | null;
+  next_suggested_action?: string | null;
+};
+
+type SocialTriageHistoryItemLike = {
+  id?: string | number | null;
+  action_type?: string | null;
+  field_name?: string | null;
+  old_value?: string | null;
+  new_value?: string | null;
+  note?: string | null;
+  metadata?: unknown;
+  acted_by?: string | number | null;
+  acted_by_name?: string | null;
+  acted_at?: string | null;
 };
 
 type VagaEligiblePatientRecordLike = {
@@ -406,6 +620,33 @@ function normalizePatientList(raw: unknown): PatientDTO[] {
     .filter((item): item is PatientDTO => item !== null);
 }
 
+function normalizePatientDetailRecord(raw: unknown): PatientDetailDTO | null {
+  const base = normalizePatientRecord(raw);
+  if (!base || !raw || typeof raw !== "object") return base;
+
+  const payload = raw as PatientRecordLike;
+  return {
+    ...base,
+    rg: coerceStatusText(payload.rg),
+    mobile: coerceStatusText(payload.mobile),
+    address: coerceStatusText(payload.address),
+    number: coerceStatusText(payload.number),
+    complement: coerceStatusText(payload.complement),
+    neighborhood: coerceStatusText(payload.neighborhood),
+    city: coerceStatusText(payload.city),
+    state: coerceStatusText(payload.state),
+    zip_code: coerceStatusText(payload.zip_code),
+    profession: coerceStatusText(payload.profession),
+    marital_status: coerceStatusText(payload.marital_status),
+    education: coerceStatusText(payload.education),
+    insurance_plan: coerceStatusText(payload.insurance_plan),
+    insurance_number: coerceStatusText(payload.insurance_number),
+    notes: coerceStatusText(payload.notes),
+    created_at: coerceStatusText(payload.created_at),
+    updated_at: coerceStatusText(payload.updated_at),
+  };
+}
+
 function normalizePreAppointmentRecord(raw: unknown): PreAppointmentImportRecord | null {
   if (!raw || typeof raw !== "object") return null;
 
@@ -456,6 +697,88 @@ function normalizePreAppointmentQueueRecord(raw: unknown): PreAppointmentQueueRe
       payload.converted_by === null || payload.converted_by === undefined
         ? null
         : String(payload.converted_by),
+  };
+}
+
+function normalizeSocialTriageQueueItem(raw: unknown): SocialTriageQueueItem | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as SocialTriageQueueItemLike;
+  if (payload.patient_id === null || payload.patient_id === undefined) return null;
+
+  const requestedServiceIds = Array.isArray(payload.requested_service_ids)
+    ? payload.requested_service_ids
+        .map((entry) => coerceStatusText(entry))
+        .filter((entry): entry is string => Boolean(entry))
+    : [];
+
+  return {
+    patient_id: String(payload.patient_id),
+    child_name: coerceStatusText(payload.child_name) ?? "",
+    date_of_birth: coerceStatusText(payload.date_of_birth),
+    age_years:
+      payload.age_years === null || payload.age_years === undefined
+        ? null
+        : toNumber(payload.age_years, 0),
+    responsible_name: coerceStatusText(payload.responsible_name),
+    main_phone: coerceStatusText(payload.main_phone),
+    neighborhood: coerceStatusText(payload.neighborhood),
+    city: coerceStatusText(payload.city),
+    state: coerceStatusText(payload.state),
+    entry_channel: coerceStatusText(payload.entry_channel),
+    entry_created_at: coerceStatusText(payload.entry_created_at),
+    service_interest: coerceStatusText(payload.service_interest),
+    requested_service_ids: requestedServiceIds,
+    has_report: toBoolean(payload.has_report),
+    cid: coerceStatusText(payload.cid),
+    status_jornada: resolveOfficialJourneyStatus(payload),
+    triagem_status: coerceStatusText(payload.triagem_status),
+    triagem_prioridade: coerceStatusText(payload.triagem_prioridade),
+    triagem_responsavel_id:
+      payload.triagem_responsavel_id === undefined || payload.triagem_responsavel_id === null
+        ? null
+        : String(payload.triagem_responsavel_id),
+    triagem_responsavel_nome: coerceStatusText(payload.triagem_responsavel_nome),
+    triagem_last_contact_at: coerceStatusText(payload.triagem_last_contact_at),
+    triagem_next_action_at: coerceStatusText(payload.triagem_next_action_at),
+    triagem_notes_summary: coerceStatusText(payload.triagem_notes_summary),
+    entrevista_agendada: toBoolean(payload.entrevista_agendada),
+    linked_appointment_id:
+      payload.linked_appointment_id === undefined || payload.linked_appointment_id === null
+        ? null
+        : String(payload.linked_appointment_id),
+    linked_appointment_at: coerceStatusText(payload.linked_appointment_at),
+    appointment_date: coerceStatusText(payload.appointment_date),
+    appointment_time: coerceStatusText(payload.appointment_time),
+    appointment_status: coerceStatusText(payload.appointment_status),
+    appointment_service_name: coerceStatusText(payload.appointment_service_name),
+    next_suggested_action: coerceStatusText(payload.next_suggested_action),
+  };
+}
+
+function normalizeSocialTriageHistoryItem(raw: unknown): SocialTriageHistoryItem | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as SocialTriageHistoryItemLike;
+  if (payload.id === undefined || payload.id === null) return null;
+
+  const metadata =
+    payload.metadata && typeof payload.metadata === "object" && !Array.isArray(payload.metadata)
+      ? (payload.metadata as Record<string, unknown>)
+      : {};
+
+  return {
+    id: String(payload.id),
+    action_type: coerceStatusText(payload.action_type),
+    field_name: coerceStatusText(payload.field_name),
+    old_value: coerceStatusText(payload.old_value),
+    new_value: coerceStatusText(payload.new_value),
+    note: coerceStatusText(payload.note),
+    metadata,
+    acted_by:
+      payload.acted_by === undefined || payload.acted_by === null
+        ? null
+        : String(payload.acted_by),
+    acted_by_name: coerceStatusText(payload.acted_by_name),
+    acted_at: coerceStatusText(payload.acted_at),
   };
 }
 
@@ -2530,6 +2853,216 @@ class ApiService {
     });
     const data = await response.json();
     return normalizePatientList(data);
+  }
+
+  async getPatientById(id: string): Promise<PatientDetailDTO | null> {
+    const normalizedId = this.toNonEmptyString(id);
+    if (!normalizedId) return null;
+
+    const response = await fetch(`${API_BASE_URL}/pacientes/${encodeURIComponent(normalizedId)}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar cadastro do assistido"
+    );
+
+    return normalizePatientDetailRecord(raw.paciente ?? null);
+  }
+
+  async updatePatient(id: string, payload: PatientUpdatePayload): Promise<PatientDetailDTO | null> {
+    const normalizedId = this.toNonEmptyString(id);
+    if (!normalizedId) return null;
+
+    const response = await fetch(`${API_BASE_URL}/pacientes/${encodeURIComponent(normalizedId)}`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao atualizar cadastro do assistido"
+    );
+
+    return normalizePatientDetailRecord(raw.paciente ?? null);
+  }
+
+  async getSocialTriageQueue(
+    filters?: SocialTriageQueueFilters
+  ): Promise<SocialTriageQueueResponse> {
+    const params = new URLSearchParams();
+
+    if (this.toNonEmptyString(filters?.q)) params.set("q", String(filters?.q).trim());
+    if (this.toNonEmptyString(filters?.child_name)) {
+      params.set("child_name", String(filters?.child_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.responsible_name)) {
+      params.set("responsible_name", String(filters?.responsible_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.phone)) params.set("phone", String(filters?.phone).trim());
+    if (this.toNonEmptyString(filters?.neighborhood)) {
+      params.set("neighborhood", String(filters?.neighborhood).trim());
+    }
+    if (this.toNonEmptyString(filters?.triagem_responsavel)) {
+      params.set("triagem_responsavel", String(filters?.triagem_responsavel).trim());
+    }
+    if (this.toNonEmptyString(filters?.triagem_status)) {
+      params.set("triagem_status", String(filters?.triagem_status).trim());
+    }
+    if (this.toNonEmptyString(filters?.triagem_prioridade)) {
+      params.set("triagem_prioridade", String(filters?.triagem_prioridade).trim());
+    }
+    if (typeof filters?.has_report === "boolean") {
+      params.set("has_report", filters.has_report ? "true" : "false");
+    }
+    if (this.toNonEmptyString(filters?.service_type)) {
+      params.set("service_type", String(filters?.service_type).trim());
+    }
+    if (this.toNonEmptyString(filters?.date_from)) {
+      params.set("date_from", String(filters?.date_from).trim());
+    }
+    if (this.toNonEmptyString(filters?.date_to)) {
+      params.set("date_to", String(filters?.date_to).trim());
+    }
+    if (typeof filters?.interview_scheduled === "boolean") {
+      params.set("interview_scheduled", filters.interview_scheduled ? "true" : "false");
+    }
+    if (this.toNonEmptyString(filters?.sort)) params.set("sort", String(filters?.sort).trim());
+    if (typeof filters?.limit === "number" && Number.isFinite(filters.limit) && filters.limit > 0) {
+      params.set("limit", String(Math.min(Math.floor(filters.limit), 100)));
+    }
+    if (
+      typeof filters?.offset === "number" &&
+      Number.isFinite(filters.offset) &&
+      filters.offset >= 0
+    ) {
+      params.set("offset", String(Math.floor(filters.offset)));
+    }
+
+    const query = params.toString().length > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_BASE_URL}/social-triage${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar fila da triagem social"
+    );
+
+    const rawItems = Array.isArray(raw.items) ? raw.items : [];
+    const items = rawItems
+      .map((item) => normalizeSocialTriageQueueItem(item))
+      .filter((item): item is SocialTriageQueueItem => item !== null);
+
+    const summaryPayload =
+      raw.summary && typeof raw.summary === "object"
+        ? (raw.summary as Record<string, unknown>)
+        : {};
+    const sortRaw = this.toNonEmptyString(raw.sort) || "oldest";
+    const sort: SocialTriageQueueResponse["sort"] =
+      sortRaw === "newest" ||
+      sortRaw === "priority" ||
+      sortRaw === "name" ||
+      sortRaw === "next_action"
+        ? sortRaw
+        : "oldest";
+
+    return {
+      items,
+      total: toNumber(raw.total, items.length),
+      limit: toNumber(raw.limit, 30),
+      offset: toNumber(raw.offset, 0),
+      sort,
+      summary: {
+        total_em_fila: toNumber(summaryPayload.total_em_fila, 0),
+        novos_casos: toNumber(summaryPayload.novos_casos, 0),
+        sem_contato: toNumber(summaryPayload.sem_contato, 0),
+        em_andamento: toNumber(summaryPayload.em_andamento, 0),
+        apto_para_agendamento: toNumber(summaryPayload.apto_para_agendamento, 0),
+        entrevista_agendada: toNumber(summaryPayload.entrevista_agendada, 0),
+      },
+    };
+  }
+
+  async patchSocialTriage(
+    patientId: string,
+    payload: SocialTriagePatchPayload
+  ): Promise<SocialTriageQueueItem | null> {
+    const normalizedPatientId = this.toNonEmptyString(patientId);
+    if (!normalizedPatientId) return null;
+
+    const response = await fetch(
+      `${API_BASE_URL}/social-triage/${encodeURIComponent(normalizedPatientId)}`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao atualizar triagem social"
+    );
+
+    return normalizeSocialTriageQueueItem(raw.triage_case ?? null);
+  }
+
+  async startSocialTriageAgenda(patientId: string, note?: string | null): Promise<void> {
+    const normalizedPatientId = this.toNonEmptyString(patientId);
+    if (!normalizedPatientId) return;
+
+    const response = await fetch(
+      `${API_BASE_URL}/social-triage/${encodeURIComponent(normalizedPatientId)}/agenda/start`,
+      {
+        method: "POST",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ note: this.toNonEmptyString(note) }),
+      }
+    );
+    await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao iniciar agendamento pela triagem social"
+    );
+  }
+
+  async getSocialTriageHistory(
+    patientId: string,
+    limit = 50
+  ): Promise<SocialTriageHistoryResponse> {
+    const normalizedPatientId = this.toNonEmptyString(patientId);
+    if (!normalizedPatientId) {
+      return {
+        patient_id: "",
+        total: 0,
+        items: [],
+      };
+    }
+
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit), 100));
+    const response = await fetch(
+      `${API_BASE_URL}/social-triage/${encodeURIComponent(
+        normalizedPatientId
+      )}/history?limit=${safeLimit}`,
+      {
+        headers: this.getAuthHeaders(),
+      }
+    );
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar historico da triagem social"
+    );
+
+    const rawItems = Array.isArray(raw.items) ? raw.items : [];
+    const items = rawItems
+      .map((item) => normalizeSocialTriageHistoryItem(item))
+      .filter((item): item is SocialTriageHistoryItem => item !== null);
+
+    return {
+      patient_id: this.toNonEmptyString(raw.patient_id) || normalizedPatientId,
+      total: toNumber(raw.total, items.length),
+      items,
+    };
   }
 
   async getVagaEligiblePatients(

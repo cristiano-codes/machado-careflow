@@ -169,6 +169,7 @@ function getModuleIcon(moduleName: string) {
   const normalized = normalizeText(moduleName);
   if (normalized.includes("agenda")) return Calendar;
   if (normalized.includes("pre_agendamento")) return BookOpen;
+  if (normalized.includes("triagem")) return UserCheck;
   if (normalized.includes("pre_cadastro")) return UserPlus;
   if (normalized.includes("entrevista")) return Users;
   if (normalized.includes("avaliacao")) return ClipboardList;

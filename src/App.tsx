@@ -19,6 +19,7 @@ import PreCadastro from "./pages/PreCadastro";
 import Entrevistas from "./pages/Entrevistas";
 import Avaliacoes from "./pages/Avaliacoes";
 import AnaliseVagas from "./pages/AnaliseVagas";
+import TriagemSocial from "./pages/TriagemSocial";
 import Configuracoes from "./pages/Configuracoes";
 import GerenciarUsuarios from "./pages/GerenciarUsuarios";
 import PermissionManager from "./pages/PermissionManager";
@@ -71,7 +72,26 @@ const AppContent = () => {
         <Route path="/dashboard" element={<Index />} />
         <Route path="/trocar-senha-obrigatoria" element={<TrocarSenhaObrigatoria />} />
         <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/pre-agendamento" element={<ProtectedRoute><PreAgendamento /></ProtectedRoute>} />
+        <Route
+          path="/pre-agendamento"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute module="pre_agendamento" permission="view">
+                <PreAgendamento />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/triagem-social"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute module="triagem_social" permission="view">
+                <TriagemSocial />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/consultar-solicitacao"
           element={

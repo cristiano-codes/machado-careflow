@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -271,6 +272,7 @@ function professionalName(item: ProfessionalOption) {
 }
 
 export default function Agenda() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { userProfile } = useAuth();
   const { settings } = useSettings();
   const { hasPermission, hasAnyScope } = usePermissions();
@@ -292,6 +294,15 @@ export default function Agenda() {
   const [statusActionLoadingKey, setStatusActionLoadingKey] = useState<string | null>(null);
   const [accessContext, setAccessContext] = useState<AgendaAccessContext>(() =>
     createDefaultAccessContext()
+  );
+
+  const triageEntryPatientId = useMemo(
+    () => (searchParams.get("patient_id") || "").toString().trim(),
+    [searchParams]
+  );
+  const isTriageEntry = useMemo(
+    () => (searchParams.get("entry") || "").toString().trim().toLowerCase() === "triagem_social",
+    [searchParams]
   );
 
   const dateParam = useMemo(() => toIsoDate(currentDate), [currentDate]);
@@ -627,6 +638,16 @@ export default function Agenda() {
     }
   }, [canViewAgenda, dateParam, selectedProfessionalId, toast]);
 
+  useEffect(() => {
+    if (!isTriageEntry || !triageEntryPatientId) return;
+    setShowQuickCreate(true);
+    setQuickCreateForm((current) =>
+      current.patientId === triageEntryPatientId
+        ? current
+        : { ...current, patientId: triageEntryPatientId }
+    );
+  }, [isTriageEntry, triageEntryPatientId]);
+
   const handleQuickCreateFieldChange = useCallback(
     (field: keyof AgendaQuickCreateForm, value: string) => {
       setQuickCreateForm((current) => ({
@@ -691,6 +712,46 @@ export default function Agenda() {
         return;
       }
 
+      if (isTriageEntry && triageEntryPatientId && triageEntryPatientId === patientId) {
+        const linkedAppointmentId = response.appointment?.appointment_id
+          ? String(response.appointment.appointment_id)
+          : response.appointment?.id
+            ? String(response.appointment.id)
+            : null;
+        const linkedAppointmentAt = `${dateParam}T${appointmentTime}:00`;
+
+        try {
+          await apiService.patchSocialTriage(patientId, {
+            action_type: "vinculacao_agenda",
+            triagem_status: "entrevista_agendada",
+            entrevista_agendada_flag: true,
+            linked_appointment_id: linkedAppointmentId,
+            linked_appointment_at: linkedAppointmentAt,
+            note: linkedAppointmentId
+              ? `Entrevista vinculada ao agendamento ${linkedAppointmentId}.`
+              : "Entrevista vinculada a agenda institucional.",
+            metadata: {
+              source: "agenda_quick_create",
+              selected_professional_id: selectedProfessionalId,
+            },
+          });
+          setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete("entry");
+            return next;
+          });
+        } catch (triageError) {
+          toast({
+            title: "Triagem Social",
+            description:
+              triageError instanceof Error
+                ? triageError.message
+                : "Agendamento criado, mas a vinculacao operacional na triagem falhou.",
+            variant: "destructive",
+          });
+        }
+      }
+
       toast({
         title: "Agenda",
         description: response.message || "Agendamento criado com sucesso.",
@@ -707,7 +768,16 @@ export default function Agenda() {
     } finally {
       setCreatingAppointment(false);
     }
-  }, [dateParam, quickCreateForm, refreshAgenda, selectedProfessionalId, toast]);
+  }, [
+    dateParam,
+    isTriageEntry,
+    quickCreateForm,
+    refreshAgenda,
+    selectedProfessionalId,
+    setSearchParams,
+    toast,
+    triageEntryPatientId,
+  ]);
 
   const handleStatusAction = useCallback(
     async (item: AgendaItem, action: "confirm" | "cancel") => {

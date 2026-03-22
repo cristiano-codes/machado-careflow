@@ -674,6 +674,71 @@ router.get('/vaga-elegiveis', authorizeVagaEligibilityLookup, async (req, res) =
   }
 });
 
+router.get('/:id', async (req, res) => {
+  const patientId = normalizeIdAsText(req.params?.id);
+  if (!patientId) {
+    return res.status(400).json({
+      success: false,
+      message: 'id do assistido e obrigatorio',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT
+          id::text AS id,
+          name,
+          cpf,
+          rg,
+          date_of_birth,
+          email,
+          phone,
+          mobile,
+          address,
+          number,
+          complement,
+          neighborhood,
+          city,
+          state,
+          zip_code,
+          profession,
+          marital_status,
+          education,
+          insurance_plan,
+          insurance_number,
+          notes,
+          status,
+          status_jornada,
+          created_at,
+          updated_at
+        FROM public.patients
+        WHERE id::text = $1
+        LIMIT 1
+      `,
+      [patientId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assistido nao encontrado',
+      });
+    }
+
+    return res.json({
+      success: true,
+      paciente: result.rows[0],
+    });
+  } catch (error) {
+    console.error('Erro ao buscar paciente por id:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao buscar paciente',
+    });
+  }
+});
+
 router.post('/', async (req, res) => {
   const userIdInt = resolveLoggedUserIdInt(req);
   if (userIdInt === null) {

@@ -14,6 +14,7 @@ import {
   apiService,
   type ApiRequestError,
   type PatientCreateResponse,
+  type PatientDetailDTO,
   type PreAppointmentImportRecord,
   type PatientCreatePayload,
 } from "@/services/api";
@@ -118,6 +119,20 @@ function mapPreAppointmentToPreCadastroForm(record: PreAppointmentImportRecord):
   };
 }
 
+function mapPatientToPreCadastroForm(record: PatientDetailDTO): PreCadastroFormState {
+  return {
+    child_name: record.nome || "",
+    date_of_birth: normalizeDateForInput(record.dataNascimento),
+    responsible_name: "",
+    phone: record.telefone || record.mobile || "",
+    email: record.email || "",
+    referral_source: "",
+    cid_investigation: "",
+    notes: record.notes || "",
+    cpf: record.cpf || "",
+  };
+}
+
 function buildInitialNotes(
   form: PreCadastroFormState,
   sourcePreAppointmentId?: string | null
@@ -159,12 +174,15 @@ function buildInitialNotes(
 export default function PreCadastro() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [entryMode, setEntryMode] = useState<EntryMode>("manual");
+  const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
+  const [editingBaseNotes, setEditingBaseNotes] = useState<string | null>(null);
   const [form, setForm] = useState<PreCadastroFormState>(INITIAL_FORM);
   const [preAppointmentSearch, setPreAppointmentSearch] = useState<PreAppointmentSearchState>(
     INITIAL_PRE_APPOINTMENT_SEARCH
   );
   const [searchingPreAppointments, setSearchingPreAppointments] = useState(false);
   const [loadingPreAppointment, setLoadingPreAppointment] = useState(false);
+  const [loadingPatient, setLoadingPatient] = useState(false);
   const [preAppointments, setPreAppointments] = useState<PreAppointmentImportRecord[]>([]);
   const [selectedPreAppointment, setSelectedPreAppointment] =
     useState<PreAppointmentImportRecord | null>(null);
@@ -181,6 +199,8 @@ export default function PreCadastro() {
   const resetForm = () => {
     setForm(INITIAL_FORM);
     setSelectedPreAppointment(null);
+    setEditingPatientId(null);
+    setEditingBaseNotes(null);
   };
 
   const updatePreAppointmentSearchField = <K extends keyof PreAppointmentSearchState>(
@@ -268,6 +288,63 @@ export default function PreCadastro() {
       setLoadingPreAppointment(false);
     }
   };
+
+  useEffect(() => {
+    const patientId = toOptionalTrimmed(searchParams.get("patient_id") || "");
+    if (!patientId) return;
+
+    let active = true;
+
+    const loadPatient = async () => {
+      try {
+        setEntryMode("manual");
+        setLoadingPatient(true);
+
+        const patient = await apiService.getPatientById(patientId);
+        if (!active) return;
+
+        if (!patient) {
+          throw new Error("Assistido nao encontrado.");
+        }
+
+        setEditingPatientId(patient.id);
+        setEditingBaseNotes(patient.notes || null);
+        setForm(mapPatientToPreCadastroForm(patient));
+        setSelectedPreAppointment(null);
+
+        toast({
+          title: "Pre-cadastro",
+          description: `Caso ${patient.nome || patient.id} carregado para continuidade do pre-cadastro.`,
+        });
+      } catch (error) {
+        if (!active) return;
+        toast({
+          title: "Pre-cadastro",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Nao foi possivel carregar o cadastro da crianca.",
+          variant: "destructive",
+        });
+      } finally {
+        if (active) {
+          setLoadingPatient(false);
+          setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete("patient_id");
+            next.delete("entry");
+            return next;
+          });
+        }
+      }
+    };
+
+    void loadPatient();
+
+    return () => {
+      active = false;
+    };
+  }, [searchParams, setSearchParams, toast]);
 
   useEffect(() => {
     const sourcePreAppointmentId = toOptionalTrimmed(
@@ -370,6 +447,10 @@ export default function PreCadastro() {
 
     const sourcePreAppointmentId =
       entryMode === "import" ? selectedPreAppointment?.id || null : null;
+    const resolvedNotes =
+      buildInitialNotes(form, sourcePreAppointmentId) ??
+      (editingPatientId ? editingBaseNotes : null) ??
+      null;
 
     const payload: PatientCreatePayload = {
       name: form.child_name.trim(),
@@ -377,7 +458,7 @@ export default function PreCadastro() {
       cpf: normalizeCpf(form.cpf),
       phone: form.phone.trim(),
       email: toOptionalTrimmed(form.email),
-      notes: buildInitialNotes(form, sourcePreAppointmentId),
+      notes: resolvedNotes,
       status_jornada: "em_fila_espera",
       ...(sourcePreAppointmentId
         ? { source_pre_appointment_id: sourcePreAppointmentId }
@@ -386,6 +467,30 @@ export default function PreCadastro() {
 
     try {
       setSubmitting(true);
+
+      if (editingPatientId) {
+        const updated = await apiService.updatePatient(editingPatientId, {
+          name: payload.name,
+          date_of_birth: payload.date_of_birth,
+          cpf: payload.cpf,
+          phone: payload.phone,
+          email: payload.email,
+          notes: payload.notes,
+          status_jornada: "em_fila_espera",
+        });
+
+        if (!updated?.id) {
+          throw new Error("Nao foi possivel atualizar o pre-cadastro.");
+        }
+
+        toast({
+          title: "Pre-cadastro atualizado",
+          description: `Cadastro ${updated.id} atualizado sem alterar o status oficial da jornada.`,
+        });
+        resetForm();
+        return;
+      }
+
       const response = await apiService.createPatient(payload);
 
       if (!response.success || !response.paciente?.id) {
@@ -472,8 +577,9 @@ export default function PreCadastro() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Pre-Cadastro de Recepcao</h1>
         <p className="text-sm text-muted-foreground">
-          Entrada institucional inicial para fila de espera. A jornada oficial permanece em
-          em_fila_espera ate a entrevista social.
+          {editingPatientId
+            ? "Continuacao operacional do pre-cadastro sem criar novo cadastro principal."
+            : "Entrada institucional inicial para fila de espera. A jornada oficial permanece em em_fila_espera ate a entrevista social."}
         </p>
       </div>
 
@@ -481,8 +587,17 @@ export default function PreCadastro() {
         <Info className="h-4 w-4" />
         <AlertTitle>Fluxo oficial</AlertTitle>
         <AlertDescription>
-          Este cadastro cria o registro canonico da crianca. A jornada oficial permanece em{" "}
-          <strong>em_fila_espera</strong>.
+          {editingPatientId ? (
+            <>
+              Este formulario atualiza o cadastro canonico da crianca sem abrir novo registro. A
+              jornada oficial permanece em <strong>em_fila_espera</strong>.
+            </>
+          ) : (
+            <>
+              Este cadastro cria o registro canonico da crianca. A jornada oficial permanece em{" "}
+              <strong>em_fila_espera</strong>.
+            </>
+          )}
         </AlertDescription>
       </Alert>
 
@@ -497,6 +612,7 @@ export default function PreCadastro() {
           <RadioGroup
             className="grid grid-cols-1 gap-3 md:grid-cols-2"
             value={entryMode}
+            disabled={loadingPatient || Boolean(editingPatientId)}
             onValueChange={(value) => {
               const nextMode: EntryMode = value === "import" ? "import" : "manual";
               setEntryMode(nextMode);
@@ -510,7 +626,7 @@ export default function PreCadastro() {
               className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"
             >
               <RadioGroupItem id="entry-mode-manual" value="manual" />
-              <span>Novo pre-cadastro</span>
+              <span>{editingPatientId ? "Continuar caso existente" : "Novo pre-cadastro"}</span>
             </label>
             <label
               htmlFor="entry-mode-import"
@@ -523,7 +639,7 @@ export default function PreCadastro() {
         </CardContent>
       </Card>
 
-      {entryMode === "import" ? (
+      {entryMode === "import" && !editingPatientId ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -671,6 +787,16 @@ export default function PreCadastro() {
         </Alert>
       ) : null}
 
+      {loadingPatient ? (
+        <Alert>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <AlertTitle>Carregando caso</AlertTitle>
+          <AlertDescription>
+            Buscando cadastro principal para continuidade do pre-cadastro.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <Card>
             <CardHeader>
@@ -810,7 +936,11 @@ export default function PreCadastro() {
                 Salvando...
               </>
             ) : (
-              entryMode === "import" ? "Salvar e converter solicitacao" : "Salvar e entrar na fila"
+              editingPatientId
+                ? "Atualizar pre-cadastro do caso"
+                : entryMode === "import"
+                  ? "Salvar e converter solicitacao"
+                  : "Salvar e entrar na fila"
             )}
           </Button>
         </div>

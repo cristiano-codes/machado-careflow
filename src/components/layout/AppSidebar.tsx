@@ -29,6 +29,14 @@ function normalizePath(pathname: string) {
 const MAPPED_ROUTE_PATHS = new Set(
   ROUTE_PERMISSION_MAP.map((routeConfig) => normalizePath(routeConfig.path))
 );
+const SOCIAL_WORK_ITEM_IDS = new Set([
+  "triagem_social",
+  "pre_cadastro",
+  "agenda",
+  "entrevistas",
+  "avaliacoes",
+  "analise_vagas",
+]);
 
 function isMappedSidebarUrl(url: string) {
   return MAPPED_ROUTE_PATHS.has(normalizePath(url));
@@ -52,6 +60,12 @@ export function AppSidebar() {
     });
 
   const visibleMainItems = getVisibleItems(MAIN_MENU_ITEMS);
+  const visibleSocialWorkItems = visibleMainItems.filter((item) =>
+    SOCIAL_WORK_ITEM_IDS.has(item.id)
+  );
+  const visibleEntryItems = visibleMainItems.filter(
+    (item) => !SOCIAL_WORK_ITEM_IDS.has(item.id)
+  );
   const hasVisibleMainModules = visibleMainItems.length > 0;
   const visibleManagementItems =
     ALLOW_MANAGEMENT_WITHOUT_MAIN_MODULE || hasVisibleMainModules
@@ -73,14 +87,44 @@ export function AppSidebar() {
       collapsible="icon"
     >
       <SidebarContent className="p-0">
-        {visibleMainItems.length > 0 && (
+        {visibleEntryItems.length > 0 && (
           <SidebarGroup className="px-0">
             <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {!isCollapsed && "Modulos Principais"}
+              {!isCollapsed && "Entrada e Recepcao"}
             </SidebarGroupLabel>
             <SidebarGroupContent className="px-2">
               <SidebarMenu>
-                {visibleMainItems.map((item) => (
+                {visibleEntryItems.map((item) => (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild className="h-10">
+                      <NavLink
+                        to={item.url}
+                        end
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
+                            { isActive }
+                          )}`
+                        }
+                      >
+                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                        {!isCollapsed && <span className="text-sm">{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {visibleSocialWorkItems.length > 0 && (
+          <SidebarGroup className="px-0">
+            <SidebarGroupLabel className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {!isCollapsed && "Servico Social"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="px-2">
+              <SidebarMenu>
+                {visibleSocialWorkItems.map((item) => (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild className="h-10">
                       <NavLink
