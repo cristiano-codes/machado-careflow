@@ -20,6 +20,10 @@ const LOGO_DATA_URL_PREFIX = 'data:image/png;base64,';
 const MAX_LOGO_BYTES = 1.5 * 1024 * 1024;
 const MAX_PUBLIC_LOGO_BYTES = 300 * 1024;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CNPJ_DIGITS_REGEX = /^\d{14}$/;
+const CEP_DIGITS_REGEX = /^\d{8}$/;
+const CONVENIO_STATUS_VALUES = ['ativo', 'inativo'];
+const CONVENIO_STATUS_SET = new Set(CONVENIO_STATUS_VALUES);
 
 const DEFAULT_BUSINESS_HOURS = {
   opening_time: '08:00',
@@ -58,6 +62,10 @@ const DEFAULT_SETTINGS = {
   instituicao_email: 'contato@institutolauir.com.br',
   instituicao_telefone: '(11) 3456-7890',
   instituicao_endereco: 'Rua das Flores, 123 - Sao Paulo, SP',
+  instituicao_cnpj: '',
+  instituicao_cep: '',
+  instituicao_cidade: '',
+  instituicao_estado: '',
   instituicao_logo_url: null,
   instituicao_logo_base64: null,
   email_notifications: true,
@@ -89,6 +97,10 @@ const SETTINGS_EDITABLE_FIELDS = [
   'instituicao_email',
   'instituicao_telefone',
   'instituicao_endereco',
+  'instituicao_cnpj',
+  'instituicao_cep',
+  'instituicao_cidade',
+  'instituicao_estado',
   'instituicao_logo_base64',
   'email_notifications',
   'sms_notifications',
@@ -115,6 +127,7 @@ const SETTINGS_EDITABLE_FIELDS = [
 
 let settingsSchemaReadyPromise = null;
 let settingsColumnsCache = null;
+let conveniosSchemaReadyPromise = null;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -155,6 +168,10 @@ async function ensureSystemSettingsSchema() {
     settingsSchemaReadyPromise = (async () => {
       await pool.query(`
         ALTER TABLE public.system_settings
+          ADD COLUMN IF NOT EXISTS instituicao_cnpj text,
+          ADD COLUMN IF NOT EXISTS instituicao_cep text,
+          ADD COLUMN IF NOT EXISTS instituicao_cidade text,
+          ADD COLUMN IF NOT EXISTS instituicao_estado text,
           ADD COLUMN IF NOT EXISTS instituicao_logo_base64 text,
           ADD COLUMN IF NOT EXISTS instituicao_logo_updated_at timestamptz DEFAULT now(),
           ADD COLUMN IF NOT EXISTS business_hours jsonb,
@@ -257,6 +274,52 @@ async function getSystemSettingsColumnsMap() {
   );
 
   return settingsColumnsCache;
+}
+
+async function ensureConveniosSchema() {
+  if (!conveniosSchemaReadyPromise) {
+    conveniosSchemaReadyPromise = (async () => {
+      await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS public.convenios (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          nome text NOT NULL,
+          numero_projeto text,
+          data_inicio date,
+          data_fim date,
+          status text NOT NULL DEFAULT 'ativo',
+          quantidade_atendidos integer NOT NULL DEFAULT 0,
+          created_at timestamptz NOT NULL DEFAULT NOW(),
+          updated_at timestamptz NOT NULL DEFAULT NOW(),
+          created_by text,
+          updated_by text,
+          CONSTRAINT convenios_status_check
+            CHECK (status IN ('ativo', 'inativo')),
+          CONSTRAINT convenios_quantidade_atendidos_check
+            CHECK (quantidade_atendidos >= 0),
+          CONSTRAINT convenios_intervalo_datas_check
+            CHECK (data_fim IS NULL OR data_inicio IS NULL OR data_fim >= data_inicio)
+        )
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_convenios_status
+          ON public.convenios (status)
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_convenios_nome
+          ON public.convenios (LOWER(nome))
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_convenios_data_inicio
+          ON public.convenios (data_inicio)
+      `);
+    })().catch((error) => {
+      conveniosSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  return conveniosSchemaReadyPromise;
 }
 
 function parseMaybeJson(value) {
@@ -473,6 +536,177 @@ function validateInstitutionLogoDataUrl(value) {
   return null;
 }
 
+function onlyDigits(value) {
+  return (value || '').toString().replace(/\D/g, '');
+}
+
+function formatCnpj(digits) {
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+function formatCep(digits) {
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function validateInstitutionCnpj(value) {
+  if (value === null || value === undefined || value === '') {
+    return { ok: true, value: '' };
+  }
+  if (typeof value !== 'string') {
+    return { ok: false, message: 'instituicao_cnpj deve ser string.' };
+  }
+
+  const digits = onlyDigits(value);
+  if (!CNPJ_DIGITS_REGEX.test(digits) || /^(\d)\1{13}$/.test(digits)) {
+    return { ok: false, message: 'CNPJ invalido. Informe 14 digitos no formato 00.000.000/0000-00.' };
+  }
+
+  return { ok: true, value: formatCnpj(digits) };
+}
+
+function validateInstitutionCep(value) {
+  if (value === null || value === undefined || value === '') {
+    return { ok: true, value: '' };
+  }
+  if (typeof value !== 'string') {
+    return { ok: false, message: 'instituicao_cep deve ser string.' };
+  }
+
+  const digits = onlyDigits(value);
+  if (!CEP_DIGITS_REGEX.test(digits)) {
+    return { ok: false, message: 'CEP invalido. Informe 8 digitos no formato 00000-000.' };
+  }
+
+  return { ok: true, value: formatCep(digits) };
+}
+
+function normalizeInstitutionText(value, fieldName, { maxLength = 120, uppercase = false } = {}) {
+  if (value === null || value === undefined || value === '') return { ok: true, value: '' };
+  if (typeof value !== 'string') {
+    return { ok: false, message: `${fieldName} deve ser string.` };
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    return { ok: false, message: `${fieldName} deve ter no maximo ${maxLength} caracteres.` };
+  }
+
+  return { ok: true, value: uppercase ? trimmed.toUpperCase() : trimmed };
+}
+
+function sanitizeConvenioName(value) {
+  return (value || '').toString().trim().replace(/\s+/g, ' ');
+}
+
+function sanitizeConvenioOptionalText(value, maxLength = 120) {
+  if (value === null || value === undefined) return null;
+  const text = value.toString().trim().replace(/\s+/g, ' ');
+  if (!text) return null;
+  return text.slice(0, maxLength);
+}
+
+function normalizeConvenioStatus(value, fallback = 'ativo') {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (CONVENIO_STATUS_SET.has(normalized)) return normalized;
+  if (['active', 'enabled', '1', 'true', 'sim'].includes(normalized)) return 'ativo';
+  if (['inactive', 'disabled', '0', 'false', 'nao', 'não'].includes(normalized)) return 'inativo';
+  return null;
+}
+
+function parseConvenioDate(rawValue, fieldName) {
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return { ok: true, value: null };
+  }
+  if (typeof rawValue !== 'string') {
+    return { ok: false, message: `${fieldName} deve ser data no formato YYYY-MM-DD.` };
+  }
+  const value = rawValue.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return { ok: false, message: `${fieldName} deve estar no formato YYYY-MM-DD.` };
+  }
+  return { ok: true, value };
+}
+
+function parseConvenioQuantidade(rawValue) {
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return { ok: true, value: 0 };
+  }
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value < 0) {
+    return { ok: false, message: 'quantidade_atendidos deve ser numero inteiro nao negativo.' };
+  }
+  return { ok: true, value };
+}
+
+function mapConvenioRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id?.toString() || '',
+    nome: row.nome || '',
+    numero_projeto: row.numero_projeto || null,
+    data_inicio: row.data_inicio || null,
+    data_fim: row.data_fim || null,
+    status: normalizeConvenioStatus(row.status, 'ativo') || 'ativo',
+    quantidade_atendidos: Number(row.quantidade_atendidos || 0),
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+    created_by: row.created_by || null,
+    updated_by: row.updated_by || null,
+  };
+}
+
+function parseConvenioPayload(body, { requireName = true } = {}) {
+  const rawBody = body && typeof body === 'object' ? body : {};
+
+  const nome = sanitizeConvenioName(rawBody.nome);
+  if (requireName && !nome) {
+    return { ok: false, message: 'nome e obrigatorio.' };
+  }
+  if (nome && nome.length > 160) {
+    return { ok: false, message: 'nome deve ter no maximo 160 caracteres.' };
+  }
+
+  const numeroProjeto = sanitizeConvenioOptionalText(rawBody.numero_projeto, 80);
+  const dataInicioValidation = parseConvenioDate(rawBody.data_inicio, 'data_inicio');
+  if (!dataInicioValidation.ok) {
+    return { ok: false, message: dataInicioValidation.message };
+  }
+  const dataFimValidation = parseConvenioDate(rawBody.data_fim, 'data_fim');
+  if (!dataFimValidation.ok) {
+    return { ok: false, message: dataFimValidation.message };
+  }
+  const quantidadeValidation = parseConvenioQuantidade(rawBody.quantidade_atendidos);
+  if (!quantidadeValidation.ok) {
+    return { ok: false, message: quantidadeValidation.message };
+  }
+
+  const status = normalizeConvenioStatus(rawBody.status, 'ativo');
+  if (!status) {
+    return { ok: false, message: 'status deve ser ativo ou inativo.' };
+  }
+
+  if (
+    dataInicioValidation.value &&
+    dataFimValidation.value &&
+    dataFimValidation.value < dataInicioValidation.value
+  ) {
+    return { ok: false, message: 'data_fim nao pode ser menor que data_inicio.' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      nome: nome || '',
+      numero_projeto: numeroProjeto,
+      data_inicio: dataInicioValidation.value,
+      data_fim: dataFimValidation.value,
+      status,
+      quantidade_atendidos: quantidadeValidation.value,
+    },
+  };
+}
+
 function normalizePublicName(value) {
   if (typeof value !== 'string') return DEFAULT_SETTINGS.instituicao_nome;
   const normalized = value.trim();
@@ -617,6 +851,10 @@ async function createSingletonSettings(seed = {}) {
     normalizedSeed.instituicao_email,
     normalizedSeed.instituicao_telefone,
     normalizedSeed.instituicao_endereco,
+    normalizedSeed.instituicao_cnpj,
+    normalizedSeed.instituicao_cep,
+    normalizedSeed.instituicao_cidade,
+    normalizedSeed.instituicao_estado,
     normalizedSeed.instituicao_logo_base64,
     normalizedSeed.email_notifications,
     normalizedSeed.sms_notifications,
@@ -650,6 +888,10 @@ async function createSingletonSettings(seed = {}) {
           instituicao_email,
           instituicao_telefone,
           instituicao_endereco,
+          instituicao_cnpj,
+          instituicao_cep,
+          instituicao_cidade,
+          instituicao_estado,
           instituicao_logo_base64,
           email_notifications,
           sms_notifications,
@@ -698,8 +940,12 @@ async function createSingletonSettings(seed = {}) {
           $22,
           $23,
           $24,
-          $25::jsonb,
-          $26::jsonb
+          $25,
+          $26,
+          $27,
+          $28,
+          $29::jsonb,
+          $30::jsonb
         )
         RETURNING *
       `,
@@ -719,6 +965,10 @@ async function createSingletonSettings(seed = {}) {
           instituicao_email,
           instituicao_telefone,
           instituicao_endereco,
+          instituicao_cnpj,
+          instituicao_cep,
+          instituicao_cidade,
+          instituicao_estado,
           instituicao_logo_base64,
           email_notifications,
           sms_notifications,
@@ -767,8 +1017,12 @@ async function createSingletonSettings(seed = {}) {
           $23,
           $24,
           $25,
-          $26::jsonb,
-          $27::jsonb
+          $26,
+          $27,
+          $28,
+          $29,
+          $30::jsonb,
+          $31::jsonb
         )
         RETURNING *
       `,
@@ -1033,6 +1287,244 @@ router.patch('/professional-roles/:id/ativo', authorize('configuracoes', 'edit')
   }
 });
 
+router.get('/convenios', authorize('configuracoes', 'view'), async (req, res) => {
+  try {
+    await ensureConveniosSchema();
+
+    const includeInactive = req.query?.all !== '0';
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id::text AS id,
+          nome,
+          numero_projeto,
+          data_inicio,
+          data_fim,
+          status,
+          quantidade_atendidos,
+          created_at,
+          updated_at,
+          created_by,
+          updated_by
+        FROM public.convenios
+        ${includeInactive ? '' : "WHERE status = 'ativo'"}
+        ORDER BY
+          CASE WHEN status = 'ativo' THEN 0 ELSE 1 END,
+          nome ASC,
+          created_at DESC
+      `
+    );
+
+    return res.json({
+      success: true,
+      convenios: rows.map(mapConvenioRow).filter(Boolean),
+    });
+  } catch (error) {
+    console.error('[settings][convenios][GET] erro ao buscar convenios:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao buscar convenios' });
+  }
+});
+
+router.post('/convenios', authorize('configuracoes', 'edit'), async (req, res) => {
+  try {
+    await ensureConveniosSchema();
+
+    const parsedPayload = parseConvenioPayload(req.body, { requireName: true });
+    if (!parsedPayload.ok) {
+      return res.status(400).json({ success: false, message: parsedPayload.message });
+    }
+
+    const actorId = req.user?.id ? req.user.id.toString() : null;
+    const payload = parsedPayload.value;
+
+    const { rows } = await pool.query(
+      `
+        INSERT INTO public.convenios (
+          nome,
+          numero_projeto,
+          data_inicio,
+          data_fim,
+          status,
+          quantidade_atendidos,
+          created_by,
+          updated_by
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8
+        )
+        RETURNING
+          id::text AS id,
+          nome,
+          numero_projeto,
+          data_inicio,
+          data_fim,
+          status,
+          quantidade_atendidos,
+          created_at,
+          updated_at,
+          created_by,
+          updated_by
+      `,
+      [
+        payload.nome,
+        payload.numero_projeto,
+        payload.data_inicio,
+        payload.data_fim,
+        payload.status,
+        payload.quantidade_atendidos,
+        actorId,
+        actorId,
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      convenio: mapConvenioRow(rows[0]),
+    });
+  } catch (error) {
+    console.error('[settings][convenios][POST] erro ao criar convenio:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao criar convenio' });
+  }
+});
+
+router.put('/convenios/:id', authorize('configuracoes', 'edit'), async (req, res) => {
+  try {
+    await ensureConveniosSchema();
+
+    const convenioId = (req.params?.id || '').toString().trim();
+    if (!convenioId) {
+      return res.status(400).json({ success: false, message: 'id invalido' });
+    }
+
+    const parsedPayload = parseConvenioPayload(req.body, { requireName: true });
+    if (!parsedPayload.ok) {
+      return res.status(400).json({ success: false, message: parsedPayload.message });
+    }
+
+    const actorId = req.user?.id ? req.user.id.toString() : null;
+    const payload = parsedPayload.value;
+
+    const { rows } = await pool.query(
+      `
+        UPDATE public.convenios
+        SET nome = $1,
+            numero_projeto = $2,
+            data_inicio = $3,
+            data_fim = $4,
+            status = $5,
+            quantidade_atendidos = $6,
+            updated_by = $7,
+            updated_at = NOW()
+        WHERE id::text = $8
+        RETURNING
+          id::text AS id,
+          nome,
+          numero_projeto,
+          data_inicio,
+          data_fim,
+          status,
+          quantidade_atendidos,
+          created_at,
+          updated_at,
+          created_by,
+          updated_by
+      `,
+      [
+        payload.nome,
+        payload.numero_projeto,
+        payload.data_inicio,
+        payload.data_fim,
+        payload.status,
+        payload.quantidade_atendidos,
+        actorId,
+        convenioId,
+      ]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Convenio nao encontrado' });
+    }
+
+    return res.json({
+      success: true,
+      convenio: mapConvenioRow(rows[0]),
+    });
+  } catch (error) {
+    console.error('[settings][convenios][PUT] erro ao editar convenio:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao editar convenio' });
+  }
+});
+
+router.patch('/convenios/:id/status', authorize('configuracoes', 'edit'), async (req, res) => {
+  try {
+    await ensureConveniosSchema();
+
+    const convenioId = (req.params?.id || '').toString().trim();
+    if (!convenioId) {
+      return res.status(400).json({ success: false, message: 'id invalido' });
+    }
+
+    let status = normalizeConvenioStatus(req.body?.status, null);
+    if (!status && typeof req.body?.ativo === 'boolean') {
+      status = req.body.ativo ? 'ativo' : 'inativo';
+    }
+    if (!status) {
+      return res.status(400).json({ success: false, message: 'status deve ser ativo ou inativo.' });
+    }
+
+    const actorId = req.user?.id ? req.user.id.toString() : null;
+    const { rows } = await pool.query(
+      `
+        UPDATE public.convenios
+        SET status = $1,
+            updated_by = $2,
+            updated_at = NOW()
+        WHERE id::text = $3
+        RETURNING
+          id::text AS id,
+          nome,
+          numero_projeto,
+          data_inicio,
+          data_fim,
+          status,
+          quantidade_atendidos,
+          created_at,
+          updated_at,
+          created_by,
+          updated_by
+      `,
+      [status, actorId, convenioId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Convenio nao encontrado' });
+    }
+
+    return res.json({
+      success: true,
+      convenio: mapConvenioRow(rows[0]),
+    });
+  } catch (error) {
+    console.error('[settings][convenios][PATCH] erro ao atualizar status do convenio:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao atualizar status do convenio' });
+  }
+});
+
 router.get('/', authorize('configuracoes', 'view'), async (req, res) => {
   try {
     const row = await ensureSingletonSettings();
@@ -1062,6 +1554,43 @@ async function saveSettingsHandler(req, res) {
       if (logoValidationError) {
         return res.status(400).json({ success: false, message: logoValidationError });
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'instituicao_cnpj')) {
+      const cnpjValidation = validateInstitutionCnpj(payload.instituicao_cnpj);
+      if (!cnpjValidation.ok) {
+        return res.status(400).json({ success: false, message: cnpjValidation.message });
+      }
+      payload.instituicao_cnpj = cnpjValidation.value;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'instituicao_cep')) {
+      const cepValidation = validateInstitutionCep(payload.instituicao_cep);
+      if (!cepValidation.ok) {
+        return res.status(400).json({ success: false, message: cepValidation.message });
+      }
+      payload.instituicao_cep = cepValidation.value;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'instituicao_cidade')) {
+      const cidadeValidation = normalizeInstitutionText(payload.instituicao_cidade, 'instituicao_cidade', {
+        maxLength: 120,
+      });
+      if (!cidadeValidation.ok) {
+        return res.status(400).json({ success: false, message: cidadeValidation.message });
+      }
+      payload.instituicao_cidade = cidadeValidation.value;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'instituicao_estado')) {
+      const estadoValidation = normalizeInstitutionText(payload.instituicao_estado, 'instituicao_estado', {
+        maxLength: 32,
+        uppercase: true,
+      });
+      if (!estadoValidation.ok) {
+        return res.status(400).json({ success: false, message: estadoValidation.message });
+      }
+      payload.instituicao_estado = estadoValidation.value;
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, 'business_hours')) {

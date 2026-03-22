@@ -17,6 +17,10 @@ export interface Settings {
   instituicao_email: string;
   instituicao_telefone: string;
   instituicao_endereco: string;
+  instituicao_cnpj: string;
+  instituicao_cep: string;
+  instituicao_cidade: string;
+  instituicao_estado: string;
   instituicao_logo_url?: string | null;
   instituicao_logo_base64?: string | null;
   instituicao_logo_updated_at?: string | null;
@@ -76,6 +80,10 @@ const defaultSettings: Settings = {
   instituicao_nome: "Instituto Lauir Machado",
   instituicao_email: "contato@institutolauir.com.br",
   instituicao_telefone: "(11) 3456-7890",
+  instituicao_cnpj: "",
+  instituicao_cep: "",
+  instituicao_cidade: "",
+  instituicao_estado: "",
   instituicao_endereco: "Rua das Flores, 123 - São Paulo, SP",
   instituicao_logo_url: null,
   instituicao_logo_base64: null,
@@ -188,6 +196,38 @@ function normalizeSettings(value: Partial<Settings>): Settings {
   return {
     ...defaultSettings,
     ...value,
+    instituicao_nome:
+      typeof value.instituicao_nome === "string"
+        ? value.instituicao_nome
+        : defaultSettings.instituicao_nome,
+    instituicao_email:
+      typeof value.instituicao_email === "string"
+        ? value.instituicao_email
+        : defaultSettings.instituicao_email,
+    instituicao_telefone:
+      typeof value.instituicao_telefone === "string"
+        ? value.instituicao_telefone
+        : defaultSettings.instituicao_telefone,
+    instituicao_endereco:
+      typeof value.instituicao_endereco === "string"
+        ? value.instituicao_endereco
+        : defaultSettings.instituicao_endereco,
+    instituicao_cnpj:
+      typeof value.instituicao_cnpj === "string"
+        ? value.instituicao_cnpj
+        : defaultSettings.instituicao_cnpj,
+    instituicao_cep:
+      typeof value.instituicao_cep === "string"
+        ? value.instituicao_cep
+        : defaultSettings.instituicao_cep,
+    instituicao_cidade:
+      typeof value.instituicao_cidade === "string"
+        ? value.instituicao_cidade
+        : defaultSettings.instituicao_cidade,
+    instituicao_estado:
+      typeof value.instituicao_estado === "string"
+        ? value.instituicao_estado
+        : defaultSettings.instituicao_estado,
     registration_mode: registrationMode,
     public_signup_default_status: publicSignupDefaultStatus,
     link_policy: linkPolicy,
@@ -211,6 +251,10 @@ function toApiSettingsPayload(settings: Settings): SettingsPayload {
     instituicao_email: settings.instituicao_email,
     instituicao_telefone: settings.instituicao_telefone,
     instituicao_endereco: settings.instituicao_endereco,
+    instituicao_cnpj: settings.instituicao_cnpj,
+    instituicao_cep: settings.instituicao_cep,
+    instituicao_cidade: settings.instituicao_cidade,
+    instituicao_estado: settings.instituicao_estado,
     instituicao_logo_base64: settings.instituicao_logo_base64 ?? null,
     email_notifications: settings.email_notifications,
     sms_notifications: settings.sms_notifications,

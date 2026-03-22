@@ -33,6 +33,35 @@ function formatPhoneBR(value: string): string {
   return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
 }
 
+function formatCnpjBR(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+  if (!digits) return "";
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  }
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+function formatCepBR(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (!digits) return "";
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function isValidCnpjBasic(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 14 && !/^(\d)\1{13}$/.test(digits);
+}
+
+function isValidCepBasic(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 8;
+}
+
 function getInstitutionInitials(name: string): string {
   const cleaned = name.trim();
   if (!cleaned) return "IN";
@@ -190,6 +219,23 @@ export default function InstitutionSettingsSection({ canEdit = true }: Instituti
 
   async function handleSettingsUpdate(e?: React.FormEvent) {
     e?.preventDefault();
+    if (tempSettings.instituicao_cnpj?.trim() && !isValidCnpjBasic(tempSettings.instituicao_cnpj)) {
+      toast({
+        title: "CNPJ invalido",
+        description: "Informe um CNPJ no formato 00.000.000/0000-00.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (tempSettings.instituicao_cep?.trim() && !isValidCepBasic(tempSettings.instituicao_cep)) {
+      toast({
+        title: "CEP invalido",
+        description: "Informe um CEP no formato 00000-000.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       const payloadToSave = {
@@ -368,6 +414,82 @@ export default function InstitutionSettingsSection({ canEdit = true }: Instituti
                     instituicao_endereco: e.target.value,
                   }))
                 }
+                disabled={!canEdit || !isEditingSettings || saving}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instituicao_cnpj" className="text-sm font-medium">
+                CNPJ
+              </Label>
+              <Input
+                id="instituicao_cnpj"
+                value={isEditingSettings ? tempSettings.instituicao_cnpj : settings.instituicao_cnpj}
+                onChange={(e) =>
+                  setTempSettings((prev) => ({
+                    ...prev,
+                    instituicao_cnpj: formatCnpjBR(e.target.value),
+                  }))
+                }
+                placeholder="00.000.000/0000-00"
+                disabled={!canEdit || !isEditingSettings || saving}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instituicao_cep" className="text-sm font-medium">
+                CEP
+              </Label>
+              <Input
+                id="instituicao_cep"
+                value={isEditingSettings ? tempSettings.instituicao_cep : settings.instituicao_cep}
+                onChange={(e) =>
+                  setTempSettings((prev) => ({
+                    ...prev,
+                    instituicao_cep: formatCepBR(e.target.value),
+                  }))
+                }
+                placeholder="00000-000"
+                disabled={!canEdit || !isEditingSettings || saving}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instituicao_cidade" className="text-sm font-medium">
+                Cidade
+              </Label>
+              <Input
+                id="instituicao_cidade"
+                value={isEditingSettings ? tempSettings.instituicao_cidade : settings.instituicao_cidade}
+                onChange={(e) =>
+                  setTempSettings((prev) => ({
+                    ...prev,
+                    instituicao_cidade: e.target.value,
+                  }))
+                }
+                disabled={!canEdit || !isEditingSettings || saving}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instituicao_estado" className="text-sm font-medium">
+                Estado
+              </Label>
+              <Input
+                id="instituicao_estado"
+                value={isEditingSettings ? tempSettings.instituicao_estado : settings.instituicao_estado}
+                onChange={(e) =>
+                  setTempSettings((prev) => ({
+                    ...prev,
+                    instituicao_estado: e.target.value.toUpperCase(),
+                  }))
+                }
+                maxLength={32}
+                placeholder="UF ou nome do estado"
                 disabled={!canEdit || !isEditingSettings || saving}
                 className="text-sm"
               />

@@ -1018,6 +1018,10 @@ export type SettingsPayload = {
   instituicao_email: string;
   instituicao_telefone: string;
   instituicao_endereco: string;
+  instituicao_cnpj: string;
+  instituicao_cep: string;
+  instituicao_cidade: string;
+  instituicao_estado: string;
   instituicao_logo_base64?: string | null;
   email_notifications: boolean;
   sms_notifications: boolean;
@@ -1078,6 +1082,31 @@ export type ProfessionalRole = {
   ativo: boolean;
   created_at?: string;
   updated_at?: string;
+};
+
+export type ConvenioStatus = "ativo" | "inativo";
+
+export type Convenio = {
+  id: string;
+  nome: string;
+  numero_projeto?: string | null;
+  data_inicio?: string | null;
+  data_fim?: string | null;
+  status: ConvenioStatus;
+  quantidade_atendidos: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+};
+
+export type ConvenioPayload = {
+  nome: string;
+  numero_projeto?: string | null;
+  data_inicio?: string | null;
+  data_fim?: string | null;
+  status: ConvenioStatus;
+  quantidade_atendidos: number;
 };
 
 export type ProfessionalPayload = {
@@ -2347,6 +2376,122 @@ class ApiService {
       response,
       "Falha ao atualizar status da funcao profissional"
     );
+  }
+
+  // ---------- SETTINGS: CONVENIOS ----------
+  async getConvenios(includeInactive = true): Promise<{
+    success: boolean;
+    convenios: Convenio[];
+    message?: string;
+  }> {
+    const suffix = includeInactive ? "?all=1" : "?all=0";
+    const response = await fetch(`${API_BASE_URL}/settings/convenios${suffix}`, {
+      headers: this.getAuthHeaders(),
+    });
+    const data = await this.parseResponseOrThrow<{
+      success?: boolean;
+      convenios?: unknown[];
+      message?: string;
+    }>(response, "Falha ao carregar convenios");
+
+    const convenios = Array.isArray(data?.convenios)
+      ? data.convenios
+          .map((item) => {
+            if (!item || typeof item !== "object") return null;
+            const record = item as Record<string, unknown>;
+            const statusRaw = this.toNonEmptyString(record.status)?.toLowerCase();
+            const status: ConvenioStatus = statusRaw === "inativo" ? "inativo" : "ativo";
+            return {
+              id: this.toNonEmptyString(record.id) || "",
+              nome: this.toNonEmptyString(record.nome) || "",
+              numero_projeto: this.toNonEmptyString(record.numero_projeto),
+              data_inicio: this.toNonEmptyString(record.data_inicio),
+              data_fim: this.toNonEmptyString(record.data_fim),
+              status,
+              quantidade_atendidos:
+                typeof record.quantidade_atendidos === "number"
+                  ? Math.max(0, Math.trunc(record.quantidade_atendidos))
+                  : Number(record.quantidade_atendidos) >= 0
+                    ? Math.trunc(Number(record.quantidade_atendidos))
+                    : 0,
+              created_at: this.toNonEmptyString(record.created_at),
+              updated_at: this.toNonEmptyString(record.updated_at),
+              created_by: this.toNonEmptyString(record.created_by),
+              updated_by: this.toNonEmptyString(record.updated_by),
+            } satisfies Convenio;
+          })
+          .filter((item): item is Convenio => Boolean(item?.id))
+      : [];
+
+    return {
+      success: Boolean(data?.success),
+      convenios,
+      message: data?.message,
+    };
+  }
+
+  async createConvenio(payload: ConvenioPayload): Promise<{
+    success: boolean;
+    convenio?: Convenio;
+    message?: string;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/settings/convenios`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      convenio?: Convenio;
+      message?: string;
+    }>(response, "Falha ao criar convenio");
+  }
+
+  async updateConvenio(id: string, payload: ConvenioPayload): Promise<{
+    success: boolean;
+    convenio?: Convenio;
+    message?: string;
+  }> {
+    const convenioId = this.toNonEmptyString(id);
+    if (!convenioId) {
+      throw new Error("Id do convenio invalido");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/settings/convenios/${encodeURIComponent(convenioId)}`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      convenio?: Convenio;
+      message?: string;
+    }>(response, "Falha ao atualizar convenio");
+  }
+
+  async setConvenioStatus(id: string, status: ConvenioStatus): Promise<{
+    success: boolean;
+    convenio?: Convenio;
+    message?: string;
+  }> {
+    const convenioId = this.toNonEmptyString(id);
+    if (!convenioId) {
+      throw new Error("Id do convenio invalido");
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/settings/convenios/${encodeURIComponent(convenioId)}/status`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ status }),
+      }
+    );
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      convenio?: Convenio;
+      message?: string;
+    }>(response, "Falha ao atualizar status do convenio");
   }
 
   // ---------- PROFISSIONAIS ----------

@@ -10,9 +10,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import InstitutionSettingsSection from "@/components/settings/InstitutionSettingsSection";
 import OperationalSettingsSection from "@/components/settings/OperationalSettingsSection";
 import ProfessionalRolesSettingsSection from "@/components/settings/ProfessionalRolesSettingsSection";
+import ConveniosSettingsSection from "@/components/settings/ConveniosSettingsSection";
 import SystemSettingsSection from "@/components/settings/SystemSettingsSection";
 import { ProtectedRoute, useModulePermissions } from "@/components/common/ProtectedRoute";
-import { Building2, Cog, Shield, Users, Wrench } from "lucide-react";
+import { Building2, Cog, Handshake, Shield, Users, Wrench } from "lucide-react";
 
 export default function Configuracoes() {
   const { canEdit } = useModulePermissions("configuracoes");
@@ -94,11 +95,23 @@ export default function Configuracoes() {
             <AccordionTrigger className="py-1.5 hover:no-underline">
               <span className="flex items-center gap-2 text-sm font-medium">
                 <Users className="h-4 w-4" />
-                Funcoes (Profissionais)
+                Funcoes
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-1">
               <ProfessionalRolesSettingsSection canEdit={canEdit} />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="convenios" className="rounded-lg border bg-card px-1.5">
+            <AccordionTrigger className="py-1.5 hover:no-underline">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <Handshake className="h-4 w-4" />
+                Convenios
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-1">
+              <ConveniosSettingsSection canEdit={canEdit} />
             </AccordionContent>
           </AccordionItem>
         </Accordion>
