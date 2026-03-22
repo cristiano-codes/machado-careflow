@@ -799,7 +799,7 @@ async function resolveAgendaAppointmentContextById({
       WHERE a.id::text = $1
         AND a.professional_id::text = $2
       LIMIT 1
-      FOR UPDATE
+      FOR UPDATE OF a
     `,
     [normalizedAppointmentId, normalizedProfessionalId]
   );
