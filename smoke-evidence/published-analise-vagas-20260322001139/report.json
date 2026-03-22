@@ -1,0 +1,44 @@
+{
+  "runId": "20260322001139",
+  "startedAt": "2026-03-22T00:11:39.358Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "screenshots": {},
+  "assertions": [
+    {
+      "name": "login API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token recebido",
+      "ok": true,
+      "details": {
+        "hasToken": true
+      }
+    },
+    {
+      "name": "GET /pacientes/vaga-elegiveis 200",
+      "ok": false,
+      "details": {
+        "status": 500
+      }
+    }
+  ],
+  "apiResponses": [],
+  "status": "error",
+  "error": {
+    "message": "ASSERTION FAILED: GET /pacientes/vaga-elegiveis 200 | {\"status\":500}",
+    "stack": "Error: ASSERTION FAILED: GET /pacientes/vaga-elegiveis 200 | {\"status\":500}\n    at addAssertion (C:\\projeto\\machado-careflow\\institutoback\\temp_smoke_analise_vagas_published.cjs:31:11)\n    at C:\\projeto\\machado-careflow\\institutoback\\temp_smoke_analise_vagas_published.cjs:115:5\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)"
+  },
+  "finishedAt": "2026-03-22T00:11:40.911Z",
+  "assertionsSummary": {
+    "total": 3,
+    "passed": 2,
+    "failed": 1
+  }
+}

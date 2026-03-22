@@ -1,0 +1,438 @@
+{
+  "runId": "20260322001252",
+  "startedAt": "2026-03-22T00:12:52.131Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "screenshots": {},
+  "checks": [
+    {
+      "name": "login API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token recebido",
+      "ok": true,
+      "details": {
+        "hasToken": true
+      }
+    },
+    {
+      "name": "GET /pacientes/vaga-elegiveis sem erro",
+      "ok": false,
+      "details": {
+        "status": 500
+      }
+    },
+    {
+      "name": "GET /pacientes/vaga-elegiveis com filtro sem erro",
+      "ok": false,
+      "details": {
+        "status": 500
+      }
+    },
+    {
+      "name": "GET /pacientes sem erro",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    }
+  ],
+  "apiDirect": {
+    "login": {
+      "status": 200,
+      "data": {
+        "message": "Login realizado com sucesso",
+        "success": true,
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGUiOiJDb29yZGVuYWRvciBHZXJhbCIsIm11c3RfY2hhbmdlX3Bhc3N3b3JkIjpmYWxzZSwicHJvZmVzc2lvbmFsX2lkIjpudWxsLCJjYW5fdmlld19hbGxfcHJvZmVzc2lvbmFscyI6ZmFsc2UsInBlcm1pc3Npb25zIjpbImRhc2hib2FyZDp2aWV3IiwiZGFzaGJvYXJkOmNyZWF0ZSIsImRhc2hib2FyZDplZGl0IiwiZGFzaGJvYXJkOmRlbGV0ZSIsImRhc2hib2FyZDphZG1pbl9wYW5lbF9hY2Nlc3MiLCJwcmVfYWdlbmRhbWVudG86dmlldyIsInByZV9hZ2VuZGFtZW50bzpjcmVhdGUiLCJwcmVfYWdlbmRhbWVudG86ZWRpdCIsInByZV9hZ2VuZGFtZW50bzpkZWxldGUiLCJwcmVfYWdlbmRhbWVudG86YWRtaW5fcGFuZWxfYWNjZXNzIiwiYWdlbmRhOnZpZXciLCJhZ2VuZGE6Y3JlYXRlIiwiYWdlbmRhOmVkaXQiLCJhZ2VuZGE6ZGVsZXRlIiwiYWdlbmRhOmFkbWluX3BhbmVsX2FjY2VzcyIsInByZV9jYWRhc3Rybzp2aWV3IiwicHJlX2NhZGFzdHJvOmNyZWF0ZSIsInByZV9jYWRhc3RybzplZGl0IiwicHJlX2NhZGFzdHJvOmRlbGV0ZSIsInByZV9jYWRhc3RybzphZG1pbl9wYW5lbF9hY2Nlc3MiLCJlbnRyZXZpc3Rhczp2aWV3IiwiZW50cmV2aXN0YXM6Y3JlYXRlIiwiZW50cmV2aXN0YXM6ZWRpdCIsImVudHJldmlzdGFzOmRlbGV0ZSIsImVudHJldmlzdGFzOmFkbWluX3BhbmVsX2FjY2VzcyIsImF2YWxpYWNvZXM6dmlldyIsImF2YWxpYWNvZXM6Y3JlYXRlIiwiYXZhbGlhY29lczplZGl0IiwiYXZhbGlhY29lczpkZWxldGUiLCJhdmFsaWFjb2VzOmFkbWluX3BhbmVsX2FjY2VzcyIsImFuYWxpc2VfdmFnYXM6dmlldyIsImFuYWxpc2VfdmFnYXM6Y3JlYXRlIiwiYW5hbGlzZV92YWdhczplZGl0IiwiYW5hbGlzZV92YWdhczpkZWxldGUiLCJhbmFsaXNlX3ZhZ2FzOmFkbWluX3BhbmVsX2FjY2VzcyIsInVzdWFyaW9zOnZpZXciLCJ1c3VhcmlvczpjcmVhdGUiLCJ1c3VhcmlvczplZGl0IiwidXN1YXJpb3M6ZGVsZXRlIiwidXN1YXJpb3M6YWRtaW5fcGFuZWxfYWNjZXNzIiwiY29uZmlndXJhY29lczp2aWV3IiwiY29uZmlndXJhY29lczpjcmVhdGUiLCJjb25maWd1cmFjb2VzOmVkaXQiLCJjb25maWd1cmFjb2VzOmRlbGV0ZSIsImNvbmZpZ3VyYWNvZXM6YWRtaW5fcGFuZWxfYWNjZXNzIiwiYWRtaW46dmlldyIsImFkbWluOmNyZWF0ZSIsImFkbWluOmVkaXQiLCJhZG1pbjpkZWxldGUiLCJhZG1pbjphZG1pbl9wYW5lbF9hY2Nlc3MiXSwiaWF0IjoxNzc0MTM4MzczLCJleHAiOjE3NzQyMjQ3NzN9.DmNqsL0cuG1RvJuWHfgQMnLUbXpUML45f03r2C3CPCU",
+        "user": {
+          "id": 1,
+          "username": "admin",
+          "email": "admin@institutolauir.com.br",
+          "name": "Administrador",
+          "phone": null,
+          "role": "Coordenador Geral",
+          "status": "ativo",
+          "first_access": false,
+          "created_at": "2026-02-03T02:47:32.992Z",
+          "must_change_password": false,
+          "deleted_at": null,
+          "professional_id": null,
+          "can_view_all_professionals": false,
+          "allow_professional_view_others": true,
+          "permissions": [
+            "dashboard:view",
+            "dashboard:create",
+            "dashboard:edit",
+            "dashboard:delete",
+            "dashboard:admin_panel_access",
+            "pre_agendamento:view",
+            "pre_agendamento:create",
+            "pre_agendamento:edit",
+            "pre_agendamento:delete",
+            "pre_agendamento:admin_panel_access",
+            "agenda:view",
+            "agenda:create",
+            "agenda:edit",
+            "agenda:delete",
+            "agenda:admin_panel_access",
+            "pre_cadastro:view",
+            "pre_cadastro:create",
+            "pre_cadastro:edit",
+            "pre_cadastro:delete",
+            "pre_cadastro:admin_panel_access",
+            "entrevistas:view",
+            "entrevistas:create",
+            "entrevistas:edit",
+            "entrevistas:delete",
+            "entrevistas:admin_panel_access",
+            "avaliacoes:view",
+            "avaliacoes:create",
+            "avaliacoes:edit",
+            "avaliacoes:delete",
+            "avaliacoes:admin_panel_access",
+            "analise_vagas:view",
+            "analise_vagas:create",
+            "analise_vagas:edit",
+            "analise_vagas:delete",
+            "analise_vagas:admin_panel_access",
+            "usuarios:view",
+            "usuarios:create",
+            "usuarios:edit",
+            "usuarios:delete",
+            "usuarios:admin_panel_access",
+            "configuracoes:view",
+            "configuracoes:create",
+            "configuracoes:edit",
+            "configuracoes:delete",
+            "configuracoes:admin_panel_access",
+            "admin:view",
+            "admin:create",
+            "admin:edit",
+            "admin:delete",
+            "admin:admin_panel_access"
+          ]
+        }
+      }
+    },
+    "vagaElegiveisBase": {
+      "status": 500,
+      "data": {
+        "success": false,
+        "message": "Erro ao listar pacientes elegiveis para vaga"
+      }
+    },
+    "vagaElegiveisFiltered": {
+      "status": 500,
+      "data": {
+        "success": false,
+        "message": "Erro ao listar pacientes elegiveis para vaga"
+      }
+    },
+    "pacientes": {
+      "status": 200,
+      "data": {
+        "success": true,
+        "total": 21,
+        "pacientes": [
+          {
+            "id": "00c88925-5053-479a-ab44-0efbd7afa328",
+            "nome": "SMOKE NOVO 20260321210445",
+            "cpf": "92984005772",
+            "telefone": "11985987562",
+            "email": "novo.20260321210445@smoke.local",
+            "dataNascimento": "2017-05-11T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "ef652623-74f5-4aa4-8538-db346be2f245",
+            "nome": "SMOKE DUP 20260321210445",
+            "cpf": "91732657995",
+            "telefone": "11995643012",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "1493e3cd-7a96-4046-a762-3c038aab6f8c",
+            "nome": "SMOKE DUP 20260321210126",
+            "cpf": "91355577337",
+            "telefone": "11999047204",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "732fd88f-e293-4436-8458-567c47ef01ab",
+            "nome": "SMOKE DUP 20260321205722",
+            "cpf": "91806207495",
+            "telefone": "11998955963",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "5703ab91-886f-4052-bbef-75562f09c60d",
+            "nome": "SMOKE DUP 20260321205457",
+            "cpf": "91809835165",
+            "telefone": "11990620797",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "1befefcd-f708-4317-a541-1fac15ec24f0",
+            "nome": "SMOKE DUP 20260321205348",
+            "cpf": "91556376121",
+            "telefone": "11991835967",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "8b80e8c3-cb69-4f66-849a-ec616ba7a713",
+            "nome": "SMOKE DUP 20260321205228",
+            "cpf": "91830118352",
+            "telefone": "11993846190",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "d449cbfb-177e-434f-834e-2b9a0499f31b",
+            "nome": "SMOKE DUP 20260321205115",
+            "cpf": "91496616077",
+            "telefone": "11999167815",
+            "email": null,
+            "dataNascimento": "0410-12-20T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "019353f8-e3a9-4d57-b254-88e4b30a80ba",
+            "nome": "paciente 2",
+            "cpf": "04050487772",
+            "telefone": "21998737429",
+            "email": null,
+            "dataNascimento": "2020-09-19T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "2d2f5f07-5db0-42ae-a557-045336839e29",
+            "nome": "Railway Fechamento 1773966797572",
+            "cpf": null,
+            "telefone": null,
+            "email": null,
+            "dataNascimento": "2014-08-14T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "aprovado"
+          },
+          {
+            "id": "ecdcb4a7-1152-4740-a9e6-e5bd38e81f5b",
+            "nome": "Rail Eval 1773964654342",
+            "cpf": null,
+            "telefone": null,
+            "email": null,
+            "dataNascimento": "2015-02-10T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_avaliacao"
+          },
+          {
+            "id": "a0cc09d1-00c2-4273-9961-94996cbbf530",
+            "nome": "Railway Final 1773964637603",
+            "cpf": null,
+            "telefone": null,
+            "email": null,
+            "dataNascimento": "2016-09-21T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "entrevista_realizada"
+          },
+          {
+            "id": "4009fc17-04ac-45a9-b1c5-5d713265daf9",
+            "nome": "Railway QA 1773964470704",
+            "cpf": null,
+            "telefone": null,
+            "email": null,
+            "dataNascimento": "2017-05-10T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "42b381fd-975f-431c-b1ad-a5ad02bbb170",
+            "nome": "Railway Homolog 1773964225952",
+            "cpf": null,
+            "telefone": null,
+            "email": null,
+            "dataNascimento": "2018-01-01T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "e0dc1634-8057-4828-b85c-1edf9a9406bd",
+            "nome": "ErrCurl 20260319181919",
+            "cpf": "33528441713",
+            "telefone": "11966665555",
+            "email": "errcurl.20260319181919@idslm.test",
+            "dataNascimento": "2015-03-01T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "a9ba7ba2-791e-40cf-960d-94a1e3e19e76",
+            "nome": "ErrProbe2 20260319181716",
+            "cpf": "38551417876",
+            "telefone": "11977776666",
+            "email": "errprobe2.20260319181716@idslm.test",
+            "dataNascimento": "2015-02-01T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "5ad72ccd-e6d9-456b-9177-4b5ec59a2605",
+            "nome": "ErrProbe 20260319181648",
+            "cpf": "56251073136",
+            "telefone": "11988887777",
+            "email": "errprobe.20260319181648@idslm.test",
+            "dataNascimento": "2015-02-01T00:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "feea8443-33d8-4c15-b09e-0547bde24120",
+            "nome": "Smoke Railway 20260319181518",
+            "cpf": "71154702430",
+            "telefone": "11999990000",
+            "email": "smoke.20260319181518@idslm.test",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "desligado"
+          },
+          {
+            "id": "4be56c1e-5770-4026-960c-590d4884ad8a",
+            "nome": "Smoke Railway 20260319181317",
+            "cpf": "63674827296",
+            "telefone": "11999990000",
+            "email": "smoke.20260319181317@idslm.test",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "desligado"
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000302",
+            "nome": "Pedro Lima",
+            "cpf": null,
+            "telefone": "11888887777",
+            "email": "pedro@email.com",
+            "dataNascimento": null,
+            "status": "ativo",
+            "status_jornada": "ativo"
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000301",
+            "nome": "Maria Silva",
+            "cpf": null,
+            "telefone": "11999990000",
+            "email": "maria@email.com",
+            "dataNascimento": null,
+            "status": "ativo",
+            "status_jornada": "aprovado"
+          }
+        ]
+      }
+    }
+  },
+  "apiResponses": [
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings/public",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/first-access",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/first-access",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings/public",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/verify",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/verify",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes/vaga-elegiveis?limit=80&offset=0",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes/vaga-elegiveis?limit=80&offset=0",
+      "status": 500
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/evaluations?patient_id=00c88925-5053-479a-ab44-0efbd7afa328&include_consolidation=true",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-interviews?patient_id=00c88925-5053-479a-ab44-0efbd7afa328",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/evaluations?patient_id=00c88925-5053-479a-ab44-0efbd7afa328&include_consolidation=true",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-interviews?patient_id=00c88925-5053-479a-ab44-0efbd7afa328",
+      "status": 200
+    }
+  ],
+  "status": "error",
+  "error": {
+    "message": "page.waitForTimeout is not a function",
+    "stack": "TypeError: page.waitForTimeout is not a function\n    at C:\\projeto\\machado-careflow\\institutoback\\temp_smoke_analise_vagas_ui_published.cjs:153:16"
+  },
+  "finishedAt": "2026-03-22T00:13:00.235Z",
+  "summary": {
+    "total": 5,
+    "passed": 3,
+    "failed": 2
+  }
+}
