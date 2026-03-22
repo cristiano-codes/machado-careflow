@@ -1,0 +1,122 @@
+{
+  "runId": "20260322231951",
+  "startedAt": "2026-03-22T23:19:51.159Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "checks": [
+    {
+      "name": "login API admin/admin 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token recebido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "social-triage API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "fila triagem retornou itens",
+      "ok": true,
+      "details": {
+        "total": 15
+      }
+    },
+    {
+      "name": "profissionais API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "profissionais disponiveis",
+      "ok": true,
+      "details": {
+        "total": 19
+      }
+    },
+    {
+      "name": "services API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "servicos ativos disponiveis",
+      "ok": true,
+      "details": {
+        "total": 8
+      }
+    },
+    {
+      "name": "agenda/range API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "agenda/range success=true",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "campo de usuario no login visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao Entrar clicado",
+      "ok": true,
+      "details": null
+    }
+  ],
+  "apiResponses": [
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/login",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-triage?limit=10&offset=0",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais?for_agenda=1",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/services?active=true",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais/agenda/range?date_from=2026-03-22&date_to=2026-03-29",
+      "status": 200
+    }
+  ],
+  "screenshots": {
+    "01-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322231951\\01-login.png"
+  },
+  "status": "failed",
+  "error": {
+    "message": "page.waitForTimeout is not a function",
+    "stack": "TypeError: page.waitForTimeout is not a function\n    at main (C:\\projeto\\machado-careflow\\institutoback\\temp_agenda_published_smoke.cjs:227:16)"
+  },
+  "finishedAt": "2026-03-22T23:19:57.219Z",
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  }
+}

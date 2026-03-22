@@ -1,0 +1,235 @@
+{
+  "runId": "20260322232454",
+  "startedAt": "2026-03-22T23:24:54.095Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "checks": [
+    {
+      "name": "login API admin/admin 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token recebido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "social-triage API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "fila triagem retornou itens",
+      "ok": true,
+      "details": {
+        "total": 15
+      }
+    },
+    {
+      "name": "profissionais API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "profissionais disponiveis",
+      "ok": true,
+      "details": {
+        "total": 19
+      }
+    },
+    {
+      "name": "services API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "servicos ativos disponiveis",
+      "ok": true,
+      "details": {
+        "total": 8
+      }
+    },
+    {
+      "name": "agenda/range API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "agenda/range success=true",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "campo de usuario no login visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao Entrar clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Agenda abre sem erro",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "visao padrao Semana aparece",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Dia clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Semana clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Mes clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Lista clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "filtro profissional visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "filtro servico visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "filtro status visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "legenda de cores visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "painel pendentes da triagem visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao Novo agendamento clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "painel de criacao visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "patient id preenchido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "selecao de profissional funcionando",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "selecao de servico funcionando",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "data preenchida",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "horario preenchido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "observacoes preenchidas",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao criar agendamento clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "criar agendamento funciona",
+      "ok": false,
+      "details": {
+        "api_status": null,
+        "api_success": null,
+        "api_message": null,
+        "toasts": []
+      }
+    }
+  ],
+  "apiResponses": [
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/login",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-triage?limit=10&offset=0",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais?for_agenda=1",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/services?active=true",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais/agenda/range?date_from=2026-03-22&date_to=2026-03-29",
+      "status": 200
+    }
+  ],
+  "screenshots": {
+    "01-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322232454\\01-login.png",
+    "02-pos-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322232454\\02-pos-login.png",
+    "03-agenda-aberta": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322232454\\03-agenda-aberta.png",
+    "04-modos": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322232454\\04-modos.png"
+  },
+  "status": "failed",
+  "error": {
+    "message": "ASSERT FAIL: criar agendamento funciona | {\"api_status\":null,\"api_success\":null,\"api_message\":null,\"toasts\":[]}",
+    "stack": "Error: ASSERT FAIL: criar agendamento funciona | {\"api_status\":null,\"api_success\":null,\"api_message\":null,\"toasts\":[]}\n    at pushCheck (C:\\projeto\\machado-careflow\\institutoback\\temp_agenda_published_smoke.cjs:35:11)\n    at main (C:\\projeto\\machado-careflow\\institutoback\\temp_agenda_published_smoke.cjs:328:5)"
+  },
+  "finishedAt": "2026-03-22T23:25:39.608Z",
+  "summary": {
+    "total": 33,
+    "passed": 32,
+    "failed": 1
+  }
+}

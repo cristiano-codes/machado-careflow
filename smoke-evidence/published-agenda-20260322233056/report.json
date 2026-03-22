@@ -1,0 +1,277 @@
+{
+  "runId": "20260322233056",
+  "startedAt": "2026-03-22T23:30:56.212Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "checks": [
+    {
+      "name": "login API admin/admin 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token recebido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "social-triage API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "fila triagem retornou itens",
+      "ok": true,
+      "details": {
+        "total": 15
+      }
+    },
+    {
+      "name": "profissionais API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "profissionais disponiveis",
+      "ok": true,
+      "details": {
+        "total": 19
+      }
+    },
+    {
+      "name": "services API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "servicos ativos disponiveis",
+      "ok": true,
+      "details": {
+        "total": 8
+      }
+    },
+    {
+      "name": "agenda/range API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "agenda/range success=true",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "campo de usuario no login visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao Entrar clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Agenda abre sem erro",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "visao padrao Semana aparece",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Dia clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Semana clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Mes clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modo Lista clicavel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "filtro profissional visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "filtro servico visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "filtro status visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "legenda de cores visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "painel pendentes da triagem visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao Novo agendamento clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "painel de criacao visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "patient id preenchido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "selecao de profissional funcionando",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "selecao de servico funcionando",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "data preenchida",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "horario preenchido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "observacoes preenchidas",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao criar agendamento clicado",
+      "ok": true,
+      "details": {
+        "button": "Criar agendamento"
+      }
+    },
+    {
+      "name": "criar agendamento funciona",
+      "ok": true,
+      "details": {
+        "api_status": 201,
+        "api_success": true,
+        "api_message": "Agendamento criado com sucesso.",
+        "toasts": [
+          "AgendaAgendamento criado com sucesso.",
+          "Detalhes do agendamentoAcao operacional sem alterar status_jornada indevidamente.AvaliacaoAgendado / pendenteEm fila de esperaCrianca/AssistidoErrProbe 20260319181648ProfissionalBeatriz Duarte Galio da PaixãoData/HoraInvalid Date 10:56Contato11988887777Origementrevista_socialResponsavel operacionalBeatriz Duarte Galio da PaixãoObservacoesSMOKE AGENDA 20260322233056Coerencia da jornada validada para o contexto atual.ConfirmarCancelarRemarcarConcluir (modulo clinico)Abrir cadastroAbrir triagemAbrir modulo relacionadoClose"
+        ]
+      }
+    },
+    {
+      "name": "detalhe do evento abre",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "modal de detalhes visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "acao confirmar disponivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "confirmar continua funcionando",
+      "ok": false,
+      "details": {
+        "api_status": 500,
+        "api_success": false,
+        "api_message": "Erro ao atualizar status do agendamento institucional",
+        "toasts": [
+          "AgendaErro ao atualizar status do agendamento institucional",
+          "Detalhes do agendamentoAcao operacional sem alterar status_jornada indevidamente.AvaliacaoAgendado / pendenteEm fila de esperaCrianca/AssistidoErrProbe 20260319181648ProfissionalBeatriz Duarte Galio da PaixãoData/HoraInvalid Date 10:56Contato11988887777Origementrevista_socialResponsavel operacionalBeatriz Duarte Galio da PaixãoObservacoesSMOKE AGENDA 20260322233056Coerencia da jornada validada para o contexto atual.ConfirmarCancelarRemarcarConcluir (modulo clinico)Abrir cadastroAbrir triagemAbrir modulo relacionadoClose"
+        ]
+      }
+    }
+  ],
+  "apiResponses": [
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/login",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-triage?limit=10&offset=0",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais?for_agenda=1",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/services?active=true",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais/agenda/range?date_from=2026-03-22&date_to=2026-03-29",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais/179a31f6-fcb3-465f-bbbe-71ffdaff21be/agenda",
+      "status": 201
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/profissionais/179a31f6-fcb3-465f-bbbe-71ffdaff21be/agenda/08571c7c-e453-404f-aab1-8c12fa94d57c/status",
+      "status": 500
+    }
+  ],
+  "screenshots": {
+    "01-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322233056\\01-login.png",
+    "02-pos-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322233056\\02-pos-login.png",
+    "03-agenda-aberta": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322233056\\03-agenda-aberta.png",
+    "04-modos": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322233056\\04-modos.png",
+    "05-agendamento-criado": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-agenda-20260322233056\\05-agendamento-criado.png"
+  },
+  "status": "failed",
+  "error": {
+    "message": "ASSERT FAIL: confirmar continua funcionando | {\"api_status\":500,\"api_success\":false,\"api_message\":\"Erro ao atualizar status do agendamento institucional\",\"toasts\":[\"AgendaErro ao atualizar status do agendamento institucional\",\"Detalhes do agendamentoAcao operacional sem alterar status_jornada indevidamente.AvaliacaoAgendado / pendenteEm fila de esperaCrianca/AssistidoErrProbe 20260319181648ProfissionalBeatriz Duarte Galio da PaixãoData/HoraInvalid Date 10:56Contato11988887777Origementrevista_socialResponsavel operacionalBeatriz Duarte Galio da PaixãoObservacoesSMOKE AGENDA 20260322233056Coerencia da jornada validada para o contexto atual.ConfirmarCancelarRemarcarConcluir (modulo clinico)Abrir cadastroAbrir triagemAbrir modulo relacionadoClose\"]}",
+    "stack": "Error: ASSERT FAIL: confirmar continua funcionando | {\"api_status\":500,\"api_success\":false,\"api_message\":\"Erro ao atualizar status do agendamento institucional\",\"toasts\":[\"AgendaErro ao atualizar status do agendamento institucional\",\"Detalhes do agendamentoAcao operacional sem alterar status_jornada indevidamente.AvaliacaoAgendado / pendenteEm fila de esperaCrianca/AssistidoErrProbe 20260319181648ProfissionalBeatriz Duarte Galio da PaixãoData/HoraInvalid Date 10:56Contato11988887777Origementrevista_socialResponsavel operacionalBeatriz Duarte Galio da PaixãoObservacoesSMOKE AGENDA 20260322233056Coerencia da jornada validada para o contexto atual.ConfirmarCancelarRemarcarConcluir (modulo clinico)Abrir cadastroAbrir triagemAbrir modulo relacionadoClose\"]}\n    at pushCheck (C:\\projeto\\machado-careflow\\institutoback\\temp_agenda_published_smoke.cjs:35:11)\n    at main (C:\\projeto\\machado-careflow\\institutoback\\temp_agenda_published_smoke.cjs:445:5)"
+  },
+  "finishedAt": "2026-03-22T23:31:15.936Z",
+  "summary": {
+    "total": 37,
+    "passed": 36,
+    "failed": 1
+  }
+}
