@@ -1,0 +1,193 @@
+{
+  "runId": "20260322002307",
+  "startedAt": "2026-03-22T00:23:07.319Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "screenshots": {
+    "01-analise-vagas-aberta": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-analise-vagas-final-20260322002307\\01-analise-vagas-aberta.png",
+    "02-filtros-aplicados": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-analise-vagas-final-20260322002307\\02-filtros-aplicados.png",
+    "03-caso-selecionado-contexto": "C:\\projeto\\machado-careflow\\smoke-evidence\\published-analise-vagas-final-20260322002307\\03-caso-selecionado-contexto.png"
+  },
+  "checks": [
+    {
+      "name": "login API 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token recebido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "GET /pacientes/vaga-elegiveis 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "GET /pacientes/vaga-elegiveis com filtro 200",
+      "ok": true,
+      "details": {
+        "status": 200,
+        "total": 1
+      }
+    },
+    {
+      "name": "Tela Analise de Vaga abriu",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Card lista filtravel visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Filtro pronto para vaga aplicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Botao Buscar clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Botao Selecionar visivel",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Clique em Selecionar executado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Contexto institucional carregado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "Rotas relevantes chamadas",
+      "ok": true,
+      "details": {
+        "total": 14
+      }
+    },
+    {
+      "name": "Nenhuma rota relevante com erro >=400",
+      "ok": true,
+      "details": {
+        "failed": []
+      }
+    }
+  ],
+  "apiResponses": [
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/first-access",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings/public",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/first-access",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings/public",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/verify",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/verify",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes/vaga-elegiveis?limit=80&offset=0",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/settings",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes/vaga-elegiveis?limit=80&offset=0",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/evaluations?patient_id=00c88925-5053-479a-ab44-0efbd7afa328&include_consolidation=true",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-interviews?patient_id=00c88925-5053-479a-ab44-0efbd7afa328",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-interviews?patient_id=00c88925-5053-479a-ab44-0efbd7afa328",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/evaluations?patient_id=00c88925-5053-479a-ab44-0efbd7afa328&include_consolidation=true",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes/vaga-elegiveis?ready_for_vaga=true&limit=80&offset=0",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/pacientes/vaga-elegiveis?ready_for_vaga=true&limit=80&offset=0",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/evaluations?patient_id=2d2f5f07-5db0-42ae-a557-045336839e29&include_consolidation=true",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-interviews?patient_id=2d2f5f07-5db0-42ae-a557-045336839e29",
+      "status": 204
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/evaluations?patient_id=2d2f5f07-5db0-42ae-a557-045336839e29&include_consolidation=true",
+      "status": 200
+    },
+    {
+      "url": "https://friendly-insight-production.up.railway.app/api/social-interviews?patient_id=2d2f5f07-5db0-42ae-a557-045336839e29",
+      "status": 200
+    }
+  ],
+  "status": "ok",
+  "error": null,
+  "finishedAt": "2026-03-22T00:23:23.369Z",
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0
+  }
+}
