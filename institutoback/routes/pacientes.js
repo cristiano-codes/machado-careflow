@@ -523,8 +523,20 @@ router.get('/vaga-elegiveis', authorizeVagaEligibilityLookup, async (req, res) =
         interview_summary AS (
           SELECT
             s.patient_id::text AS patient_id,
-            COUNT(*) FILTER (WHERE COALESCE(s.is_draft, false) = false)::int AS completed_social_interview_count,
-            MAX(s.interview_date) FILTER (WHERE COALESCE(s.is_draft, false) = false) AS latest_social_interview_date
+            COUNT(*) FILTER (
+              WHERE CASE
+                WHEN LOWER(COALESCE(to_jsonb(s)->>'is_draft', '')) IN ('true', '1', 't', 'sim', 'yes', 'y') THEN true
+                WHEN LOWER(COALESCE(to_jsonb(s)->>'is_draft', '')) IN ('false', '0', 'f', 'nao', 'no', 'n') THEN false
+                ELSE false
+              END = false
+            )::int AS completed_social_interview_count,
+            MAX(s.interview_date) FILTER (
+              WHERE CASE
+                WHEN LOWER(COALESCE(to_jsonb(s)->>'is_draft', '')) IN ('true', '1', 't', 'sim', 'yes', 'y') THEN true
+                WHEN LOWER(COALESCE(to_jsonb(s)->>'is_draft', '')) IN ('false', '0', 'f', 'nao', 'no', 'n') THEN false
+                ELSE false
+              END = false
+            ) AS latest_social_interview_date
           FROM public.social_interviews s
           GROUP BY s.patient_id::text
         ),
