@@ -4275,6 +4275,7 @@ router.post('/:id/agenda/:appointmentId/status', authorizeAgendaRead, async (req
     return res.status(500).json({
       success: false,
       message: 'Erro ao atualizar status do agendamento institucional',
+      error_code: error?.code || null,
     });
   } finally {
     client.release();
