@@ -167,6 +167,14 @@ export type PreAppointmentImportRecord = {
   converted_at?: string | null;
 };
 
+export type PreAppointmentTriageStatus =
+  | "pending"
+  | "in_review"
+  | "selected_for_pre_cadastro"
+  | "converted"
+  | "not_eligible"
+  | "archived";
+
 export type PreAppointmentSearchFilters = {
   q?: string | null;
   child_name?: string | null;
@@ -175,6 +183,56 @@ export type PreAppointmentSearchFilters = {
   cpf?: string | null;
   date?: string | null;
   limit?: number | null;
+};
+
+export type PreAppointmentQueueFilters = {
+  q?: string | null;
+  child_name?: string | null;
+  responsible_name?: string | null;
+  phone?: string | null;
+  cpf?: string | null;
+  date?: string | null;
+  service_type?: string | null;
+  cid?: string | null;
+  referred_by?: string | null;
+  status?: PreAppointmentTriageStatus | string | null;
+  priority?: "prioritario" | "normal" | string | null;
+  sort?: "oldest" | "newest" | "priority" | "name" | string | null;
+  limit?: number | null;
+  offset?: number | null;
+};
+
+export type PreAppointmentQueueSummary = {
+  pending: number;
+  in_review: number;
+  converted: number;
+  not_eligible: number;
+};
+
+export type PreAppointmentQueueRecord = PreAppointmentImportRecord & {
+  status_operacional?: PreAppointmentTriageStatus | string | null;
+  status_normalized?: PreAppointmentTriageStatus | string | null;
+  status_raw?: string | null;
+  urgency?: string | null;
+  service_type?: string | null;
+  requested_services?: string | null;
+  observacao_resumida?: string | null;
+  converted_by?: string | null;
+};
+
+export type PreAppointmentQueueResponse = {
+  items: PreAppointmentQueueRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+  sort: "oldest" | "newest" | "priority" | "name";
+  summary: PreAppointmentQueueSummary;
+};
+
+export type PreAppointmentTriageUpdatePayload = {
+  status?: PreAppointmentTriageStatus | string | null;
+  note?: string | null;
+  append_note?: boolean;
 };
 
 export type VagaEligiblePatientFilters = {
@@ -265,6 +323,17 @@ type PreAppointmentRecordLike = {
   created_at?: string | null;
   converted_to_patient_id?: string | number | null;
   converted_at?: string | null;
+};
+
+type PreAppointmentQueueRecordLike = PreAppointmentRecordLike & {
+  status_operacional?: string | null;
+  status_normalized?: string | null;
+  status_raw?: string | null;
+  urgency?: string | null;
+  service_type?: string | null;
+  requested_services?: string | null;
+  observacao_resumida?: string | null;
+  converted_by?: string | number | null;
 };
 
 type VagaEligiblePatientRecordLike = {
@@ -365,6 +434,28 @@ function normalizePreAppointmentRecord(raw: unknown): PreAppointmentImportRecord
     created_at: coerceStatusText(payload.created_at),
     converted_to_patient_id: convertedToPatientId,
     converted_at: coerceStatusText(payload.converted_at),
+  };
+}
+
+function normalizePreAppointmentQueueRecord(raw: unknown): PreAppointmentQueueRecord | null {
+  const base = normalizePreAppointmentRecord(raw);
+  if (!base) return null;
+
+  const payload = raw as PreAppointmentQueueRecordLike;
+
+  return {
+    ...base,
+    status_operacional: coerceStatusText(payload.status_operacional),
+    status_normalized: coerceStatusText(payload.status_normalized),
+    status_raw: coerceStatusText(payload.status_raw),
+    urgency: coerceStatusText(payload.urgency),
+    service_type: coerceStatusText(payload.service_type),
+    requested_services: coerceStatusText(payload.requested_services),
+    observacao_resumida: coerceStatusText(payload.observacao_resumida),
+    converted_by:
+      payload.converted_by === null || payload.converted_by === undefined
+        ? null
+        : String(payload.converted_by),
   };
 }
 
@@ -2248,6 +2339,126 @@ class ApiService {
     );
 
     return normalizePreAppointmentRecord(raw.preAppointment ?? null);
+  }
+
+  async getPreAppointmentTriageQueue(
+    filters?: PreAppointmentQueueFilters
+  ): Promise<PreAppointmentQueueResponse> {
+    const params = new URLSearchParams();
+
+    if (this.toNonEmptyString(filters?.q)) params.set("q", String(filters?.q).trim());
+    if (this.toNonEmptyString(filters?.child_name)) {
+      params.set("child_name", String(filters?.child_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.responsible_name)) {
+      params.set("responsible_name", String(filters?.responsible_name).trim());
+    }
+    if (this.toNonEmptyString(filters?.phone)) {
+      params.set("phone", String(filters?.phone).trim());
+    }
+    if (this.toNonEmptyString(filters?.cpf)) params.set("cpf", String(filters?.cpf).trim());
+    if (this.toNonEmptyString(filters?.date)) params.set("date", String(filters?.date).trim());
+    if (this.toNonEmptyString(filters?.service_type)) {
+      params.set("service_type", String(filters?.service_type).trim());
+    }
+    if (this.toNonEmptyString(filters?.cid)) params.set("cid", String(filters?.cid).trim());
+    if (this.toNonEmptyString(filters?.referred_by)) {
+      params.set("referred_by", String(filters?.referred_by).trim());
+    }
+    if (this.toNonEmptyString(filters?.status)) {
+      params.set("status", String(filters?.status).trim());
+    }
+    if (this.toNonEmptyString(filters?.priority)) {
+      params.set("priority", String(filters?.priority).trim());
+    }
+    if (this.toNonEmptyString(filters?.sort)) {
+      params.set("sort", String(filters?.sort).trim());
+    }
+    if (typeof filters?.limit === "number" && Number.isFinite(filters.limit) && filters.limit > 0) {
+      params.set("limit", String(Math.min(Math.floor(filters.limit), 100)));
+    }
+    if (
+      typeof filters?.offset === "number" &&
+      Number.isFinite(filters.offset) &&
+      filters.offset >= 0
+    ) {
+      params.set("offset", String(Math.floor(filters.offset)));
+    }
+
+    const query = params.toString().length > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_BASE_URL}/pre-appointments/triage-queue${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar fila de triagem de pre-agendamento"
+    );
+
+    const rawItems = Array.isArray(raw.items) ? raw.items : [];
+    const items = rawItems
+      .map((item) => normalizePreAppointmentQueueRecord(item))
+      .filter((item): item is PreAppointmentQueueRecord => item !== null);
+
+    const summaryPayload =
+      raw.summary && typeof raw.summary === "object"
+        ? (raw.summary as Record<string, unknown>)
+        : {};
+    const sortRaw =
+      typeof raw.sort === "string" ? raw.sort.trim().toLowerCase() : "oldest";
+    const sort: "oldest" | "newest" | "priority" | "name" =
+      sortRaw === "newest" || sortRaw === "priority" || sortRaw === "name"
+        ? sortRaw
+        : "oldest";
+
+    return {
+      items,
+      total: toNumber(raw.total, items.length),
+      limit: toNumber(raw.limit, items.length || 30),
+      offset: toNumber(raw.offset, 0),
+      sort,
+      summary: {
+        pending: toNumber(summaryPayload.pending, 0),
+        in_review: toNumber(summaryPayload.in_review, 0),
+        converted: toNumber(summaryPayload.converted, 0),
+        not_eligible: toNumber(summaryPayload.not_eligible, 0),
+      },
+    };
+  }
+
+  async updatePreAppointmentTriage(
+    id: string,
+    payload: PreAppointmentTriageUpdatePayload
+  ): Promise<PreAppointmentQueueRecord | null> {
+    const normalizedId = this.toNonEmptyString(id);
+    if (!normalizedId) return null;
+
+    const body: Record<string, unknown> = {};
+    if (Object.prototype.hasOwnProperty.call(payload || {}, "status")) {
+      body.status = payload?.status ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload || {}, "note")) {
+      body.note = payload?.note ?? null;
+    }
+    if (typeof payload?.append_note === "boolean") {
+      body.append_note = payload.append_note;
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/pre-appointments/${encodeURIComponent(normalizedId)}/triage`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(body),
+      }
+    );
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao atualizar triagem do pre-agendamento"
+    );
+
+    return normalizePreAppointmentQueueRecord(raw.preAppointment ?? null);
   }
 
   // ---------- PACIENTES ----------

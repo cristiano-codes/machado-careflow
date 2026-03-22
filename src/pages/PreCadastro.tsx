@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Info, Loader2, Search, UserPlus } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -156,6 +157,7 @@ function buildInitialNotes(
 }
 
 export default function PreCadastro() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [entryMode, setEntryMode] = useState<EntryMode>("manual");
   const [form, setForm] = useState<PreCadastroFormState>(INITIAL_FORM);
   const [preAppointmentSearch, setPreAppointmentSearch] = useState<PreAppointmentSearchState>(
@@ -266,6 +268,61 @@ export default function PreCadastro() {
       setLoadingPreAppointment(false);
     }
   };
+
+  useEffect(() => {
+    const sourcePreAppointmentId = toOptionalTrimmed(
+      searchParams.get("source_pre_appointment_id") || ""
+    );
+    if (!sourcePreAppointmentId) return;
+
+    let active = true;
+
+    const importFromQueue = async () => {
+      try {
+        setEntryMode("import");
+        setLoadingPreAppointment(true);
+
+        const record = await apiService.getPreAppointmentById(sourcePreAppointmentId);
+        if (!record) {
+          throw new Error("Pre-agendamento nao encontrado.");
+        }
+
+        if (!active) return;
+        setSelectedPreAppointment(record);
+        setForm(mapPreAppointmentToPreCadastroForm(record));
+        toast({
+          title: "Dados importados",
+          description: `Formulario preenchido a partir da fila de triagem (pre-agendamento #${record.id}).`,
+        });
+      } catch (error) {
+        if (!active) return;
+        toast({
+          title: "Importacao",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Nao foi possivel importar os dados enviados pela fila de triagem.",
+          variant: "destructive",
+        });
+      } finally {
+        if (active) {
+          setLoadingPreAppointment(false);
+          setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete("source_pre_appointment_id");
+            next.delete("entry_mode");
+            return next;
+          });
+        }
+      }
+    };
+
+    void importFromQueue();
+
+    return () => {
+      active = false;
+    };
+  }, [searchParams, setSearchParams, toast]);
 
   const handleSuccessfulSave = (
     response: PatientCreateResponse,
