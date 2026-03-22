@@ -132,17 +132,25 @@ async function resolveSocialInterviewsSchema(client) {
 
   const result = await client.query(
     `
-      SELECT udt_name
+      SELECT column_name, udt_name
       FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = 'social_interviews'
-        AND column_name = 'created_by'
-      LIMIT 1
     `
   );
 
+  const columns = new Set(result.rows.map((row) => String(row.column_name || '').trim()));
+  const createdByColumn = result.rows.find((row) => row.column_name === 'created_by');
+
   socialInterviewsSchemaCache = {
-    createdByType: result.rows[0]?.udt_name || null,
+    createdByType: createdByColumn?.udt_name || null,
+    hasCreatedByColumn: columns.has('created_by'),
+    hasPayload: columns.has('payload'),
+    hasAssistenteSocial: columns.has('assistente_social'),
+    hasAssistenteSocialId: columns.has('assistente_social_id'),
+    hasParecerSocial: columns.has('parecer_social'),
+    hasResultadoTerapeutas: columns.has('resultado_terapeutas'),
+    hasDataResultadoTerapeutas: columns.has('data_resultado_terapeutas'),
   };
 
   return socialInterviewsSchemaCache;
@@ -166,6 +174,14 @@ function resolveCreatedByValue(userId, createdByType) {
   }
 
   return String(userId);
+}
+
+function resolveAssistenteSocialId(payload) {
+  const candidate = normalizeOptionalText(
+    payload?.assistente_social_id || payload?.assistenteSocialId
+  );
+  if (!candidate) return null;
+  return UUID_V1_TO_V5_REGEX.test(candidate) ? candidate : null;
 }
 
 function buildInterviewPayload(body, fallbackRow = null) {
@@ -429,26 +445,48 @@ router.post('/', authorizeSocialInterviewsCreate, async (req, res) => {
     await client.query('BEGIN');
     const schema = await resolveSocialInterviewsSchema(client);
     const createdByValue = resolveCreatedByValue(userIdInt, schema.createdByType);
+    const assistenteSocialId = resolveAssistenteSocialId(normalized.payload);
+
+    const insertColumns = ['patient_id', 'interview_date'];
+    const insertValues = [normalized.patientId, normalized.interviewDate];
+    const insertPlaceholders = ['$1', '$2'];
+
+    function appendInsert(column, value, cast = '') {
+      insertValues.push(value);
+      const index = insertValues.length;
+      insertColumns.push(column);
+      insertPlaceholders.push(`$${index}${cast}`);
+    }
+
+    if (schema.hasAssistenteSocial) {
+      appendInsert('assistente_social', normalized.assistenteSocial);
+    }
+    if (schema.hasAssistenteSocialId) {
+      appendInsert('assistente_social_id', assistenteSocialId);
+    }
+    if (schema.hasParecerSocial) {
+      appendInsert('parecer_social', normalized.parecerSocial);
+    }
+    if (schema.hasResultadoTerapeutas) {
+      appendInsert('resultado_terapeutas', normalized.resultadoTerapeutas);
+    }
+    if (schema.hasDataResultadoTerapeutas) {
+      appendInsert('data_resultado_terapeutas', normalized.dataResultadoTerapeutas);
+    }
+    if (schema.hasPayload) {
+      appendInsert('payload', JSON.stringify(normalized.payload), '::jsonb');
+    }
+    if (schema.hasCreatedByColumn) {
+      appendInsert('created_by', createdByValue);
+    }
 
     const insertResult = await client.query(
       `
-        INSERT INTO public.social_interviews (
-          patient_id,
-          interview_date,
-          assistente_social,
-          payload,
-          created_by
-        )
-        VALUES ($1, $2, $3, $4::jsonb, $5)
+        INSERT INTO public.social_interviews (${insertColumns.join(', ')})
+        VALUES (${insertPlaceholders.join(', ')})
         RETURNING *
       `,
-      [
-        normalized.patientId,
-        normalized.interviewDate,
-        normalized.assistenteSocial,
-        JSON.stringify(normalized.payload),
-        createdByValue,
-      ]
+      insertValues
     );
 
     const transitionResult = await maybeTransitionInterviewCompletion({
@@ -547,24 +585,46 @@ router.put('/:id', authorizeSocialInterviewsEdit, async (req, res) => {
       return res.status(400).json({ success: false, message: 'interview_date invalida' });
     }
 
+    const schema = await resolveSocialInterviewsSchema(client);
+    const assistenteSocialId = resolveAssistenteSocialId(normalized.payload);
+
+    const updateValues = [normalized.patientId, normalized.interviewDate];
+    const setClauses = ['patient_id = $1', 'interview_date = $2'];
+
+    function appendUpdate(column, value, cast = '') {
+      updateValues.push(value);
+      const index = updateValues.length;
+      setClauses.push(`${column} = $${index}${cast}`);
+    }
+
+    if (schema.hasAssistenteSocial) {
+      appendUpdate('assistente_social', normalized.assistenteSocial);
+    }
+    if (schema.hasAssistenteSocialId) {
+      appendUpdate('assistente_social_id', assistenteSocialId);
+    }
+    if (schema.hasParecerSocial) {
+      appendUpdate('parecer_social', normalized.parecerSocial);
+    }
+    if (schema.hasResultadoTerapeutas) {
+      appendUpdate('resultado_terapeutas', normalized.resultadoTerapeutas);
+    }
+    if (schema.hasDataResultadoTerapeutas) {
+      appendUpdate('data_resultado_terapeutas', normalized.dataResultadoTerapeutas);
+    }
+    if (schema.hasPayload) {
+      appendUpdate('payload', JSON.stringify(normalized.payload), '::jsonb');
+    }
+
     const updateResult = await client.query(
       `
         UPDATE public.social_interviews
-        SET patient_id = $1,
-            interview_date = $2,
-            assistente_social = $3,
-            payload = $4::jsonb,
+        SET ${setClauses.join(',\n            ')},
             updated_at = NOW()
-        WHERE id = $5
+        WHERE id = $${updateValues.length + 1}
         RETURNING *
       `,
-      [
-        normalized.patientId,
-        normalized.interviewDate,
-        normalized.assistenteSocial,
-        JSON.stringify(normalized.payload),
-        interviewId,
-      ]
+      [...updateValues, interviewId]
     );
 
     const transitionResult = await maybeTransitionInterviewCompletion({
