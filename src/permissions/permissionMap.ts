@@ -139,11 +139,11 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
     requiredAnyScopes: ["pre_agendamento:view"],
   },
   {
-    id: "agenda",
-    title: "Agenda",
-    url: "/agenda",
-    icon: Calendar,
-    requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES,
+    id: "triagem_social",
+    title: "Triagem Social",
+    url: "/triagem-social",
+    icon: UserCheck,
+    requiredAnyScopes: ["triagem_social:view"],
   },
   {
     id: "pre_cadastro",
@@ -153,11 +153,11 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
     requiredAnyScopes: ["pre_cadastro:view"],
   },
   {
-    id: "triagem_social",
-    title: "Triagem Social",
-    url: "/triagem-social",
-    icon: UserCheck,
-    requiredAnyScopes: ["triagem_social:view"],
+    id: "agenda",
+    title: "Agenda",
+    url: "/agenda",
+    icon: Calendar,
+    requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES,
   },
   {
     id: "entrevistas",

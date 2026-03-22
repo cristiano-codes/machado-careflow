@@ -158,6 +158,18 @@ function nextSuggestedAction(status) {
   return 'Atualizar triagem';
 }
 
+function isSchemaCompatibilityError(error) {
+  const code = normalizeOptionalText(error?.code);
+  if (!code) return false;
+  return ['42P01', '42703', '42883', '42804'].includes(code);
+}
+
+async function tableExists(client, qualifiedTableName) {
+  const db = client || pool;
+  const result = await db.query(`SELECT to_regclass($1) IS NOT NULL AS exists`, [qualifiedTableName]);
+  return result.rows[0]?.exists === true;
+}
+
 async function assertPatientInQueue(client, patientId, { lock = false } = {}) {
   const result = await client.query(
     `
@@ -469,6 +481,51 @@ router.get('/', authorizeSocialTriageView, async (req, res) => {
   const whereSql = `WHERE ${whereClauses.join('\n      AND ')}`;
   const orderBySql = getOrderBy(sort);
 
+  let hasTriageCaseTable = false;
+  try {
+    hasTriageCaseTable = await tableExists(null, 'public.social_triage_cases');
+  } catch (error) {
+    console.warn('[social-triage] Falha ao verificar tabela social_triage_cases:', {
+      code: error?.code || null,
+      message: error?.message || String(error),
+    });
+  }
+
+  const triageCaseJoinSql = hasTriageCaseTable
+    ? `
+      LEFT JOIN LATERAL (
+        SELECT
+          st.triagem_status,
+          st.triagem_prioridade,
+          st.triagem_responsavel_id,
+          st.triagem_responsavel_nome,
+          st.triagem_last_contact_at,
+          st.triagem_next_action_at,
+          st.triagem_notes_summary,
+          st.entrevista_agendada_flag,
+          st.linked_appointment_id,
+          st.linked_appointment_at
+        FROM public.social_triage_cases st
+        WHERE st.patient_id::text = p.id::text
+        LIMIT 1
+      ) st ON true
+    `
+    : `
+      LEFT JOIN LATERAL (
+        SELECT
+          NULL::text AS triagem_status,
+          NULL::text AS triagem_prioridade,
+          NULL::text AS triagem_responsavel_id,
+          NULL::text AS triagem_responsavel_nome,
+          NULL::timestamptz AS triagem_last_contact_at,
+          NULL::timestamptz AS triagem_next_action_at,
+          NULL::text AS triagem_notes_summary,
+          false AS entrevista_agendada_flag,
+          NULL::text AS linked_appointment_id,
+          NULL::timestamptz AS linked_appointment_at
+      ) st ON true
+    `;
+
   const queueCteSql = `
     WITH queue AS (
       SELECT
@@ -504,25 +561,29 @@ router.get('/', authorizeSocialTriageView, async (req, res) => {
         appt.appointment_service_name,
         (COALESCE(st.entrevista_agendada_flag, false) OR appt.appointment_id IS NOT NULL) AS entrevista_agendada
       FROM public.patients p
-      LEFT JOIN public.social_triage_cases st
-        ON st.patient_id::text = p.id::text
+      ${triageCaseJoinSql}
       LEFT JOIN public.users triage_user
         ON triage_user.id::text = st.triagem_responsavel_id
       LEFT JOIN LATERAL (
         SELECT
           pa.id::text AS pre_appointment_id,
-          pa.responsible_name,
-          pa.phone,
-          pa.source,
-          pa.service_type,
-          pa.has_report,
-          pa.cid,
+          NULLIF(BTRIM(COALESCE(to_jsonb(pa)->>'responsible_name', '')), '') AS responsible_name,
+          NULLIF(BTRIM(COALESCE(to_jsonb(pa)->>'phone', '')), '') AS phone,
+          NULLIF(BTRIM(COALESCE(to_jsonb(pa)->>'source', '')), '') AS source,
+          NULLIF(BTRIM(COALESCE(to_jsonb(pa)->>'service_type', '')), '') AS service_type,
+          CASE
+            WHEN LOWER(COALESCE(to_jsonb(pa)->>'has_report', '')) IN ('true', 't', '1', 'yes', 'sim') THEN true
+            WHEN LOWER(COALESCE(to_jsonb(pa)->>'has_report', '')) IN ('false', 'f', '0', 'no', 'nao', 'não') THEN false
+            ELSE false
+          END AS has_report,
+          NULLIF(BTRIM(COALESCE(to_jsonb(pa)->>'cid', '')), '') AS cid,
           pa.created_at,
           (
             SELECT string_agg(DISTINCT svc.name, ', ' ORDER BY svc.name)
             FROM jsonb_array_elements_text(
-              CASE WHEN jsonb_typeof(COALESCE(pa.services, '[]'::jsonb)) = 'array'
-                THEN COALESCE(pa.services, '[]'::jsonb)
+              CASE
+                WHEN jsonb_typeof(to_jsonb(pa)->'services') = 'array'
+                  THEN to_jsonb(pa)->'services'
                 ELSE '[]'::jsonb
               END
             ) sid(service_id)
@@ -532,15 +593,16 @@ router.get('/', authorizeSocialTriageView, async (req, res) => {
             SELECT ARRAY(
               SELECT DISTINCT sid.service_id
               FROM jsonb_array_elements_text(
-                CASE WHEN jsonb_typeof(COALESCE(pa.services, '[]'::jsonb)) = 'array'
-                  THEN COALESCE(pa.services, '[]'::jsonb)
+                CASE
+                  WHEN jsonb_typeof(to_jsonb(pa)->'services') = 'array'
+                    THEN to_jsonb(pa)->'services'
                   ELSE '[]'::jsonb
                 END
               ) sid(service_id)
             )
           ) AS requested_service_ids
         FROM public.pre_appointments pa
-        WHERE pa.converted_to_patient_id::text = p.id::text
+        WHERE NULLIF(BTRIM(COALESCE(to_jsonb(pa)->>'converted_to_patient_id', '')), '') = p.id::text
         ORDER BY pa.created_at DESC NULLS LAST
         LIMIT 1
       ) origin ON true
@@ -662,10 +724,21 @@ router.get('/', authorizeSocialTriageView, async (req, res) => {
       }),
       metadata: {
         status_official_source: 'patients.status_jornada',
+        triage_storage_ready: hasTriageCaseTable,
+        compatibility_mode: hasTriageCaseTable ? null : 'without_social_triage_cases_table',
       },
     });
   } catch (error) {
-    console.error('Erro ao listar fila da triagem social:', error);
+    if (isSchemaCompatibilityError(error)) {
+      console.error('Erro de compatibilidade de schema ao listar triagem social:', {
+        code: error?.code || null,
+        message: error?.message || null,
+        detail: error?.detail || null,
+        hint: error?.hint || null,
+      });
+    } else {
+      console.error('Erro ao listar fila da triagem social:', error);
+    }
     return res.status(500).json({
       success: false,
       message: 'Erro interno ao listar fila da triagem social.',
@@ -680,6 +753,20 @@ router.get('/:patientId/history', authorizeSocialTriageView, async (req, res) =>
 
   const limit = normalizeLimit(req.query?.limit, 50);
   try {
+    const hasHistoryTable = await tableExists(null, 'public.social_triage_history');
+    if (!hasHistoryTable) {
+      return res.json({
+        success: true,
+        patient_id: patientId,
+        total: 0,
+        items: [],
+        metadata: {
+          triage_storage_ready: false,
+          compatibility_mode: 'without_social_triage_history_table',
+        },
+      });
+    }
+
     const result = await pool.query(
       `
         SELECT
@@ -721,7 +808,16 @@ router.get('/:patientId/history', authorizeSocialTriageView, async (req, res) =>
       })),
     });
   } catch (error) {
-    console.error('Erro ao listar historico da triagem social:', error);
+    if (isSchemaCompatibilityError(error)) {
+      console.error('Erro de compatibilidade de schema ao listar historico da triagem social:', {
+        code: error?.code || null,
+        message: error?.message || null,
+        detail: error?.detail || null,
+        hint: error?.hint || null,
+      });
+    } else {
+      console.error('Erro ao listar historico da triagem social:', error);
+    }
     return res.status(500).json({
       success: false,
       message: 'Erro interno ao listar historico da triagem social.',
