@@ -12,7 +12,15 @@ import {
   subMonths,
   subWeeks,
 } from "date-fns";
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Loader2, PlusCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  PanelRightOpen,
+  PlusCircle,
+} from "lucide-react";
 
 import { resolveAgendaEventPalette, agendaLegend, agendaStatusLegend } from "@/components/agenda/agendaPalette";
 import { ProtectedRoute as ModuleProtectedRoute } from "@/components/common/ProtectedRoute";
@@ -280,6 +288,7 @@ export default function Agenda() {
   const [agendaError, setAgendaError] = useState<string | null>(null);
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showAuxPanel, setShowAuxPanel] = useState(false);
   const [creating, setCreating] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<AgendaAppointmentItem | null>(null);
   const [patientPhone, setPatientPhone] = useState<string | null>(null);
@@ -487,6 +496,7 @@ export default function Agenda() {
 
   useEffect(() => {
     if (!isTriageEntry || !triagePatientId) return;
+    setShowAuxPanel(true);
     setShowCreate(true);
     setForm((current) => ({
       ...current,
@@ -580,14 +590,6 @@ export default function Agenda() {
     });
     return sortByDateTime(list);
   }, [appointments, search, selectedService, selectedStatus]);
-
-  const summary = useMemo(() => {
-    const total = filteredAppointments.length;
-    const confirmed = filteredAppointments.filter((item) => normalizeStatus(item.appointment_status ?? item.status) === "confirmado").length;
-    const pending = filteredAppointments.filter((item) => normalizeStatus(item.appointment_status ?? item.status) === "agendado").length;
-    const cancelled = filteredAppointments.filter((item) => normalizeStatus(item.appointment_status ?? item.status) === "cancelado").length;
-    return { total, confirmed, pending, cancelled };
-  }, [filteredAppointments]);
 
   const loadByProfessional = useMemo(() => {
     const map = new Map<string, { name: string; total: number; pending: number }>();
@@ -854,6 +856,7 @@ export default function Agenda() {
         ? `Remarcacao sugerida do agendamento ${item.appointment_id || item.id}.`
         : current.notes,
     }));
+    setShowAuxPanel(true);
     setShowCreate(true);
   };
 
@@ -869,6 +872,7 @@ export default function Agenda() {
       source: "triagem_social",
       notes: item.triagem_notes_summary || current.notes,
     }));
+    setShowAuxPanel(true);
     setShowCreate(true);
   };
 
@@ -946,7 +950,17 @@ export default function Agenda() {
                     {VIEW_LABEL[item]}
                   </Button>
                 ))}
-                <Button size="sm" onClick={() => setShowCreate((current) => !current)}>
+                <Button size="sm" variant="outline" onClick={() => setShowAuxPanel((current) => !current)}>
+                  <PanelRightOpen className="mr-1 h-4 w-4" />
+                  Painel auxiliar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setShowAuxPanel(true);
+                    setShowCreate((current) => !current);
+                  }}
+                >
                   <PlusCircle className="mr-1 h-4 w-4" />Novo agendamento
                 </Button>
               </div>
@@ -1006,15 +1020,13 @@ export default function Agenda() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div
+          className={cn(
+            "grid gap-4",
+            showAuxPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-1"
+          )}
+        >
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total</p><p className="text-2xl font-semibold">{summary.total}</p></CardContent></Card>
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Confirmados</p><p className="text-2xl font-semibold text-emerald-700">{summary.confirmed}</p></CardContent></Card>
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Pendentes</p><p className="text-2xl font-semibold text-amber-700">{summary.pending}</p></CardContent></Card>
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Cancelados</p><p className="text-2xl font-semibold text-red-700">{summary.cancelled}</p></CardContent></Card>
-            </div>
-
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle>{VIEW_LABEL[mode]}</CardTitle>
@@ -1100,7 +1112,8 @@ export default function Agenda() {
             </Card>
           </div>
 
-          <div className="space-y-4">
+          {showAuxPanel ? (
+            <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3"><CardTitle>Pendentes de agendamento</CardTitle><CardDescription>Casos aptos vindos da Triagem Social.</CardDescription></CardHeader>
               <CardContent className="space-y-2">
@@ -1179,7 +1192,8 @@ export default function Agenda() {
                 )}
               </CardContent>
             </Card>
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <Dialog open={Boolean(selectedEvent)} onOpenChange={(open) => !open && setSelectedEvent(null)}>
