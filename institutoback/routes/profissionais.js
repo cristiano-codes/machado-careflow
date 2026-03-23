@@ -95,6 +95,21 @@ function normalizeEntityId(value) {
   return text || null;
 }
 
+function normalizeEntityIdList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => normalizeEntityId(entry))
+      .filter(Boolean);
+  }
+
+  const text = normalizeOptionalText(value);
+  if (!text) return [];
+  return text
+    .split(',')
+    .map((entry) => normalizeEntityId(entry))
+    .filter(Boolean);
+}
+
 function normalizeAppointmentStatus(value) {
   const normalized = (value || '').toString().trim().toLowerCase();
   if (!normalized) return 'scheduled';
@@ -2817,8 +2832,11 @@ router.get('/me', authorizeAgendaRead, async (req, res) => {
 router.get('/agenda/range', authorizeAgendaRead, async (req, res) => {
   const dateFrom = normalizeDateParam(req.query?.date_from || req.query?.dateFrom);
   const dateTo = normalizeDateParam(req.query?.date_to || req.query?.dateTo);
-  const requestedProfessionalId = normalizeEntityId(
-    req.query?.professional_id || req.query?.professionalId
+  const requestedProfessionalIds = Array.from(
+    new Set([
+      ...normalizeEntityIdList(req.query?.professional_ids || req.query?.professionalIds),
+      ...normalizeEntityIdList(req.query?.professional_id || req.query?.professionalId),
+    ])
   );
 
   if (!dateFrom || !dateTo) {
@@ -2849,8 +2867,9 @@ router.get('/agenda/range', authorizeAgendaRead, async (req, res) => {
     const writeEnforcement = resolveAgendaWriteEnforcementMode();
 
     if (
-      requestedProfessionalId &&
-      !canAccessAgendaWriteTarget(accessContext, requestedProfessionalId)
+      requestedProfessionalIds.some(
+        (professionalId) => !canAccessAgendaWriteTarget(accessContext, professionalId)
+      )
     ) {
       return res.status(403).json({
         success: false,
@@ -2860,8 +2879,8 @@ router.get('/agenda/range', authorizeAgendaRead, async (req, res) => {
     }
 
     let targetProfessionalIds = [];
-    if (requestedProfessionalId) {
-      targetProfessionalIds = [requestedProfessionalId];
+    if (requestedProfessionalIds.length > 0) {
+      targetProfessionalIds = requestedProfessionalIds;
     } else if (
       accessContext.linkedProfessionalId &&
       !accessContext.canViewOtherProfessionals

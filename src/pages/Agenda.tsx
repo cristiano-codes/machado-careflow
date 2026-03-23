@@ -28,6 +28,7 @@ import { JourneyStatusBadge } from "@/components/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +59,7 @@ import {
 
 type AgendaViewMode = "day" | "week" | "month" | "list";
 type AgendaRange = { from: Date; to: Date };
+type FilterOption = { value: string; label: string };
 
 type ProfessionalOption = {
   id: string;
@@ -87,7 +90,6 @@ type CreateForm = {
   source: "manual" | "triagem_social";
 };
 
-const ALL = "all";
 const VIEW_ORDER: AgendaViewMode[] = ["day", "week", "month", "list"];
 const VIEW_LABEL: Record<AgendaViewMode, string> = {
   day: "Dia",
@@ -95,6 +97,26 @@ const VIEW_LABEL: Record<AgendaViewMode, string> = {
   month: "Mes",
   list: "Lista",
 };
+
+function compactMultiLabel(selected: string[], options: FilterOption[], allLabel: string) {
+  if (selected.length === 0) return allLabel;
+  const labels = selected
+    .map((value) => options.find((option) => option.value === value)?.label || value)
+    .filter(Boolean);
+  if (labels.length <= 2) return labels.join(", ");
+  return `${labels.length} selecionados`;
+}
+
+function toggleMultiValue(current: string[], value: string) {
+  if (!value) return current;
+  return current.includes(value)
+    ? current.filter((entry) => entry !== value)
+    : [...current, value];
+}
+
+function resolveOptionLabel(options: FilterOption[], value: string) {
+  return options.find((option) => option.value === value)?.label || value;
+}
 
 function toIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -278,9 +300,9 @@ export default function Agenda() {
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [appointments, setAppointments] = useState<AgendaAppointmentItem[]>([]);
   const [pendingQueue, setPendingQueue] = useState<SocialTriageQueueItem[]>([]);
-  const [selectedProfessional, setSelectedProfessional] = useState<string>(ALL);
-  const [selectedService, setSelectedService] = useState<string>(ALL);
-  const [selectedStatus, setSelectedStatus] = useState<string>(ALL);
+  const [selectedProfessionalIds, setSelectedProfessionalIds] = useState<string[]>([]);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [loadingAgenda, setLoadingAgenda] = useState(false);
@@ -387,10 +409,9 @@ export default function Agenda() {
           settings.allow_professional_view_others);
       const forceOwn = Boolean(nextAccess.professionalId) && !allowOthers;
 
-      setSelectedProfessional((current) => {
-        if (forceOwn && nextAccess.professionalId) return nextAccess.professionalId;
-        if (current !== ALL && profList.some((item) => item.id === current)) return current;
-        return ALL;
+      setSelectedProfessionalIds((current) => {
+        if (forceOwn && nextAccess.professionalId) return [nextAccess.professionalId];
+        return current.filter((id) => profList.some((item) => item.id === id));
       });
 
       setForm((current) => {
@@ -424,7 +445,7 @@ export default function Agenda() {
       const response = await apiService.getAgendaRange({
         date_from: toIsoDate(range.from),
         date_to: toIsoDate(range.to),
-        professional_id: selectedProfessional !== ALL ? selectedProfessional : null,
+        professional_ids: selectedProfessionalIds.length > 0 ? selectedProfessionalIds : null,
       });
       setAppointments(Array.isArray(response.appointments) ? response.appointments : []);
     } catch (error) {
@@ -438,7 +459,7 @@ export default function Agenda() {
     } finally {
       setLoadingAgenda(false);
     }
-  }, [canViewAgenda, range.from, range.to, selectedProfessional, toast]);
+  }, [canViewAgenda, range.from, range.to, selectedProfessionalIds, toast]);
 
   const loadPending = useCallback(async () => {
     if (!canViewTriageQueue) {
@@ -486,7 +507,7 @@ export default function Agenda() {
 
   useEffect(() => {
     if (!mustUseOwnAgenda || !access.professionalId) return;
-    setSelectedProfessional(access.professionalId);
+    setSelectedProfessionalIds([access.professionalId]);
     setForm((current) => ({ ...current, professionalId: access.professionalId || "" }));
   }, [access.professionalId, mustUseOwnAgenda]);
 
@@ -501,11 +522,13 @@ export default function Agenda() {
     setForm((current) => ({
       ...current,
       patientId: triagePatientId,
-      professionalId: current.professionalId || (selectedProfessional !== ALL ? selectedProfessional : ""),
+      professionalId:
+        current.professionalId ||
+        (selectedProfessionalIds.length === 1 ? selectedProfessionalIds[0] : ""),
       date: current.date || toIsoDate(cursorDate),
       source: "triagem_social",
     }));
-  }, [cursorDate, isTriageEntry, selectedProfessional, triagePatientId]);
+  }, [cursorDate, isTriageEntry, selectedProfessionalIds, triagePatientId]);
 
   useEffect(() => {
     if (!isTriageEntry || triageServiceResolved || services.length === 0) return;
@@ -555,21 +578,56 @@ export default function Agenda() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [appointments]);
 
+  const professionalFilterOptions = useMemo<FilterOption[]>(
+    () => professionals.map((item) => ({ value: item.id, label: profName(item) })),
+    [professionals]
+  );
+
+  const serviceFilterOptions = useMemo<FilterOption[]>(
+    () => services.map((item) => ({ value: item.id, label: item.name })),
+    [services]
+  );
+
+  const statusFilterOptions = useMemo<FilterOption[]>(
+    () => statusOptions.map((status) => ({ value: status, label: statusLabel(status) })),
+    [statusOptions]
+  );
+
   useEffect(() => {
-    if (selectedStatus === ALL) return;
-    if (statusOptions.includes(selectedStatus)) return;
-    setSelectedStatus(ALL);
-  }, [selectedStatus, statusOptions]);
+    setSelectedProfessionalIds((current) =>
+      current.filter((id) => professionalFilterOptions.some((option) => option.value === id))
+    );
+  }, [professionalFilterOptions]);
+
+  useEffect(() => {
+    setSelectedServiceIds((current) =>
+      current.filter((id) => serviceFilterOptions.some((option) => option.value === id))
+    );
+  }, [serviceFilterOptions]);
+
+  useEffect(() => {
+    if (selectedStatuses.length === 0) return;
+    setSelectedStatuses((current) =>
+      current.filter((status) => statusOptions.includes(status))
+    );
+  }, [selectedStatuses.length, statusOptions]);
 
   const filteredAppointments = useMemo(() => {
     const term = search.trim().toLowerCase();
     const list = appointments.filter((item) => {
-      if (selectedService !== ALL) {
-        const serviceId = item.service_id === null || item.service_id === undefined ? "" : String(item.service_id);
-        if (serviceId !== selectedService) return false;
+      if (selectedProfessionalIds.length > 0) {
+        const professionalId =
+          item.professional_id === null || item.professional_id === undefined
+            ? ""
+            : String(item.professional_id);
+        if (!selectedProfessionalIds.includes(professionalId)) return false;
       }
-      if (selectedStatus !== ALL) {
-        if (normalizeStatus(item.appointment_status ?? item.status) !== selectedStatus) return false;
+      if (selectedServiceIds.length > 0) {
+        const serviceId = item.service_id === null || item.service_id === undefined ? "" : String(item.service_id);
+        if (!selectedServiceIds.includes(serviceId)) return false;
+      }
+      if (selectedStatuses.length > 0) {
+        if (!selectedStatuses.includes(normalizeStatus(item.appointment_status ?? item.status))) return false;
       }
       if (term) {
         const hay = [
@@ -589,7 +647,7 @@ export default function Agenda() {
       return true;
     });
     return sortByDateTime(list);
-  }, [appointments, search, selectedService, selectedStatus]);
+  }, [appointments, search, selectedProfessionalIds, selectedServiceIds, selectedStatuses]);
 
   const loadByProfessional = useMemo(() => {
     const map = new Map<string, { name: string; total: number; pending: number }>();
@@ -623,9 +681,8 @@ export default function Agenda() {
   }, [filteredAppointments, slots]);
 
   const dayProfessionals = useMemo(() => {
-    if (selectedProfessional !== ALL) {
-      const one = professionals.find((item) => item.id === selectedProfessional);
-      return one ? [one] : [];
+    if (selectedProfessionalIds.length > 0) {
+      return professionals.filter((item) => selectedProfessionalIds.includes(item.id));
     }
     if (!canViewOthers && access.professionalId) {
       const one = professionals.find((item) => item.id === access.professionalId);
@@ -645,7 +702,7 @@ export default function Agenda() {
       });
     }
     return Array.from(map.values());
-  }, [access.professionalId, appointments, canViewOthers, professionals, selectedProfessional]);
+  }, [access.professionalId, appointments, canViewOthers, professionals, selectedProfessionalIds]);
 
   const eventsByDateProfSlot = useMemo(() => {
     const map = new Map<string, AgendaAppointmentItem[]>();
@@ -698,7 +755,9 @@ export default function Agenda() {
     }
 
     const patientId = form.patientId.trim();
-    const professionalId = (form.professionalId || (selectedProfessional !== ALL ? selectedProfessional : "")).trim();
+    const professionalId = (
+      form.professionalId || (selectedProfessionalIds.length === 1 ? selectedProfessionalIds[0] : "")
+    ).trim();
     const serviceId = form.serviceId.trim();
     const date = form.date.trim();
     const time = form.time.trim();
@@ -803,7 +862,7 @@ export default function Agenda() {
     } finally {
       setCreating(false);
     }
-  }, [canWriteAgenda, form, isTriageEntry, refreshAll, selectedProfessional, setSearchParams, toast]);
+  }, [canWriteAgenda, form, isTriageEntry, refreshAll, selectedProfessionalIds, setSearchParams, toast]);
 
   const handleStatus = useCallback(
     async (item: AgendaAppointmentItem, action: "confirm" | "cancel") => {
@@ -868,7 +927,7 @@ export default function Agenda() {
       ...current,
       patientId: item.patient_id,
       serviceId: suggestedService?.id || current.serviceId,
-      professionalId: current.professionalId || (selectedProfessional !== ALL ? selectedProfessional : ""),
+      professionalId: current.professionalId || (selectedProfessionalIds.length === 1 ? selectedProfessionalIds[0] : ""),
       source: "triagem_social",
       notes: item.triagem_notes_summary || current.notes,
     }));
@@ -915,7 +974,7 @@ export default function Agenda() {
 
   return (
     <ModuleProtectedRoute requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}>
-      <div className="mx-auto w-full max-w-[1560px] space-y-4">
+      <div className="mx-auto w-full max-w-[1560px] space-y-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
@@ -938,8 +997,8 @@ export default function Agenda() {
         </div>
 
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5" />Visualizacao</CardTitle>
                 <CardDescription>Modo padrao semanal com alternancia Dia/Semana/Mes/Lista.</CardDescription>
@@ -966,50 +1025,234 @@ export default function Agenda() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-2 pt-0">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
               <div className="space-y-1">
                 <Label>Profissional</Label>
-                <Select value={selectedProfessional} onValueChange={setSelectedProfessional} disabled={loadingMeta || mustUseOwnAgenda}>
-                  <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                  <SelectContent>
-                    {!mustUseOwnAgenda ? <SelectItem value={ALL}>Todos os profissionais</SelectItem> : null}
-                    {professionals.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>{profName(item)}</SelectItem>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-9 w-full justify-start px-2 text-left font-normal"
+                      disabled={loadingMeta || mustUseOwnAgenda}
+                    >
+                      <span className="truncate">
+                        {compactMultiLabel(
+                          selectedProfessionalIds,
+                          professionalFilterOptions,
+                          "Todos os profissionais"
+                        )}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-2" align="start">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProfessionalIds([])}
+                      className={cn(
+                        "mb-2 flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-muted/60",
+                        selectedProfessionalIds.length === 0 && "bg-muted font-medium"
+                      )}
+                    >
+                      <Checkbox checked={selectedProfessionalIds.length === 0} />
+                      Todos os profissionais
+                    </button>
+                    <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                      {professionalFilterOptions.map((option) => (
+                        <button
+                          type="button"
+                          key={option.value}
+                          onClick={() =>
+                            setSelectedProfessionalIds((current) =>
+                              toggleMultiValue(current, option.value)
+                            )
+                          }
+                          className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-muted/60"
+                        >
+                          <Checkbox checked={selectedProfessionalIds.includes(option.value)} />
+                          <span className="line-clamp-1">{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {selectedProfessionalIds.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedProfessionalIds.slice(0, 2).map((id) => (
+                      <Badge key={id} variant="secondary" className="text-[10px]">
+                        {resolveOptionLabel(professionalFilterOptions, id)}
+                      </Badge>
                     ))}
-                  </SelectContent>
-                </Select>
+                    {selectedProfessionalIds.length > 2 ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        +{selectedProfessionalIds.length - 2}
+                      </Badge>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-5 px-1.5 text-[10px]"
+                      onClick={() => setSelectedProfessionalIds([])}
+                    >
+                      Limpar
+                    </Button>
+                  </div>
+                ) : null}
               </div>
+
               <div className="space-y-1">
                 <Label>Servico</Label>
-                <Select value={selectedService} onValueChange={setSelectedService}>
-                  <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL}>Todos os servicos</SelectItem>
-                    {services.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-9 w-full justify-start px-2 text-left font-normal"
+                    >
+                      <span className="truncate">
+                        {compactMultiLabel(selectedServiceIds, serviceFilterOptions, "Todos os servicos")}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-2" align="start">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedServiceIds([])}
+                      className={cn(
+                        "mb-2 flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-muted/60",
+                        selectedServiceIds.length === 0 && "bg-muted font-medium"
+                      )}
+                    >
+                      <Checkbox checked={selectedServiceIds.length === 0} />
+                      Todos os servicos
+                    </button>
+                    <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                      {serviceFilterOptions.length === 0 ? (
+                        <p className="px-2 py-1 text-sm text-muted-foreground">Sem servicos cadastrados.</p>
+                      ) : (
+                        serviceFilterOptions.map((option) => (
+                          <button
+                            type="button"
+                            key={option.value}
+                            onClick={() =>
+                              setSelectedServiceIds((current) => toggleMultiValue(current, option.value))
+                            }
+                            className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-muted/60"
+                          >
+                            <Checkbox checked={selectedServiceIds.includes(option.value)} />
+                            <span className="line-clamp-1">{option.label}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {selectedServiceIds.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedServiceIds.slice(0, 2).map((id) => (
+                      <Badge key={id} variant="secondary" className="text-[10px]">
+                        {resolveOptionLabel(serviceFilterOptions, id)}
+                      </Badge>
                     ))}
-                  </SelectContent>
-                </Select>
+                    {selectedServiceIds.length > 2 ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        +{selectedServiceIds.length - 2}
+                      </Badge>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-5 px-1.5 text-[10px]"
+                      onClick={() => setSelectedServiceIds([])}
+                    >
+                      Limpar
+                    </Button>
+                  </div>
+                ) : null}
               </div>
+
               <div className="space-y-1">
                 <Label>Status</Label>
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL}>Todos os status</SelectItem>
-                    {statusOptions.map((item) => (
-                      <SelectItem key={item} value={item}>{statusLabel(item)}</SelectItem>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-9 w-full justify-start px-2 text-left font-normal"
+                    >
+                      <span className="truncate">
+                        {compactMultiLabel(selectedStatuses, statusFilterOptions, "Todos os status")}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-2" align="start">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStatuses([])}
+                      className={cn(
+                        "mb-2 flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-muted/60",
+                        selectedStatuses.length === 0 && "bg-muted font-medium"
+                      )}
+                    >
+                      <Checkbox checked={selectedStatuses.length === 0} />
+                      Todos os status
+                    </button>
+                    <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                      {statusFilterOptions.length === 0 ? (
+                        <p className="px-2 py-1 text-sm text-muted-foreground">Sem status no periodo.</p>
+                      ) : (
+                        statusFilterOptions.map((option) => (
+                          <button
+                            type="button"
+                            key={option.value}
+                            onClick={() =>
+                              setSelectedStatuses((current) => toggleMultiValue(current, option.value))
+                            }
+                            className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-muted/60"
+                          >
+                            <Checkbox checked={selectedStatuses.includes(option.value)} />
+                            <span className="line-clamp-1">{option.label}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {selectedStatuses.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedStatuses.slice(0, 2).map((id) => (
+                      <Badge key={id} variant="secondary" className="text-[10px]">
+                        {resolveOptionLabel(statusFilterOptions, id)}
+                      </Badge>
                     ))}
-                  </SelectContent>
-                </Select>
+                    {selectedStatuses.length > 2 ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        +{selectedStatuses.length - 2}
+                      </Badge>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-5 px-1.5 text-[10px]"
+                      onClick={() => setSelectedStatuses([])}
+                    >
+                      Limpar
+                    </Button>
+                  </div>
+                ) : null}
               </div>
+
               <div className="space-y-1 md:col-span-2 xl:col-span-2">
                 <Label>Busca</Label>
-                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Crianca, responsavel, telefone, profissional, servico" />
+                <Input
+                  className="h-9"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Crianca, responsavel, telefone, profissional, servico"
+                />
               </div>
               <div className="flex items-end gap-2">
-                <Button className="w-full" variant="outline" onClick={() => void refreshAll()}>Atualizar</Button>
+                <Button className="h-9 w-full" variant="outline" onClick={() => void refreshAll()}>
+                  Atualizar
+                </Button>
               </div>
             </div>
             {access.compatibilityMode ? (
@@ -1026,9 +1269,9 @@ export default function Agenda() {
             showAuxPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "xl:grid-cols-1"
           )}
         >
-          <div className="space-y-4">
+          <div className="space-y-3">
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-2">
                 <CardTitle>{VIEW_LABEL[mode]}</CardTitle>
                 <CardDescription>Periodo: {rangeLabel}</CardDescription>
               </CardHeader>
@@ -1060,16 +1303,16 @@ export default function Agenda() {
                   </div>
                 ) : mode === "month" ? (
                   <div className="overflow-x-auto">
-                    <div className="min-w-[980px] border">
-                      <div className="grid grid-cols-7 border-b bg-muted/60">{["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => <div key={d} className="border-r px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0">{d}</div>)}</div>
+                    <div className="min-w-[940px] overflow-hidden rounded-md border border-slate-300/90 bg-slate-100/50">
+                      <div className="grid grid-cols-7 border-b border-slate-300/90 bg-slate-200/70">{["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((d) => <div key={d} className="border-r border-slate-300/80 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-foreground/80 last:border-r-0">{d}</div>)}</div>
                       <div className="grid grid-cols-7">
                         {monthDays.map((day) => {
                           const key = toIsoDate(day);
                           const dayItems = filteredAppointments.filter((item) => normalizeDateKey(item.appointment_date) === key);
                           const inMonth = day.getMonth() === cursorDate.getMonth();
                           return (
-                            <div key={key} className={cn("min-h-[140px] border-r border-b p-2 last:border-r-0", !inMonth && "bg-muted/20") }>
-                              <div className="mb-2 flex items-center justify-between"><span className={cn("text-sm font-semibold", !inMonth && "text-muted-foreground")}>{day.getDate()}</span><span className="text-[10px] text-muted-foreground">{dayItems.length}</span></div>
+                            <div key={key} className={cn("min-h-[118px] border-r border-b border-slate-300/70 p-1.5 last:border-r-0", !inMonth ? "bg-slate-200/35" : "bg-slate-50/70")}>
+                              <div className="mb-1.5 flex items-center justify-between"><span className={cn("text-sm font-semibold", !inMonth && "text-muted-foreground")}>{day.getDate()}</span><span className="text-[10px] text-muted-foreground">{dayItems.length}</span></div>
                               <div className="space-y-1">{dayItems.slice(0, 3).map((item) => renderEventBlock(item, true))}{dayItems.length > 3 ? <span className="text-xs text-muted-foreground">+{dayItems.length - 3} mais</span> : null}</div>
                             </div>
                           );
@@ -1079,27 +1322,27 @@ export default function Agenda() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <div className="grid min-w-[980px] border" style={{ gridTemplateColumns: `96px repeat(${mode === "week" ? weekDays.length : Math.max(dayProfessionals.length, 1)}, minmax(170px, 1fr))` }}>
-                      <div className="border-b border-r bg-muted/60 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Horario</div>
+                    <div className="grid min-w-[940px] overflow-hidden rounded-md border border-slate-300/90 bg-slate-100/55" style={{ gridTemplateColumns: `74px repeat(${mode === "week" ? weekDays.length : Math.max(dayProfessionals.length, 1)}, minmax(164px, 1fr))` }}>
+                      <div className="border-b border-r border-slate-300/90 bg-slate-200/70 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/80">Horario</div>
                       {mode === "week"
                         ? weekDays.map((day) => (
-                            <div key={toIsoDate(day)} className="border-b border-r bg-muted/60 px-2 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{day.toLocaleDateString("pt-BR", { weekday: "short" })}</p><p className="text-sm font-semibold">{day.toLocaleDateString("pt-BR")}</p></div>
+                            <div key={toIsoDate(day)} className="border-b border-r border-slate-300/90 bg-slate-200/70 px-2 py-1.5"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{day.toLocaleDateString("pt-BR", { weekday: "short" })}</p><p className="text-sm font-semibold">{day.toLocaleDateString("pt-BR")}</p></div>
                           ))
                         : (dayProfessionals.length === 0 ? [{ id: "__none__", professional_name: "Profissional" }] : dayProfessionals).map((prof) => (
-                            <div key={prof.id} className="border-b border-r bg-muted/60 px-2 py-2"><p className="text-sm font-semibold">{profName(prof)}</p><p className="text-xs text-muted-foreground">{cursorDate.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" })}</p></div>
+                            <div key={prof.id} className="border-b border-r border-slate-300/90 bg-slate-200/70 px-2 py-1.5"><p className="text-sm font-semibold">{profName(prof)}</p><p className="text-[11px] text-muted-foreground">{cursorDate.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" })}</p></div>
                           ))}
 
                       {slots.map((slot) => (
                         <div key={slot} className="contents">
-                          <div className="border-r border-b bg-background px-2 py-2 text-xs font-medium text-muted-foreground">{slot}</div>
+                          <div className="border-r border-b border-slate-300/80 bg-slate-100 px-2 py-1 text-[11px] font-semibold text-foreground/75">{slot}</div>
                           {(mode === "week" ? weekDays.map((day) => ({ type: "day", key: toIsoDate(day) })) : (dayProfessionals.length === 0 ? [{ type: "prof", key: "__none__" }] : dayProfessionals.map((prof) => ({ type: "prof", key: prof.id })))).map((col) => {
                             const dateKey = mode === "week" ? col.key : toIsoDate(cursorDate);
                             const items = mode === "week"
                               ? slotsByDate.get(`${dateKey}|${slot}`) || []
                               : eventsByDateProfSlot.get(`${dateKey}|${slot}|${col.key}`) || [];
                             return (
-                              <div key={`${col.key}-${slot}`} className={cn("min-h-[72px] border-r border-b px-1.5 py-1.5", items.length === 0 ? "bg-background" : "bg-muted/10")}>
-                                {items.length === 0 ? <div className="h-full rounded-sm border border-dashed border-muted/40" /> : <div className="space-y-1">{items.map((item) => renderEventBlock(item, true))}</div>}
+                              <div key={`${col.key}-${slot}`} className={cn("min-h-[58px] border-r border-b border-slate-300/70 px-1 py-1", items.length === 0 ? "bg-slate-50/65" : "bg-white/80")}>
+                                {items.length === 0 ? <div className="h-full rounded-sm border border-dashed border-slate-300/80 bg-white/35" /> : <div className="space-y-1">{items.map((item) => renderEventBlock(item, true))}</div>}
                               </div>
                             );
                           })}
@@ -1113,9 +1356,9 @@ export default function Agenda() {
           </div>
 
           {showAuxPanel ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
             <Card>
-              <CardHeader className="pb-3"><CardTitle>Pendentes de agendamento</CardTitle><CardDescription>Casos aptos vindos da Triagem Social.</CardDescription></CardHeader>
+              <CardHeader className="pb-2"><CardTitle>Pendentes de agendamento</CardTitle><CardDescription>Casos aptos vindos da Triagem Social.</CardDescription></CardHeader>
               <CardContent className="space-y-2">
                 {!canViewTriageQueue ? (
                   <p className="text-sm text-muted-foreground">Sem permissao para visualizar pendencias da triagem.</p>
@@ -1145,7 +1388,7 @@ export default function Agenda() {
 
             {showCreate ? (
               <Card>
-                <CardHeader className="pb-3"><CardTitle>Novo agendamento</CardTitle><CardDescription>Criacao contextual sem perder a visao do calendario.</CardDescription></CardHeader>
+                <CardHeader className="pb-2"><CardTitle>Novo agendamento</CardTitle><CardDescription>Criacao contextual sem perder a visao do calendario.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div className="space-y-1"><Label>Patient ID</Label><Input value={form.patientId} onChange={(e) => setForm((c) => ({ ...c, patientId: e.target.value }))} placeholder="ID do assistido" /></div>
@@ -1165,7 +1408,7 @@ export default function Agenda() {
             ) : null}
 
             <Card>
-              <CardHeader className="pb-3"><CardTitle>Legenda de cores</CardTitle><CardDescription>Cor principal por servico e marcador por status.</CardDescription></CardHeader>
+              <CardHeader className="pb-2"><CardTitle>Legenda de cores</CardTitle><CardDescription>Cor principal por servico e marcador por status.</CardDescription></CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid gap-2">{agendaLegend().map((item) => <div key={item.key} className="flex items-center gap-2 text-sm"><span className={cn("h-2.5 w-2.5 rounded-full", item.dotClass)} />{item.label}</div>)}</div>
                 <div className="space-y-2">{agendaStatusLegend().map((item) => <div key={item.key} className="flex items-center gap-2 text-xs"><span className={cn("h-4 w-5 rounded-sm border", item.className)} />{item.label}</div>)}</div>
@@ -1173,7 +1416,7 @@ export default function Agenda() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-2">
                 <CardTitle>Distribuicao por profissional</CardTitle>
                 <CardDescription>Carga operacional no periodo atual.</CardDescription>
               </CardHeader>

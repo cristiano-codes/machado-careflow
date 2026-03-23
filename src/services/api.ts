@@ -2628,6 +2628,7 @@ class ApiService {
     date_from: string;
     date_to: string;
     professional_id?: string | null;
+    professional_ids?: string[] | null;
   }): Promise<AgendaRangeResponse> {
     const dateFrom = this.toNonEmptyString(params?.date_from);
     const dateTo = this.toNonEmptyString(params?.date_to);
@@ -2641,6 +2642,14 @@ class ApiService {
     const professionalId = this.toNonEmptyString(params?.professional_id);
     if (professionalId) {
       query.set("professional_id", professionalId);
+    }
+    const professionalIds = Array.isArray(params?.professional_ids)
+      ? params.professional_ids
+          .map((value) => this.toNonEmptyString(value))
+          .filter((value): value is string => Boolean(value))
+      : [];
+    if (professionalIds.length > 0) {
+      query.set("professional_ids", professionalIds.join(","));
     }
 
     const response = await fetch(
