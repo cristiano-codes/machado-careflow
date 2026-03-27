@@ -601,7 +601,7 @@ router.get('/', authorizeSocialTriageView, async (req, res) => {
               ) sid(service_id)
             )
           ) AS requested_service_ids
-        FROM public.pre_appointments pa
+        FROM public.fila_de_espera pa
         WHERE NULLIF(BTRIM(COALESCE(to_jsonb(pa)->>'converted_to_patient_id', '')), '') = p.id::text
         ORDER BY pa.created_at DESC NULLS LAST
         LIMIT 1

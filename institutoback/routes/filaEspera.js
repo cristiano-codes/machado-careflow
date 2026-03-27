@@ -278,7 +278,7 @@ router.post('/', async (req, res) => {
 
     const insertResult = await client.query(
       `
-        INSERT INTO pre_appointments (
+        INSERT INTO fila_de_espera (
           name,
           cpf,
           phone,
@@ -362,7 +362,7 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT * FROM pre_appointments 
+      SELECT * FROM fila_de_espera
       ORDER BY created_at DESC
     `);
     const items = result.rows.map(mapPreAppointmentRow);
@@ -531,7 +531,7 @@ router.get('/triage-queue', authMiddleware, authorizeWaitingListLookup, async (r
           COUNT(*) FILTER (WHERE ${PRE_APPOINTMENT_STATUS_NORMALIZATION_SQL} = 'in_review')::int AS in_review_count,
           COUNT(*) FILTER (WHERE ${PRE_APPOINTMENT_STATUS_NORMALIZATION_SQL} = 'converted')::int AS converted_count,
           COUNT(*) FILTER (WHERE ${PRE_APPOINTMENT_STATUS_NORMALIZATION_SQL} = 'not_eligible')::int AS not_eligible_count
-        FROM public.pre_appointments pa
+        FROM public.fila_de_espera pa
         ${whereSql}
       `,
       params
@@ -578,7 +578,7 @@ router.get('/triage-queue', authMiddleware, authorizeWaitingListLookup, async (r
           pa.converted_to_patient_id::text AS converted_to_patient_id,
           pa.converted_at,
           pa.converted_by::text AS converted_by
-        FROM public.pre_appointments pa
+        FROM public.fila_de_espera pa
         ${whereSql}
         ORDER BY ${orderBySql}
         LIMIT ${limitParam}
@@ -708,7 +708,7 @@ router.get('/eligible', authMiddleware, authorizeWaitingListLookup, async (req, 
           pa.created_at,
           pa.converted_to_patient_id::text AS converted_to_patient_id,
           pa.converted_at
-        FROM pre_appointments pa
+        FROM fila_de_espera pa
         WHERE ${whereClauses.join('\n          AND ')}
         ORDER BY pa.created_at DESC
         LIMIT $${params.length}
@@ -790,7 +790,7 @@ router.patch('/:id/triage', authMiddleware, authorizeWaitingListLookup, async (r
           pa.notes,
           pa.converted_to_patient_id::text AS converted_to_patient_id,
           pa.converted_at
-        FROM public.pre_appointments pa
+        FROM public.fila_de_espera pa
         WHERE pa.id = $1
         LIMIT 1
         FOR UPDATE
@@ -843,7 +843,7 @@ router.patch('/:id/triage', authMiddleware, authorizeWaitingListLookup, async (r
 
     const updateResult = await client.query(
       `
-        UPDATE public.pre_appointments pa
+        UPDATE public.fila_de_espera pa
         SET ${setClauses.join(',\n            ')}
         WHERE pa.id = $1
         RETURNING
@@ -910,7 +910,7 @@ router.get('/public-search', async (req, res) => {
     const params = [];
     let sql = `
       SELECT name, status, created_at
-      FROM pre_appointments
+      FROM fila_de_espera
       WHERE
     `;
 
@@ -991,7 +991,7 @@ router.get('/:id', authMiddleware, authorizeWaitingListLookup, async (req, res) 
           pa.*,
           pa.id::text AS id,
           pa.converted_to_patient_id::text AS converted_to_patient_id
-        FROM pre_appointments pa
+        FROM fila_de_espera pa
         WHERE pa.id = $1
         LIMIT 1
       `,

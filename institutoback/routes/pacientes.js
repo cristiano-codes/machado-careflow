@@ -112,7 +112,7 @@ async function lockPreAppointmentForConversion(client, preAppointmentId) {
         status,
         converted_to_patient_id::text AS converted_to_patient_id,
         converted_at
-      FROM public.pre_appointments
+      FROM public.fila_de_espera
       WHERE id = $1
       LIMIT 1
       FOR UPDATE
@@ -131,7 +131,7 @@ async function markPreAppointmentAsConverted({
 }) {
   await client.query(
     `
-      UPDATE public.pre_appointments
+      UPDATE public.fila_de_espera
       SET status = 'converted',
           converted_to_patient_id = $2,
           converted_at = NOW(),
@@ -579,7 +579,7 @@ router.get('/vaga-elegiveis', authorizeVagaEligibilityLookup, async (req, res) =
                 NULL
               )
             )[1] AS notes
-          FROM public.pre_appointments pa
+          FROM public.fila_de_espera pa
           WHERE NULLIF(BTRIM(COALESCE(pa.converted_to_patient_id::text, '')), '') IS NOT NULL
           GROUP BY pa.converted_to_patient_id::text
         )
