@@ -181,11 +181,11 @@ export default function PreAgendamento() {
       const preAppointmentId = toOptional(preAppointmentPayload.pre_appointment_id || "");
       const patientPayload = {
         name: form.name.trim(),
-        date_of_birth: form.date_of_birth || null,
         phone: form.phone.trim(),
         email: toOptional(form.email),
         notes: buildPatientNotes(form, preAppointmentId),
         status_jornada: "em_fila_espera",
+        ...(form.date_of_birth ? { date_of_birth: form.date_of_birth } : {}),
         ...(preAppointmentId ? { source_pre_appointment_id: preAppointmentId } : {}),
       };
 

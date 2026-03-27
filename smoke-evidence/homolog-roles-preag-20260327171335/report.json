@@ -1,0 +1,320 @@
+{
+  "runId": "20260327171335",
+  "startedAt": "2026-03-27T17:13:35.844Z",
+  "urls": {
+    "frontend": "http://localhost:5000",
+    "backend": "http://localhost:3000/api"
+  },
+  "tests": {
+    "test1_create_flag_on": {
+      "ok": true,
+      "steps": [
+        {
+          "name": "abrir secao Funcoes",
+          "ok": true,
+          "details": null
+        },
+        {
+          "name": "preencher nome da nova funcao",
+          "ok": true,
+          "details": {
+            "roleName": "Psicologia Clinica"
+          }
+        },
+        {
+          "name": "marcar flag de exibicao no pre-agendamento",
+          "ok": true,
+          "details": null
+        },
+        {
+          "name": "clicar em Adicionar funcao",
+          "ok": true,
+          "details": {
+            "found": true,
+            "disabled": false
+          }
+        },
+        {
+          "name": "nova funcao aparece na lista",
+          "ok": true,
+          "details": {
+            "exists": true,
+            "preVisible": true,
+            "active": true,
+            "text": "Psicologia ClinicaAtivoExibido27/03/2026"
+          }
+        },
+        {
+          "name": "flag persistida como exibido",
+          "ok": true,
+          "details": {
+            "exists": true,
+            "preVisible": true,
+            "active": true,
+            "text": "Psicologia ClinicaAtivoExibido27/03/2026"
+          }
+        },
+        {
+          "name": "role criada persistiu no backend",
+          "ok": true,
+          "details": {
+            "createdRoleId": 21
+          }
+        },
+        {
+          "name": "funcao criada aparece em Servicos desejados",
+          "ok": true,
+          "details": {
+            "roleName": "Psicologia Clinica"
+          }
+        },
+        {
+          "name": "endpoint filtrado inclui funcao criada",
+          "ok": true,
+          "details": {
+            "total": 2
+          }
+        }
+      ]
+    },
+    "test2_toggle_off_hidden": {
+      "ok": false,
+      "steps": [
+        {
+          "name": "desligar exibicao no pre-agendamento",
+          "ok": false,
+          "details": null
+        }
+      ]
+    },
+    "test3_delete_in_use_blocked": {
+      "ok": false,
+      "steps": []
+    },
+    "test4_delete_without_link": {
+      "ok": false,
+      "steps": []
+    }
+  },
+  "dependencyByName": {
+    "activeVisibleRoles": 10,
+    "activeServices": 11,
+    "visibleRolesWithoutService": [
+      {
+        "id": 3,
+        "nome": "Assistente Social"
+      },
+      {
+        "id": 9,
+        "nome": "Enfermeiro"
+      },
+      {
+        "id": 5,
+        "nome": "Fisioterapeuta"
+      },
+      {
+        "id": 2,
+        "nome": "Fonoaudiologo"
+      },
+      {
+        "id": 8,
+        "nome": "Nutricionista"
+      },
+      {
+        "id": 7,
+        "nome": "Pedagogo"
+      },
+      {
+        "id": 1,
+        "nome": "Psicologo"
+      },
+      {
+        "id": 6,
+        "nome": "Psicopedagogo"
+      },
+      {
+        "id": 4,
+        "nome": "Terapeuta Ocupacional"
+      }
+    ],
+    "servicesWithoutVisibleRole": [
+      {
+        "id": "00000000-0000-0000-0000-000000000201",
+        "name": "Avalia‡Æo"
+      },
+      {
+        "id": "9e9c1a57-ed2a-4f1e-9dac-dd7e72c11a15",
+        "name": "Avaliação Neuropsicológica"
+      },
+      {
+        "id": "0f93530c-8204-4ef7-8faf-dd455c48537e",
+        "name": "Avaliação Psicológica"
+      },
+      {
+        "id": "d87334ed-a96b-41ec-8a5d-1f2629d6c9b0",
+        "name": "Avaliação Vocacional"
+      },
+      {
+        "id": "08476877-686d-455e-be6b-fce9a3a37d3b",
+        "name": "Orientação Profissional"
+      },
+      {
+        "id": "6884f039-d876-48e4-bd45-94fd4923dbf7",
+        "name": "Psicologia Clinica"
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000202",
+        "name": "SessÆo"
+      },
+      {
+        "id": "0876c94b-9e78-4065-aebb-a35e2ddab77a",
+        "name": "Terapia em Grupo"
+      },
+      {
+        "id": "abdf0f68-487f-46ef-ba55-c5b0aa0f0738",
+        "name": "Terapia Individual"
+      },
+      {
+        "id": "c1770c53-0aac-4b17-99fb-7e7492066ff7",
+        "name": "Terapia Ocupacional"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "login API admin/admin 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token de autenticacao recebido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "GET professional-roles 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "GET services active 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "existe servico ativo sem funcao equivalente para teste de criacao",
+      "ok": true,
+      "details": {
+        "services": 11,
+        "rolesVisible": 10
+      }
+    },
+    {
+      "name": "campo usuario visivel no login",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao Entrar clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "tela Configuracoes > Funcoes abre normalmente",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "edicao de funcao continua funcionando",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "funcao segue presente apos edicao",
+      "ok": true,
+      "details": {
+        "existsAfterEdit": true,
+        "roleName": "Psicologia Clinica"
+      }
+    },
+    {
+      "name": "campos obrigatorios do pre-agendamento preenchidos",
+      "ok": true,
+      "details": {
+        "nameFilled": true,
+        "phoneFilled": true,
+        "emailFilled": true
+      }
+    },
+    {
+      "name": "servico desejado selecionado no pre-agendamento",
+      "ok": true,
+      "details": {
+        "roleName": "Psicologia Clinica"
+      }
+    },
+    {
+      "name": "botao Registrar entrada inicial clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "submit principal do pre-agendamento continua funcionando",
+      "ok": true,
+      "details": null
+    }
+  ],
+  "screenshots": {
+    "01-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171335\\01-login.png",
+    "02-pos-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171335\\02-pos-login.png",
+    "03-config-funcoes-aberta": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171335\\03-config-funcoes-aberta.png",
+    "04-preag-test1": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171335\\04-preag-test1.png",
+    "05-preag-submit-ok": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171335\\05-preag-submit-ok.png"
+  },
+  "apiCalls": [
+    {
+      "method": "POST",
+      "url": "http://localhost:3000/api/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/settings/professional-roles?all=1",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/services?active=true",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/settings/professional-roles?all=1",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/settings/professional-roles?all=1",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/services?active=true&pre_appointment=true",
+      "status": 200
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "status": "failed",
+  "error": {
+    "message": "test2_toggle_off_hidden | desligar exibicao no pre-agendamento | {}",
+    "stack": "Error: test2_toggle_off_hidden | desligar exibicao no pre-agendamento | {}\n    at recordStep (C:\\projeto\\machado-careflow\\temp_homolog_roles_preag.cjs:45:11)\n    at main (C:\\projeto\\machado-careflow\\temp_homolog_roles_preag.cjs:622:5)"
+  },
+  "finishedAt": "2026-03-27T17:13:47.532Z"
+}

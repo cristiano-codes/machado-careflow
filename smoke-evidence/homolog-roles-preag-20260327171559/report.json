@@ -1,0 +1,453 @@
+{
+  "runId": "20260327171559",
+  "startedAt": "2026-03-27T17:15:59.185Z",
+  "urls": {
+    "frontend": "http://localhost:5000",
+    "backend": "http://localhost:3000/api"
+  },
+  "tests": {
+    "test1_create_flag_on": {
+      "ok": true,
+      "steps": [
+        {
+          "name": "abrir secao Funcoes",
+          "ok": true,
+          "details": null
+        },
+        {
+          "name": "preencher nome da nova funcao",
+          "ok": true,
+          "details": {
+            "roleName": "Terapia Individual"
+          }
+        },
+        {
+          "name": "marcar flag de exibicao no pre-agendamento",
+          "ok": true,
+          "details": null
+        },
+        {
+          "name": "clicar em Adicionar funcao",
+          "ok": true,
+          "details": {
+            "found": true,
+            "disabled": false
+          }
+        },
+        {
+          "name": "nova funcao aparece na lista",
+          "ok": true,
+          "details": {
+            "exists": true,
+            "preVisible": true,
+            "active": true,
+            "text": "Terapia IndividualAtivoExibido27/03/2026"
+          }
+        },
+        {
+          "name": "flag persistida como exibido",
+          "ok": true,
+          "details": {
+            "exists": true,
+            "preVisible": true,
+            "active": true,
+            "text": "Terapia IndividualAtivoExibido27/03/2026"
+          }
+        },
+        {
+          "name": "role criada persistiu no backend",
+          "ok": true,
+          "details": {
+            "createdRoleId": 23
+          }
+        },
+        {
+          "name": "funcao criada aparece em Servicos desejados",
+          "ok": true,
+          "details": {
+            "roleName": "Terapia Individual"
+          }
+        },
+        {
+          "name": "endpoint filtrado inclui funcao criada",
+          "ok": true,
+          "details": {
+            "total": 3
+          }
+        }
+      ]
+    },
+    "test2_toggle_off_hidden": {
+      "ok": true,
+      "steps": [
+        {
+          "name": "desligar exibicao no pre-agendamento",
+          "ok": true,
+          "details": null
+        },
+        {
+          "name": "funcao permanece cadastrada",
+          "ok": true,
+          "details": {
+            "exists": true,
+            "preVisible": false,
+            "active": true,
+            "text": "Terapia IndividualAtivoOculto27/03/2026"
+          }
+        },
+        {
+          "name": "flag ficou desligada",
+          "ok": true,
+          "details": {
+            "exists": true,
+            "preVisible": false,
+            "active": true,
+            "text": "Terapia IndividualAtivoOculto27/03/2026"
+          }
+        },
+        {
+          "name": "funcao desligada nao aparece em Servicos desejados",
+          "ok": true,
+          "details": {
+            "hasLabelAfterOff": false
+          }
+        }
+      ]
+    },
+    "test3_delete_in_use_blocked": {
+      "ok": true,
+      "steps": [
+        {
+          "name": "listar profissionais para localizar vinculo",
+          "ok": true,
+          "details": {
+            "status": 200
+          }
+        },
+        {
+          "name": "existe funcao com vinculo real",
+          "ok": true,
+          "details": {
+            "totalProfessionals": 16
+          }
+        },
+        {
+          "name": "exclusao de funcao em uso bloqueada com 409",
+          "ok": true,
+          "details": {
+            "status": 409,
+            "body": {
+              "success": false,
+              "code": "role_in_use",
+              "linked_professionals": 6,
+              "message": "Funcao vinculada a profissionais e nao pode ser excluida com seguranca. Inative a funcao para manter o historico."
+            }
+          }
+        },
+        {
+          "name": "retorno nao e erro 500",
+          "ok": true,
+          "details": {
+            "status": 409
+          }
+        }
+      ]
+    },
+    "test4_delete_without_link": {
+      "ok": true,
+      "steps": [
+        {
+          "name": "funcao de teste existe antes da exclusao",
+          "ok": true,
+          "details": {
+            "exists": true,
+            "preVisible": false,
+            "active": true,
+            "text": "Terapia IndividualAtivoOculto27/03/2026"
+          }
+        },
+        {
+          "name": "acionar excluir na linha da funcao",
+          "ok": true,
+          "details": null
+        },
+        {
+          "name": "funcao removida da listagem",
+          "ok": true,
+          "details": {
+            "exists": false
+          }
+        },
+        {
+          "name": "funcao permanece removida apos recarregar",
+          "ok": true,
+          "details": {
+            "exists": false
+          }
+        },
+        {
+          "name": "funcao removida no backend",
+          "ok": true,
+          "details": {
+            "stillExistsBackend": false
+          }
+        },
+        {
+          "name": "funcao excluida nao aparece no pre-agendamento",
+          "ok": true,
+          "details": {
+            "stillShownAfterDelete": false
+          }
+        },
+        {
+          "name": "pre-agendamento continua carregando apos exclusao",
+          "ok": true,
+          "details": null
+        }
+      ]
+    }
+  },
+  "dependencyByName": {
+    "activeVisibleRoles": 11,
+    "activeServices": 11,
+    "visibleRolesWithoutService": [
+      {
+        "id": 3,
+        "nome": "Assistente Social"
+      },
+      {
+        "id": 9,
+        "nome": "Enfermeiro"
+      },
+      {
+        "id": 5,
+        "nome": "Fisioterapeuta"
+      },
+      {
+        "id": 2,
+        "nome": "Fonoaudiologo"
+      },
+      {
+        "id": 8,
+        "nome": "Nutricionista"
+      },
+      {
+        "id": 7,
+        "nome": "Pedagogo"
+      },
+      {
+        "id": 1,
+        "nome": "Psicologo"
+      },
+      {
+        "id": 6,
+        "nome": "Psicopedagogo"
+      },
+      {
+        "id": 4,
+        "nome": "Terapeuta Ocupacional"
+      }
+    ],
+    "servicesWithoutVisibleRole": [
+      {
+        "id": "00000000-0000-0000-0000-000000000201",
+        "name": "Avalia‡Æo"
+      },
+      {
+        "id": "9e9c1a57-ed2a-4f1e-9dac-dd7e72c11a15",
+        "name": "Avaliação Neuropsicológica"
+      },
+      {
+        "id": "0f93530c-8204-4ef7-8faf-dd455c48537e",
+        "name": "Avaliação Psicológica"
+      },
+      {
+        "id": "d87334ed-a96b-41ec-8a5d-1f2629d6c9b0",
+        "name": "Avaliação Vocacional"
+      },
+      {
+        "id": "08476877-686d-455e-be6b-fce9a3a37d3b",
+        "name": "Orientação Profissional"
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000202",
+        "name": "SessÆo"
+      },
+      {
+        "id": "0876c94b-9e78-4065-aebb-a35e2ddab77a",
+        "name": "Terapia em Grupo"
+      },
+      {
+        "id": "abdf0f68-487f-46ef-ba55-c5b0aa0f0738",
+        "name": "Terapia Individual"
+      },
+      {
+        "id": "c1770c53-0aac-4b17-99fb-7e7492066ff7",
+        "name": "Terapia Ocupacional"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "login API admin/admin 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "token de autenticacao recebido",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "GET professional-roles 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "GET services active 200",
+      "ok": true,
+      "details": {
+        "status": 200
+      }
+    },
+    {
+      "name": "existe servico ativo sem funcao cadastrada para teste de criacao",
+      "ok": true,
+      "details": {
+        "services": 11,
+        "rolesTotal": 12
+      }
+    },
+    {
+      "name": "campo usuario visivel no login",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "botao Entrar clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "tela Configuracoes > Funcoes abre normalmente",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "edicao de funcao continua funcionando",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "funcao segue presente apos edicao",
+      "ok": true,
+      "details": {
+        "existsAfterEdit": true,
+        "roleName": "Terapia Individual"
+      }
+    },
+    {
+      "name": "campos obrigatorios do pre-agendamento preenchidos",
+      "ok": true,
+      "details": {
+        "nameFilled": true,
+        "phoneFilled": true,
+        "emailFilled": true
+      }
+    },
+    {
+      "name": "servico desejado selecionado no pre-agendamento",
+      "ok": true,
+      "details": {
+        "roleName": "Terapia Individual"
+      }
+    },
+    {
+      "name": "botao Registrar entrada inicial clicado",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "submit principal do pre-agendamento continua funcionando",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "pre-agendamento abre sem erro no fim da homologacao",
+      "ok": true,
+      "details": null
+    },
+    {
+      "name": "nao houve erro de page runtime no navegador",
+      "ok": true,
+      "details": {
+        "pageErrors": []
+      }
+    }
+  ],
+  "screenshots": {
+    "01-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171559\\01-login.png",
+    "02-pos-login": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171559\\02-pos-login.png",
+    "03-config-funcoes-aberta": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171559\\03-config-funcoes-aberta.png",
+    "04-preag-test1": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171559\\04-preag-test1.png",
+    "05-preag-submit-ok": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171559\\05-preag-submit-ok.png",
+    "06-preag-test2": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171559\\06-preag-test2.png",
+    "07-preag-test4": "C:\\projeto\\machado-careflow\\smoke-evidence\\homolog-roles-preag-20260327171559\\07-preag-test4.png"
+  },
+  "apiCalls": [
+    {
+      "method": "POST",
+      "url": "http://localhost:3000/api/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/settings/professional-roles?all=1",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/services?active=true",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/settings/professional-roles?all=1",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/settings/professional-roles?all=1",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/services?active=true&pre_appointment=true",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/profissionais",
+      "status": 200
+    },
+    {
+      "method": "DELETE",
+      "url": "http://localhost:3000/api/settings/professional-roles/1",
+      "status": 409
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/settings/professional-roles?all=1",
+      "status": 200
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "status": "passed",
+  "error": null,
+  "finishedAt": "2026-03-27T17:16:18.305Z"
+}
