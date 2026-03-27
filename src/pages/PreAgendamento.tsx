@@ -1,14 +1,12 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarCheck2, Info, Loader2 } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CalendarCheck2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { API_BASE_URL, apiService, type ApiRequestError } from "@/services/api";
@@ -28,14 +26,11 @@ type FormState = {
   urgency: "normal" | "prioritario";
   responsible_name: string;
   phone: string;
-  whatsapp: boolean;
   email: string;
   how_heard: string;
   how_heard_other: string;
   referred_by: string;
   referred_by_other: string;
-  consent_whatsapp: boolean;
-  consent_lgpd: boolean;
   notes: string;
 };
 
@@ -49,14 +44,11 @@ const INITIAL_FORM: FormState = {
   urgency: "normal",
   responsible_name: "",
   phone: "",
-  whatsapp: false,
   email: "",
   how_heard: "",
   how_heard_other: "",
   referred_by: "",
   referred_by_other: "",
-  consent_whatsapp: false,
-  consent_lgpd: false,
   notes: "",
 };
 
@@ -130,8 +122,7 @@ export default function PreAgendamento() {
       form.name.trim().length > 0 &&
       form.phone.trim().length > 0 &&
       form.email.trim().length > 0 &&
-      form.services.length > 0 &&
-      form.consent_lgpd,
+      form.services.length > 0,
     [form]
   );
 
@@ -167,14 +158,14 @@ export default function PreAgendamento() {
           urgency: form.urgency,
           responsible_name: toOptional(form.responsible_name),
           phone: form.phone.trim(),
-          whatsapp: form.whatsapp,
+          whatsapp: false,
           email: form.email.trim(),
           how_heard: toOptional(form.how_heard),
           how_heard_other: form.how_heard === "outro" ? toOptional(form.how_heard_other) : null,
           referred_by: toOptional(form.referred_by),
           referred_by_other: form.referred_by === "outro" ? toOptional(form.referred_by_other) : null,
-          consent_whatsapp: form.consent_whatsapp,
-          consent_lgpd: form.consent_lgpd,
+          consent_whatsapp: false,
+          consent_lgpd: true,
           notes: toOptional(form.notes),
         }),
       });
@@ -269,15 +260,6 @@ export default function PreAgendamento() {
         </p>
       </div>
 
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>Separacao de responsabilidades</AlertTitle>
-        <AlertDescription>
-          Esta tela nao executa fila operacional. Toda triagem (contatos, prioridade,
-          observacoes, agendamento) deve ser feita no modulo <strong>Triagem Social</strong>.
-        </AlertDescription>
-      </Alert>
-
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -296,7 +278,6 @@ export default function PreAgendamento() {
               <div className="space-y-1"><Label>E-mail *</Label><Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} required /></div>
               <div className="space-y-1"><Label>Responsavel</Label><Input value={form.responsible_name} onChange={(e) => updateField("responsible_name", e.target.value)} /></div>
               <div className="space-y-1"><Label>Urgencia</Label><Select value={form.urgency} onValueChange={(v: "normal" | "prioritario") => updateField("urgency", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="normal">Normal</SelectItem><SelectItem value="prioritario">Prioritario</SelectItem></SelectContent></Select></div>
-              <div className="flex items-center justify-between rounded-md border px-3 py-2"><div><p className="text-sm font-medium">Telefone e WhatsApp?</p><p className="text-xs text-muted-foreground">Usado para contato de triagem</p></div><Switch checked={form.whatsapp} onCheckedChange={(checked) => updateField("whatsapp", checked)} /></div>
             </div>
 
             <div className="space-y-2">
@@ -336,11 +317,6 @@ export default function PreAgendamento() {
                 {form.has_report ? <Input value={form.cid} onChange={(e) => updateField("cid", e.target.value)} placeholder="CID" /> : null}
               </div>
               <div className="space-y-1"><Label>Observacoes iniciais</Label><Textarea value={form.notes} onChange={(e) => updateField("notes", e.target.value)} className="min-h-[110px]" /></div>
-            </div>
-
-            <div className="grid gap-2 md:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.consent_whatsapp} onCheckedChange={(v) => updateField("consent_whatsapp", v === true)} />Autoriza contato via WhatsApp</label>
-              <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.consent_lgpd} onCheckedChange={(v) => updateField("consent_lgpd", v === true)} />Consentimento LGPD *</label>
             </div>
 
             <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
