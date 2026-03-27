@@ -1080,6 +1080,7 @@ export type ProfessionalRole = {
   id: number;
   nome: string;
   ativo: boolean;
+  show_in_pre_appointment: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -2347,15 +2348,26 @@ class ApiService {
     };
   }
 
-  async createProfessionalRole(nome: string): Promise<{
+  async createProfessionalRole(payload: {
+    nome: string;
+    show_in_pre_appointment?: boolean;
+  }): Promise<{
     success: boolean;
     role?: ProfessionalRole;
     message?: string;
   }> {
+    const nome = this.toNonEmptyString(payload?.nome) || "";
+    const showInPreAppointment =
+      typeof payload?.show_in_pre_appointment === "boolean"
+        ? payload.show_in_pre_appointment
+        : true;
     const response = await fetch(`${API_BASE_URL}/settings/professional-roles`, {
       method: "POST",
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ nome }),
+      body: JSON.stringify({
+        nome,
+        show_in_pre_appointment: showInPreAppointment,
+      }),
     });
     return this.parseResponseOrThrow<{
       success: boolean;
@@ -2364,15 +2376,27 @@ class ApiService {
     }>(response, "Falha ao criar funcao profissional");
   }
 
-  async updateProfessionalRole(id: number, nome: string): Promise<{
+  async updateProfessionalRole(
+    id: number,
+    payload: {
+      nome: string;
+      show_in_pre_appointment?: boolean;
+    }
+  ): Promise<{
     success: boolean;
     role?: ProfessionalRole;
     message?: string;
   }> {
+    const nome = this.toNonEmptyString(payload?.nome) || "";
+    const body: Record<string, unknown> = { nome };
+    if (typeof payload?.show_in_pre_appointment === "boolean") {
+      body.show_in_pre_appointment = payload.show_in_pre_appointment;
+    }
+
     const response = await fetch(`${API_BASE_URL}/settings/professional-roles/${id}`, {
       method: "PUT",
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ nome }),
+      body: JSON.stringify(body),
     });
     return this.parseResponseOrThrow<{
       success: boolean;
@@ -2399,6 +2423,52 @@ class ApiService {
       response,
       "Falha ao atualizar status da funcao profissional"
     );
+  }
+
+  async setProfessionalRolePreAppointmentVisibility(
+    id: number,
+    show_in_pre_appointment: boolean
+  ): Promise<{
+    success: boolean;
+    role?: ProfessionalRole;
+    message?: string;
+  }> {
+    const response = await fetch(
+      `${API_BASE_URL}/settings/professional-roles/${id}/show-in-pre-appointment`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ show_in_pre_appointment }),
+      }
+    );
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      role?: ProfessionalRole;
+      message?: string;
+    }>(
+      response,
+      "Falha ao atualizar visibilidade da funcao no pre-agendamento"
+    );
+  }
+
+  async deleteProfessionalRole(id: number): Promise<{
+    success: boolean;
+    role?: ProfessionalRole;
+    message?: string;
+    code?: string;
+    linked_professionals?: number;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/settings/professional-roles/${id}`, {
+      method: "DELETE",
+      headers: this.getAuthHeaders(),
+    });
+    return this.parseResponseOrThrow<{
+      success: boolean;
+      role?: ProfessionalRole;
+      message?: string;
+      code?: string;
+      linked_professionals?: number;
+    }>(response, "Falha ao excluir funcao profissional");
   }
 
   // ---------- SETTINGS: CONVENIOS ----------

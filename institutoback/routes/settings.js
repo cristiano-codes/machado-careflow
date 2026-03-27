@@ -128,6 +128,7 @@ const SETTINGS_EDITABLE_FIELDS = [
 let settingsSchemaReadyPromise = null;
 let settingsColumnsCache = null;
 let conveniosSchemaReadyPromise = null;
+let professionalRolesSchemaReadyPromise = null;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -488,12 +489,19 @@ function parseRoleActive(value) {
   return null;
 }
 
+function parseRolePreAppointmentVisibility(value, fallback = true) {
+  if (value === undefined || value === null) return fallback;
+  const parsed = parseRoleActive(value);
+  return parsed === null ? fallback : parsed;
+}
+
 function mapRoleRow(row) {
   if (!row) return null;
   return {
     id: row.id,
     nome: row.nome,
     ativo: row.ativo,
+    show_in_pre_appointment: row.show_in_pre_appointment !== false,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -1091,7 +1099,35 @@ router.get('/public', async (req, res) => {
   }
 });
 
+function ensureProfessionalRolesSchema() {
+  if (!professionalRolesSchemaReadyPromise) {
+    professionalRolesSchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE public.professional_roles
+          ADD COLUMN IF NOT EXISTS show_in_pre_appointment boolean
+      `);
+
+      await pool.query(`
+        UPDATE public.professional_roles
+        SET show_in_pre_appointment = true
+        WHERE show_in_pre_appointment IS NULL
+      `);
+
+      await pool.query(`
+        ALTER TABLE public.professional_roles
+          ALTER COLUMN show_in_pre_appointment SET DEFAULT true,
+          ALTER COLUMN show_in_pre_appointment SET NOT NULL
+      `);
+    })().catch((error) => {
+      professionalRolesSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+  return professionalRolesSchemaReadyPromise;
+}
+
 async function ensureDefaultProfessionalRoles() {
+  await ensureProfessionalRolesSchema();
   const { rows } = await pool.query(
     'SELECT COUNT(*)::int AS total FROM public.professional_roles'
   );
@@ -1101,8 +1137,8 @@ async function ensureDefaultProfessionalRoles() {
   for (const nome of DEFAULT_PROFESSIONAL_ROLES) {
     await pool.query(
       `
-        INSERT INTO public.professional_roles (nome, ativo)
-        VALUES ($1, true)
+        INSERT INTO public.professional_roles (nome, ativo, show_in_pre_appointment)
+        VALUES ($1, true, true)
         ON CONFLICT DO NOTHING
       `,
       [nome]
@@ -1119,7 +1155,7 @@ router.get('/professional-roles', authorize('configuracoes', 'view'), async (req
 
     const { rows } = await pool.query(
       `
-        SELECT id, nome, ativo, created_at, updated_at
+        SELECT id, nome, ativo, show_in_pre_appointment, created_at, updated_at
         FROM public.professional_roles
         ${includeAll ? '' : 'WHERE ativo = true'}
         ORDER BY nome ASC
@@ -1142,7 +1178,12 @@ router.get('/professional-roles', authorize('configuracoes', 'view'), async (req
 
 router.post('/professional-roles', authorize('configuracoes', 'edit'), async (req, res) => {
   try {
+    await ensureProfessionalRolesSchema();
     const nome = sanitizeRoleName(req.body?.nome);
+    const showInPreAppointment = parseRolePreAppointmentVisibility(
+      req.body?.show_in_pre_appointment,
+      true
+    );
     if (!nome) {
       return res.status(400).json({ success: false, message: 'nome e obrigatorio' });
     }
@@ -1166,11 +1207,11 @@ router.post('/professional-roles', authorize('configuracoes', 'edit'), async (re
 
     const inserted = await pool.query(
       `
-        INSERT INTO public.professional_roles (nome, ativo)
-        VALUES ($1, true)
-        RETURNING id, nome, ativo, created_at, updated_at
+        INSERT INTO public.professional_roles (nome, ativo, show_in_pre_appointment)
+        VALUES ($1, true, $2)
+        RETURNING id, nome, ativo, show_in_pre_appointment, created_at, updated_at
       `,
-      [nome]
+      [nome, showInPreAppointment]
     );
 
     return res.status(201).json({
@@ -1189,6 +1230,7 @@ router.post('/professional-roles', authorize('configuracoes', 'edit'), async (re
 
 router.put('/professional-roles/:id', authorize('configuracoes', 'edit'), async (req, res) => {
   try {
+    await ensureProfessionalRolesSchema();
     const id = parseRoleId(req.params?.id);
     if (!id) {
       return res.status(400).json({ success: false, message: 'id invalido' });
@@ -1201,6 +1243,16 @@ router.put('/professional-roles/:id', authorize('configuracoes', 'edit'), async 
     if (nome.length > 120) {
       return res.status(400).json({ success: false, message: 'nome deve ter no maximo 120 caracteres' });
     }
+
+    const body = req.body || {};
+    const showInPreAppointmentProvided = Object.prototype.hasOwnProperty.call(
+      body,
+      'show_in_pre_appointment'
+    );
+    const showInPreAppointment = parseRolePreAppointmentVisibility(
+      body?.show_in_pre_appointment,
+      true
+    );
 
     const duplicate = await pool.query(
       `
@@ -1217,15 +1269,22 @@ router.put('/professional-roles/:id', authorize('configuracoes', 'edit'), async 
       return res.status(409).json({ success: false, message: 'Ja existe funcao com este nome' });
     }
 
+    const setClauses = ['nome = $1', 'updated_at = NOW()'];
+    const updateParams = [nome];
+    if (showInPreAppointmentProvided) {
+      updateParams.push(showInPreAppointment);
+      setClauses.push(`show_in_pre_appointment = $${updateParams.length}`);
+    }
+    updateParams.push(id);
+
     const updated = await pool.query(
       `
         UPDATE public.professional_roles
-        SET nome = $1,
-            updated_at = NOW()
-        WHERE id = $2
-        RETURNING id, nome, ativo, created_at, updated_at
+        SET ${setClauses.join(', ')}
+        WHERE id = $${updateParams.length}
+        RETURNING id, nome, ativo, show_in_pre_appointment, created_at, updated_at
       `,
-      [nome, id]
+      updateParams
     );
 
     if (updated.rows.length === 0) {
@@ -1248,6 +1307,7 @@ router.put('/professional-roles/:id', authorize('configuracoes', 'edit'), async 
 
 router.patch('/professional-roles/:id/ativo', authorize('configuracoes', 'edit'), async (req, res) => {
   try {
+    await ensureProfessionalRolesSchema();
     const id = parseRoleId(req.params?.id);
     if (!id) {
       return res.status(400).json({ success: false, message: 'id invalido' });
@@ -1264,7 +1324,7 @@ router.patch('/professional-roles/:id/ativo', authorize('configuracoes', 'edit')
         SET ativo = $1,
             updated_at = NOW()
         WHERE id = $2
-        RETURNING id, nome, ativo, created_at, updated_at
+        RETURNING id, nome, ativo, show_in_pre_appointment, created_at, updated_at
       `,
       [ativo, id]
     );
@@ -1284,6 +1344,137 @@ router.patch('/professional-roles/:id/ativo', authorize('configuracoes', 'edit')
       stack: error?.stack,
     });
     return res.status(500).json({ success: false, message: 'Erro ao atualizar status da funcao' });
+  }
+});
+
+router.patch(
+  '/professional-roles/:id/show-in-pre-appointment',
+  authorize('configuracoes', 'edit'),
+  async (req, res) => {
+    try {
+      await ensureProfessionalRolesSchema();
+      const id = parseRoleId(req.params?.id);
+      if (!id) {
+        return res.status(400).json({ success: false, message: 'id invalido' });
+      }
+
+      const visible = parseRoleActive(req.body?.show_in_pre_appointment);
+      if (visible === null) {
+        return res.status(400).json({
+          success: false,
+          message: 'show_in_pre_appointment deve ser booleano',
+        });
+      }
+
+      const updated = await pool.query(
+        `
+          UPDATE public.professional_roles
+          SET show_in_pre_appointment = $1,
+              updated_at = NOW()
+          WHERE id = $2
+          RETURNING id, nome, ativo, show_in_pre_appointment, created_at, updated_at
+        `,
+        [visible, id]
+      );
+
+      if (updated.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Funcao nao encontrada' });
+      }
+
+      return res.json({
+        success: true,
+        role: mapRoleRow(updated.rows[0]),
+      });
+    } catch (error) {
+      console.error('[settings][roles][PATCH visibility] erro ao atualizar visibilidade:', {
+        code: error?.code,
+        message: error?.message,
+        stack: error?.stack,
+      });
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao atualizar visibilidade no pre-agendamento',
+      });
+    }
+  }
+);
+
+router.delete('/professional-roles/:id', authorize('configuracoes', 'edit'), async (req, res) => {
+  const id = parseRoleId(req.params?.id);
+  if (!id) {
+    return res.status(400).json({ success: false, message: 'id invalido' });
+  }
+
+  const client = await pool.connect();
+  let transactionStarted = false;
+  try {
+    await ensureProfessionalRolesSchema();
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const roleResult = await client.query(
+      `
+        SELECT id, nome, ativo, show_in_pre_appointment, created_at, updated_at
+        FROM public.professional_roles
+        WHERE id = $1
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [id]
+    );
+
+    if (roleResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Funcao nao encontrada' });
+    }
+
+    const usageResult = await client.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM public.professionals
+        WHERE role_id = $1
+      `,
+      [id]
+    );
+    const linkedProfessionals = Number(usageResult.rows[0]?.total || 0);
+    if (linkedProfessionals > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        code: 'role_in_use',
+        linked_professionals: linkedProfessionals,
+        message:
+          'Funcao vinculada a profissionais e nao pode ser excluida com seguranca. Inative a funcao para manter o historico.',
+      });
+    }
+
+    const deleted = await client.query(
+      `
+        DELETE FROM public.professional_roles
+        WHERE id = $1
+        RETURNING id, nome, ativo, show_in_pre_appointment, created_at, updated_at
+      `,
+      [id]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      role: mapRoleRow(deleted.rows[0]),
+    });
+  } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK');
+    }
+    console.error('[settings][roles][DELETE] erro ao excluir funcao:', {
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return res.status(500).json({ success: false, message: 'Erro ao excluir funcao profissional' });
+  } finally {
+    client.release();
   }
 });
 

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Pencil, RefreshCcw, Save, X } from "lucide-react";
+import { Loader2, Pencil, RefreshCcw, Save, Trash2, X } from "lucide-react";
 
 interface ProfessionalRolesSettingsSectionProps {
   canEdit?: boolean;
@@ -27,6 +27,7 @@ export default function ProfessionalRolesSettingsSection({
   const [error, setError] = useState<string | null>(null);
 
   const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleShowInPreAppointment, setNewRoleShowInPreAppointment] = useState(true);
   const [creating, setCreating] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
@@ -62,13 +63,17 @@ export default function ProfessionalRolesSettingsSection({
 
     try {
       setCreating(true);
-      const response = await apiService.createProfessionalRole(nome);
+      const response = await apiService.createProfessionalRole({
+        nome,
+        show_in_pre_appointment: newRoleShowInPreAppointment,
+      });
       if (!response.success || !response.role) {
         throw new Error(response.message || "Nao foi possivel criar a funcao");
       }
 
       setRoles((prev) => sortRoles([...prev, response.role!]));
       setNewRoleName("");
+      setNewRoleShowInPreAppointment(true);
       toast({
         title: "Funcao criada",
         description: `A funcao "${response.role.nome}" foi adicionada.`,
@@ -90,7 +95,7 @@ export default function ProfessionalRolesSettingsSection({
 
     try {
       setUpdatingId(roleId);
-      const response = await apiService.updateProfessionalRole(roleId, nome);
+      const response = await apiService.updateProfessionalRole(roleId, { nome });
       if (!response.success || !response.role) {
         throw new Error(response.message || "Nao foi possivel editar a funcao");
       }
@@ -102,7 +107,7 @@ export default function ProfessionalRolesSettingsSection({
       setEditingRoleName("");
       toast({
         title: "Funcao atualizada",
-        description: "Nome da funcao atualizado com sucesso.",
+        description: "Funcao atualizada com sucesso.",
       });
     } catch (err) {
       toast({
@@ -137,6 +142,64 @@ export default function ProfessionalRolesSettingsSection({
     }
   }
 
+  async function handleTogglePreAppointmentVisibility(role: ProfessionalRole, nextVisible: boolean) {
+    try {
+      setUpdatingId(role.id);
+      const response = await apiService.setProfessionalRolePreAppointmentVisibility(
+        role.id,
+        nextVisible
+      );
+      if (!response.success || !response.role) {
+        throw new Error(response.message || "Nao foi possivel atualizar a visibilidade");
+      }
+
+      setRoles((prev) =>
+        sortRoles(prev.map((item) => (item.id === role.id ? response.role! : item)))
+      );
+    } catch (err) {
+      toast({
+        title: "Erro ao atualizar visibilidade",
+        description: err instanceof Error ? err.message : "Nao foi possivel atualizar a visibilidade.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function handleDeleteRole(role: ProfessionalRole) {
+    const confirmed = window.confirm(
+      `Deseja excluir a funcao "${role.nome}"? Esta acao e permanente.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setUpdatingId(role.id);
+      const response = await apiService.deleteProfessionalRole(role.id);
+      if (!response.success) {
+        throw new Error(response.message || "Nao foi possivel excluir a funcao");
+      }
+
+      setRoles((prev) => prev.filter((item) => item.id !== role.id));
+      if (editingRoleId === role.id) {
+        setEditingRoleId(null);
+        setEditingRoleName("");
+      }
+      toast({
+        title: "Funcao excluida",
+        description: `A funcao "${role.nome}" foi removida.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Nao foi possivel excluir",
+        description: err instanceof Error ? err.message : "Nao foi possivel excluir a funcao.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -154,22 +217,32 @@ export default function ProfessionalRolesSettingsSection({
         </div>
 
         {canEdit && (
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              placeholder="Nova funcao (ex.: Psicologo)"
-              value={newRoleName}
-              onChange={(e) => setNewRoleName(e.target.value)}
-              disabled={creating}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleCreateRole();
-                }
-              }}
-            />
-            <Button type="button" onClick={() => void handleCreateRole()} disabled={creating || !newRoleName.trim()}>
-              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adicionar"}
-            </Button>
+          <div className="rounded-md border p-3">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder="Nova funcao (ex.: Psicologo)"
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                disabled={creating}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleCreateRole();
+                  }
+                }}
+              />
+              <Button type="button" onClick={() => void handleCreateRole()} disabled={creating || !newRoleName.trim()}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adicionar funcao"}
+              </Button>
+            </div>
+            <label className="mt-3 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+              <span>Aparecer em Servicos desejados (Pre-Agendamento)</span>
+              <Switch
+                checked={newRoleShowInPreAppointment}
+                onCheckedChange={setNewRoleShowInPreAppointment}
+                disabled={creating}
+              />
+            </label>
           </div>
         )}
 
@@ -202,6 +275,7 @@ export default function ProfessionalRolesSettingsSection({
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Pre-Agendamento</TableHead>
                   <TableHead>Criado em</TableHead>
                   <TableHead className="text-right">Acoes</TableHead>
                 </TableRow>
@@ -228,6 +302,20 @@ export default function ProfessionalRolesSettingsSection({
                         <Badge variant={role.ativo ? "default" : "outline"}>
                           {role.ativo ? "Ativo" : "Inativo"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={role.show_in_pre_appointment}
+                            onCheckedChange={(checked) => {
+                              void handleTogglePreAppointmentVisibility(role, checked);
+                            }}
+                            disabled={!canEdit || isBusy}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {role.show_in_pre_appointment ? "Exibido" : "Oculto"}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {role.created_at ? new Date(role.created_at).toLocaleDateString("pt-BR") : "-"}
@@ -275,6 +363,18 @@ export default function ProfessionalRolesSettingsSection({
                                 </Button>
                               )}
                             </>
+                          )}
+
+                          {canEdit && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => void handleDeleteRole(role)}
+                              disabled={isBusy}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           )}
 
                           <Switch

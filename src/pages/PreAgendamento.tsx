@@ -97,7 +97,9 @@ export default function PreAgendamento() {
     const loadServices = async () => {
       try {
         setLoadingServices(true);
-        const response = await fetch(`${API_BASE_URL}/services?active=true`);
+        const response = await fetch(
+          `${API_BASE_URL}/services?active=true&pre_appointment=true`
+        );
         const payload = (await response.json()) as ServicesResponse;
         if (!response.ok || payload.success !== true || !Array.isArray(payload.services)) {
           throw new Error("Nao foi possivel carregar os servicos ativos.");
