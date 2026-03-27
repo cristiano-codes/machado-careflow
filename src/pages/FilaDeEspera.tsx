@@ -14,7 +14,12 @@ import { getServiceLabel } from "@/utils/serviceLabels";
 
 type ServiceOption = { id: string; name: string };
 type ServicesResponse = { success?: boolean; services?: ServiceOption[] };
-type PreAppointmentResponse = { success?: boolean; message?: string; pre_appointment_id?: string | null };
+type WaitingListResponse = {
+  success?: boolean;
+  message?: string;
+  pre_appointment_id?: string | null;
+  fila_espera_id?: string | null;
+};
 
 type FormState = {
   name: string;
@@ -77,7 +82,7 @@ function toOptional(value: string) {
 
 function buildPatientNotes(form: FormState, preAppointmentId: string | null) {
   const lines: string[] = [];
-  if (preAppointmentId) lines.push(`Origem: pre-agendamento #${preAppointmentId}`);
+  if (preAppointmentId) lines.push(`Origem: fila de espera #${preAppointmentId}`);
   if (toOptional(form.responsible_name)) lines.push(`Responsavel principal: ${form.responsible_name.trim()}`);
   if (toOptional(form.referred_by)) lines.push(`Encaminhamento inicial: ${form.referred_by}`);
   if (form.has_report && toOptional(form.cid)) lines.push(`CID informado na recepcao: ${form.cid.trim()}`);
@@ -85,7 +90,7 @@ function buildPatientNotes(form: FormState, preAppointmentId: string | null) {
   return lines.length > 0 ? lines.join("\n") : null;
 }
 
-export default function PreAgendamento() {
+export default function FilaDeEspera() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
@@ -98,7 +103,7 @@ export default function PreAgendamento() {
       try {
         setLoadingServices(true);
         const response = await fetch(
-          `${API_BASE_URL}/services?active=true&pre_appointment=true`
+          `${API_BASE_URL}/services?active=true&pre_appointment=true&context=fila-espera`
         );
         const payload = (await response.json()) as ServicesResponse;
         if (!response.ok || payload.success !== true || !Array.isArray(payload.services)) {
@@ -147,7 +152,7 @@ export default function PreAgendamento() {
     try {
       setSubmitting(true);
 
-      const preAppointmentResponse = await fetch(`${API_BASE_URL}/pre-appointments`, {
+      const waitingListResponse = await fetch(`${API_BASE_URL}/fila-espera`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -172,13 +177,15 @@ export default function PreAgendamento() {
         }),
       });
 
-      const preAppointmentPayload =
-        (await preAppointmentResponse.json().catch(() => ({}))) as PreAppointmentResponse;
-      if (!preAppointmentResponse.ok || preAppointmentPayload.success !== true) {
-        throw new Error(preAppointmentPayload.message || "Nao foi possivel registrar pre-agendamento.");
+      const waitingListPayload =
+        (await waitingListResponse.json().catch(() => ({}))) as WaitingListResponse;
+      if (!waitingListResponse.ok || waitingListPayload.success !== true) {
+        throw new Error(waitingListPayload.message || "Nao foi possivel registrar entrada na fila de espera.");
       }
 
-      const preAppointmentId = toOptional(preAppointmentPayload.pre_appointment_id || "");
+      const preAppointmentId = toOptional(
+        waitingListPayload.fila_espera_id || waitingListPayload.pre_appointment_id || ""
+      );
       const patientPayload = {
         name: form.name.trim(),
         phone: form.phone.trim(),
@@ -208,7 +215,7 @@ export default function PreAgendamento() {
           typedError.requires_link_confirmation
         ) {
           const shouldLink = window.confirm(
-            `Ja existe cadastro da crianca (ID ${duplicateId}). Deseja vincular este pre-agendamento ao cadastro existente?`
+            `Ja existe cadastro da crianca (ID ${duplicateId}). Deseja vincular este registro da fila de espera ao cadastro existente?`
           );
 
           if (!shouldLink) {
@@ -226,7 +233,7 @@ export default function PreAgendamento() {
           if (!linked.success || !linked.paciente?.id) {
             throw new Error(
               linked.message ||
-                "Nao foi possivel vincular o pre-agendamento ao cadastro existente."
+                "Nao foi possivel vincular o registro da fila de espera ao cadastro existente."
             );
           }
         } else {
@@ -255,7 +262,7 @@ export default function PreAgendamento() {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Pre-Agendamento / Recepcao</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Fila de Espera</h1>
         <p className="text-sm text-muted-foreground">
           Primeiro contato, cadastro basico e insercao inicial na fila. A operacao do Servico
           Social acontece na pagina dedicada de Triagem Social.

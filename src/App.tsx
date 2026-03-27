@@ -12,7 +12,7 @@ import { AGENDA_READ_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
-import PreAgendamento from "./pages/PreAgendamento";
+import FilaDeEspera from "./pages/FilaDeEspera";
 import ConsultarSolicitacao from "./pages/ConsultarSolicitacao";
 import Agenda from "./pages/Agenda";
 import PreCadastro from "./pages/PreCadastro";
@@ -73,15 +73,18 @@ const AppContent = () => {
         <Route path="/trocar-senha-obrigatoria" element={<TrocarSenhaObrigatoria />} />
         <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route
-          path="/pre-agendamento"
+          path="/fila-de-espera"
           element={
             <ProtectedRoute>
-              <PermissionProtectedRoute module="pre_agendamento" permission="view">
-                <PreAgendamento />
+              <PermissionProtectedRoute
+                requiredAnyScopes={["fila_espera:view", "pre_agendamento:view"]}
+              >
+                <FilaDeEspera />
               </PermissionProtectedRoute>
             </ProtectedRoute>
           }
         />
+        <Route path="/pre-agendamento" element={<Navigate to="/fila-de-espera" replace />} />
         <Route
           path="/triagem-social"
           element={

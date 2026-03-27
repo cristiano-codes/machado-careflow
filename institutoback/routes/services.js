@@ -155,7 +155,7 @@ router.get('/', async (req, res) => {
   const preAppointmentOnly =
     isTruthy(req.query?.pre_appointment) ||
     isTruthy(req.query?.pre_appointment_only) ||
-    ['pre_appointment', 'pre-agendamento', 'preagendamento'].includes(context);
+    ['pre_appointment', 'pre-agendamento', 'preagendamento', 'fila-espera', 'fila_espera'].includes(context);
 
   try {
     if (preAppointmentOnly) {
@@ -169,7 +169,7 @@ router.get('/', async (req, res) => {
           throw error;
         }
         console.warn(
-          '[services][GET] filtro de pre-agendamento indisponivel; aplicando fallback do catalogo ativo.',
+          '[services][GET] filtro de fila de espera indisponivel; aplicando fallback do catalogo ativo.',
           {
             code: error?.code,
             message: error?.message,

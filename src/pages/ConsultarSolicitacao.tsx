@@ -79,7 +79,7 @@ export default function ConsultarSolicitacao() {
       params.set("date_of_birth", dateOfBirth);
 
       const response = await fetch(
-        `${API_BASE_URL}/pre-appointments/public-search?${params.toString()}`
+        `${API_BASE_URL}/fila-espera/public-search?${params.toString()}`
       );
       const data = (await response.json().catch(() => ({}))) as SearchResponse;
 

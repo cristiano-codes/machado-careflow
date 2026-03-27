@@ -141,7 +141,7 @@ function buildInitialNotes(
 
   const sourceId = toOptionalTrimmed(sourcePreAppointmentId || "");
   if (sourceId) {
-    lines.push(`Origem: pre-agendamento #${sourceId}`);
+    lines.push(`Origem: fila de espera #${sourceId}`);
   }
 
   const responsibleName = toOptionalTrimmed(form.responsible_name);
@@ -212,7 +212,7 @@ export default function PreCadastro() {
 
   const validateForm = () => {
     if (entryMode === "import" && !selectedPreAppointment?.id) {
-      throw new Error("Selecione um pre-agendamento para importar.");
+      throw new Error("Selecione um registro da fila de espera para importar.");
     }
 
     if (!form.child_name.trim()) {
@@ -248,7 +248,7 @@ export default function PreCadastro() {
         description:
           error instanceof Error
             ? error.message
-            : "Nao foi possivel buscar pre-agendamentos elegiveis.",
+            : "Nao foi possivel buscar registros elegiveis da fila de espera.",
         variant: "destructive",
       });
     } finally {
@@ -273,7 +273,7 @@ export default function PreCadastro() {
       setForm(mapPreAppointmentToPreCadastroForm(record));
       toast({
         title: "Dados importados",
-        description: `Formulario preenchido com o pre-agendamento #${record.id}.`,
+        description: `Formulario preenchido com o registro da fila de espera #${record.id}.`,
       });
     } catch (error) {
       toast({
@@ -281,7 +281,7 @@ export default function PreCadastro() {
         description:
           error instanceof Error
             ? error.message
-            : "Nao foi possivel importar os dados do pre-agendamento.",
+            : "Nao foi possivel importar os dados da fila de espera.",
         variant: "destructive",
       });
     } finally {
@@ -369,7 +369,7 @@ export default function PreCadastro() {
         setForm(mapPreAppointmentToPreCadastroForm(record));
         toast({
           title: "Dados importados",
-          description: `Formulario preenchido a partir da fila de triagem (pre-agendamento #${record.id}).`,
+          description: `Formulario preenchido a partir da fila de triagem (fila de espera #${record.id}).`,
         });
       } catch (error) {
         if (!active) return;
@@ -409,13 +409,13 @@ export default function PreCadastro() {
 
     if (response.linked_existing_patient) {
       toast({
-        title: "Pre-agendamento convertido",
+        title: "Fila de espera convertida",
         description: `Solicitacao vinculada ao cadastro existente (ID ${patientId}).`,
       });
     } else if (sourcePreAppointmentId) {
       toast({
         title: "Pre-cadastro salvo",
-        description: `Cadastro principal criado e pre-agendamento convertido (ID ${patientId}).`,
+        description: `Cadastro principal criado e registro da fila de espera convertido (ID ${patientId}).`,
       });
     } else {
       toast({
@@ -509,7 +509,7 @@ export default function PreCadastro() {
         typedError.requires_link_confirmation
       ) {
         const shouldLinkExisting = window.confirm(
-          `Ja existe um cadastro para esta crianca (ID ${duplicateId}). Deseja vincular este pre-agendamento ao cadastro existente?`
+          `Ja existe um cadastro para esta crianca (ID ${duplicateId}). Deseja vincular este registro da fila de espera ao cadastro existente?`
         );
 
         if (!shouldLinkExisting) {
@@ -633,7 +633,7 @@ export default function PreCadastro() {
               className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm"
             >
               <RadioGroupItem id="entry-mode-import" value="import" />
-              <span>Importar do pre-agendamento</span>
+              <span>Importar da fila de espera</span>
             </label>
           </RadioGroup>
         </CardContent>
@@ -644,7 +644,7 @@ export default function PreCadastro() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Search className="h-5 w-5" />
-              Buscar pre-agendamento
+              Buscar fila de espera
             </CardTitle>
             <CardDescription>
               Busque por nome da crianca, responsavel, telefone, CPF, data ou termo livre.
@@ -741,7 +741,7 @@ export default function PreCadastro() {
             <div className="space-y-2">
               {preAppointments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Nenhum pre-agendamento carregado. Use a busca para localizar registros pendentes.
+                  Nenhum registro da fila de espera carregado. Use a busca para localizar pendencias.
                 </p>
               ) : (
                 preAppointments.map((item) => (
@@ -779,7 +779,7 @@ export default function PreCadastro() {
           <Info className="h-4 w-4" />
           <AlertTitle className="flex flex-wrap items-center gap-2">
             Origem da ficha
-            <Badge variant="secondary">Pre-Agendamento #{selectedPreAppointment.id}</Badge>
+            <Badge variant="secondary">Fila de Espera #{selectedPreAppointment.id}</Badge>
           </AlertTitle>
           <AlertDescription>
             Dados carregados a partir da solicitacao selecionada. Revise e edite antes de salvar.

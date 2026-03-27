@@ -1393,7 +1393,7 @@ router.patch(
       });
       return res.status(500).json({
         success: false,
-        message: 'Erro ao atualizar visibilidade no pre-agendamento',
+        message: 'Erro ao atualizar visibilidade na fila de espera',
       });
     }
   }

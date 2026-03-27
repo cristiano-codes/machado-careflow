@@ -793,6 +793,8 @@ function normalizePreAppointmentList(raw: unknown): PreAppointmentImportRecord[]
     const payload = raw as Record<string, unknown>;
     const list = Array.isArray(payload.preAppointments)
       ? payload.preAppointments
+      : Array.isArray(payload.filaEspera)
+        ? payload.filaEspera
       : Array.isArray(payload.items)
         ? payload.items
         : [];
@@ -2447,7 +2449,7 @@ class ApiService {
       message?: string;
     }>(
       response,
-      "Falha ao atualizar visibilidade da funcao no pre-agendamento"
+      "Falha ao atualizar visibilidade da funcao na fila de espera"
     );
   }
 
@@ -2975,13 +2977,13 @@ class ApiService {
     }
 
     const query = params.toString().length > 0 ? `?${params.toString()}` : "";
-    const response = await fetch(`${API_BASE_URL}/pre-appointments/eligible${query}`, {
+    const response = await fetch(`${API_BASE_URL}/fila-espera/eligible${query}`, {
       headers: this.getAuthHeaders(),
     });
 
     const raw = await this.parseResponseOrThrow<unknown>(
       response,
-      "Falha ao buscar pre-agendamentos elegiveis"
+      "Falha ao buscar registros elegiveis da fila de espera"
     );
 
     return normalizePreAppointmentList(raw);
@@ -2992,7 +2994,7 @@ class ApiService {
     if (!normalizedId) return null;
 
     const response = await fetch(
-      `${API_BASE_URL}/pre-appointments/${encodeURIComponent(normalizedId)}`,
+      `${API_BASE_URL}/fila-espera/${encodeURIComponent(normalizedId)}`,
       {
         headers: this.getAuthHeaders(),
       }
@@ -3000,7 +3002,7 @@ class ApiService {
 
     const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
       response,
-      "Falha ao carregar pre-agendamento"
+      "Falha ao carregar registro da fila de espera"
     );
 
     return normalizePreAppointmentRecord(raw.preAppointment ?? null);
@@ -3051,13 +3053,13 @@ class ApiService {
     }
 
     const query = params.toString().length > 0 ? `?${params.toString()}` : "";
-    const response = await fetch(`${API_BASE_URL}/pre-appointments/triage-queue${query}`, {
+    const response = await fetch(`${API_BASE_URL}/fila-espera/triage-queue${query}`, {
       headers: this.getAuthHeaders(),
     });
 
     const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
       response,
-      "Falha ao carregar fila de triagem de pre-agendamento"
+      "Falha ao carregar fila de triagem da fila de espera"
     );
 
     const rawItems = Array.isArray(raw.items) ? raw.items : [];
@@ -3110,7 +3112,7 @@ class ApiService {
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/pre-appointments/${encodeURIComponent(normalizedId)}/triage`,
+      `${API_BASE_URL}/fila-espera/${encodeURIComponent(normalizedId)}/triage`,
       {
         method: "PATCH",
         headers: this.getAuthHeaders(),
@@ -3120,7 +3122,7 @@ class ApiService {
 
     const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
       response,
-      "Falha ao atualizar triagem do pre-agendamento"
+      "Falha ao atualizar triagem da fila de espera"
     );
 
     return normalizePreAppointmentQueueRecord(raw.preAppointment ?? null);

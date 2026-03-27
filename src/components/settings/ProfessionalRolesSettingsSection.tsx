@@ -236,7 +236,7 @@ export default function ProfessionalRolesSettingsSection({
               </Button>
             </div>
             <label className="mt-3 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-              <span>Aparecer em Servicos desejados (Pre-Agendamento)</span>
+              <span>Aparecer em Servicos desejados (Fila de Espera)</span>
               <Switch
                 checked={newRoleShowInPreAppointment}
                 onCheckedChange={setNewRoleShowInPreAppointment}
@@ -275,7 +275,7 @@ export default function ProfessionalRolesSettingsSection({
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Pre-Agendamento</TableHead>
+                  <TableHead>Fila de Espera</TableHead>
                   <TableHead>Criado em</TableHead>
                   <TableHead className="text-right">Acoes</TableHead>
                 </TableRow>

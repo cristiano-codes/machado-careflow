@@ -828,7 +828,7 @@ router.post('/', async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(404).json({
           success: false,
-          message: 'Pre-agendamento de origem nao encontrado.',
+          message: 'Registro de origem da fila de espera nao encontrado.',
         });
       }
 
@@ -840,7 +840,7 @@ router.post('/', async (req, res) => {
           source_pre_appointment_id: sourcePreAppointmentId,
           converted_to_patient_id:
             normalizeIdAsText(sourcePreAppointment.converted_to_patient_id) || null,
-          message: 'Este pre-agendamento ja foi convertido e nao pode gerar novo cadastro.',
+          message: 'Este registro da fila de espera ja foi convertido e nao pode gerar novo cadastro.',
         });
       }
     }
@@ -868,7 +868,7 @@ router.post('/', async (req, res) => {
             source_pre_appointment_id: sourcePreAppointmentId,
             requires_link_confirmation: true,
             message:
-              'Assistido ja cadastrado (CPF ou nome + data de nascimento). Confirme a vinculacao para converter o pre-agendamento sem duplicar.',
+              'Assistido ja cadastrado (CPF ou nome + data de nascimento). Confirme a vinculacao para converter o registro da fila de espera sem duplicar.',
           });
         }
 
@@ -900,7 +900,7 @@ router.post('/', async (req, res) => {
             converted_to_patient_id: duplicateIdText,
             linked_existing_patient: true,
           },
-          message: 'Pre-agendamento convertido com vinculacao ao cadastro ja existente.',
+          message: 'Registro da fila de espera convertido com vinculacao ao cadastro ja existente.',
         });
       }
 

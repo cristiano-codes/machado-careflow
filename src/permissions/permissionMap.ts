@@ -56,7 +56,8 @@ const MODULE_ALIASES: Record<string, string[]> = {
   settings: ["settings", "configuracoes"],
   usuarios: ["usuarios", "users"],
   users: ["users", "usuarios"],
-  pre_agendamento: ["pre_agendamento", "preagendamento"],
+  fila_espera: ["fila_espera", "filaespera", "pre_agendamento", "preagendamento"],
+  pre_agendamento: ["pre_agendamento", "preagendamento", "fila_espera", "filaespera"],
   pre_cadastro: ["pre_cadastro", "precadastro"],
   entrevistas: [
     "entrevistas",
@@ -132,11 +133,11 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
     requiredAnyScopes: ["dashboard:view"],
   },
   {
-    id: "pre_agendamento",
-    title: "Pre-Agendamento",
-    url: "/pre-agendamento",
+    id: "fila_espera",
+    title: "Fila de Espera",
+    url: "/fila-de-espera",
     icon: MessageSquare,
-    requiredAnyScopes: ["pre_agendamento:view"],
+    requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"],
   },
   {
     id: "triagem_social",
@@ -247,7 +248,8 @@ export const ALLOW_MANAGEMENT_WITHOUT_MAIN_MODULE = false;
 export const ROUTE_PERMISSION_MAP: RoutePermissionConfig[] = [
   { path: "/dashboard", requiredAnyScopes: ["dashboard:view"] },
   { path: "/agenda", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
-  { path: "/pre-agendamento", requiredAnyScopes: ["pre_agendamento:view"] },
+  { path: "/fila-de-espera", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },
+  { path: "/pre-agendamento", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },
   { path: "/triagem-social", requiredAnyScopes: ["triagem_social:view"] },
   { path: "/pre-cadastro", requiredAnyScopes: ["pre_cadastro:view"] },
   { path: "/entrevistas", requiredAnyScopes: ["entrevistas:view"] },

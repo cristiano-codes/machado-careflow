@@ -26,7 +26,8 @@ institutoback/
 |   |-- jobVacancies.js
 |   |-- pacientes.js
 |   |-- permissions.js
-|   |-- preAppointments.js
+|   |-- filaEspera.js
+|   |-- preAppointments.js (alias legado)
 |   |-- profissionais.js
 |   |-- services.js
 |   |-- settings.js
@@ -112,7 +113,8 @@ Prefixo: `/api`
 - `/stats`
 - `/activities`
 - `/services`
-- `/pre-appointments`
+- `/fila-espera` (canonica)
+- `/pre-appointments` (alias legado temporario)
 - `/job-vacancies`
 - `/job-candidates`
 - `/profissionais`
@@ -161,8 +163,10 @@ Prefixo: `/api`
 - `GET /api/stats`
 - `GET /api/activities`
 - `GET /api/services`
-- `POST /api/pre-appointments`
-- `GET /api/pre-appointments`
+- `POST /api/fila-espera`
+- `GET /api/fila-espera`
+- `POST /api/pre-appointments` (alias legado)
+- `GET /api/pre-appointments` (alias legado)
 - `GET /api/job-vacancies`
 - `GET /api/job-candidates`
 - `GET /api/settings`

@@ -41,7 +41,7 @@ Paginas em `src/pages`:
 - `Index`
 - `Dashboard`
 - `Profile`
-- `PreAgendamento`
+- `FilaDeEspera`
 - `PreCadastro`
 - `Agenda`
 - `Entrevistas`
@@ -255,7 +255,8 @@ Prefixo: `/api`
 - `/stats` - resumo institucional da jornada por `status_jornada` para o dashboard
 - `/activities`
 - `/services`
-- `/pre-appointments`
+- `/fila-espera` (canonica)
+- `/pre-appointments` (alias legado temporario)
 - `/job-vacancies`
 - `/job-candidates`
 - `/profissionais`
