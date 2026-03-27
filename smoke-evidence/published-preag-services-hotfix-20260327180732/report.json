@@ -1,0 +1,31 @@
+{
+  "runId": "20260327180732",
+  "startedAt": "2026-03-27T18:07:32.907Z",
+  "urls": {
+    "frontend": "https://home-production-7dda.up.railway.app",
+    "backend": "https://friendly-insight-production.up.railway.app/api"
+  },
+  "checks": [
+    {
+      "name": "login API publicado 200",
+      "ok": false,
+      "details": {
+        "status": 401
+      }
+    }
+  ],
+  "api": [
+    {
+      "method": "POST",
+      "url": "https://friendly-insight-production.up.railway.app/api/auth/login",
+      "status": 401
+    }
+  ],
+  "screenshots": {},
+  "status": "failed",
+  "error": {
+    "message": "login API publicado 200 | {\"status\":401}",
+    "stack": "Error: login API publicado 200 | {\"status\":401}\n    at pushCheck (C:\\projeto\\machado-careflow\\temp_homolog_published_preag_services_hotfix.cjs:36:11)\n    at main (C:\\projeto\\machado-careflow\\temp_homolog_published_preag_services_hotfix.cjs:270:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)"
+  },
+  "finishedAt": "2026-03-27T18:07:34.076Z"
+}
