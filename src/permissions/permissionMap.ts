@@ -248,6 +248,7 @@ export const ALLOW_MANAGEMENT_WITHOUT_MAIN_MODULE = false;
 export const ROUTE_PERMISSION_MAP: RoutePermissionConfig[] = [
   { path: "/dashboard", requiredAnyScopes: ["dashboard:view"] },
   { path: "/agenda", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
+  { path: "/agenda-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/fila-de-espera", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },
   { path: "/pre-agendamento", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },
   { path: "/triagem-social", requiredAnyScopes: ["triagem_social:view"] },

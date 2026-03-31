@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import FilaDeEspera from "./pages/FilaDeEspera";
 import ConsultarSolicitacao from "./pages/ConsultarSolicitacao";
 import Agenda from "./pages/Agenda";
+import AgendaTeste from "./pages/AgendaTeste";
 import PreCadastro from "./pages/PreCadastro";
 import Entrevistas from "./pages/Entrevistas";
 import Avaliacoes from "./pages/Avaliacoes";
@@ -111,6 +112,18 @@ const AppContent = () => {
                 requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
               >
                 <Agenda />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agenda-teste"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <AgendaTeste />
               </PermissionProtectedRoute>
             </ProtectedRoute>
           }
