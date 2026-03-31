@@ -16,6 +16,11 @@ import FilaDeEspera from "./pages/FilaDeEspera";
 import ConsultarSolicitacao from "./pages/ConsultarSolicitacao";
 import Agenda from "./pages/Agenda";
 import AgendaTeste from "./pages/AgendaTeste";
+import SalasTeste from "./pages/SalasTeste";
+import AtividadesTeste from "./pages/AtividadesTeste";
+import TurmasTeste from "./pages/TurmasTeste";
+import GradeTeste from "./pages/GradeTeste";
+import MatriculasTeste from "./pages/MatriculasTeste";
 import PreCadastro from "./pages/PreCadastro";
 import Entrevistas from "./pages/Entrevistas";
 import Avaliacoes from "./pages/Avaliacoes";
@@ -124,6 +129,78 @@ const AppContent = () => {
                 requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
               >
                 <AgendaTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/salas-teste"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <SalasTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/atividades-teste"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <AtividadesTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/turmas-teste"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <TurmasTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/grade-teste"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <GradeTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/alocacoes-teste"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <GradeTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/matriculas-teste"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <MatriculasTeste />
               </PermissionProtectedRoute>
             </ProtectedRoute>
           }
