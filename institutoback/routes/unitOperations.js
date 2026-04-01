@@ -328,13 +328,15 @@ async function fetchActivityById(client, activityId) {
   return result.rows[0] || null;
 }
 
-async function fetchClassById(client, classId) {
+async function fetchClassById(client, classId, options = {}) {
+  const shouldLock = options?.forUpdate === true;
   const result = await client.query(
     `
       SELECT id, unit_id, capacidade_maxima, data_inicio, data_termino
       FROM public.unit_classes
       WHERE id = $1
       LIMIT 1
+      ${shouldLock ? 'FOR UPDATE' : ''}
     `,
     [classId]
   );
@@ -1330,21 +1332,33 @@ router.post('/enrollments/upsert', authorizeEnrollmentsWrite, async (req, res) =
   }
 
   const client = await pool.connect();
+  let transactionStarted = false;
   try {
-    const classData = await fetchClassById(client, classId);
-    if (!classData) return toError(res, 404, 'Turma informada nao foi encontrada');
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const rollbackAndError = async (statusCode, message, extra = {}) => {
+      if (transactionStarted) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+      }
+      return toError(res, statusCode, message, extra);
+    };
+
+    const classData = await fetchClassById(client, classId, { forUpdate: true });
+    if (!classData) return rollbackAndError(404, 'Turma informada nao foi encontrada');
 
     const patient = await fetchPatientByTextId(client, studentId);
-    if (!patient) return toError(res, 404, 'Assistido informado nao foi encontrado');
+    if (!patient) return rollbackAndError(404, 'Assistido informado nao foi encontrado');
 
     if (classData.data_inicio && dataEntrada < classData.data_inicio) {
-      return toError(res, 400, 'Data de entrada nao pode ser anterior ao inicio da turma');
+      return rollbackAndError(400, 'Data de entrada nao pode ser anterior ao inicio da turma');
     }
     if (classData.data_termino && dataEntrada > classData.data_termino) {
-      return toError(res, 400, 'Data de entrada nao pode ser posterior ao termino da turma');
+      return rollbackAndError(400, 'Data de entrada nao pode ser posterior ao termino da turma');
     }
     if (classData.data_termino && dataSaida && dataSaida > classData.data_termino) {
-      return toError(res, 400, 'Data de saida nao pode ser posterior ao termino da turma');
+      return rollbackAndError(400, 'Data de saida nao pode ser posterior ao termino da turma');
     }
 
     const isActiveEnrollment = ['ativo', 'aguardando_vaga'].includes(status) && !dataSaida;
@@ -1365,7 +1379,7 @@ router.post('/enrollments/upsert', authorizeEnrollmentsWrite, async (req, res) =
       );
 
       if (duplicateEnrollmentResult.rows.length > 0) {
-        return toError(res, 409, 'Assistido ja possui matricula ativa/espera nesta turma', {
+        return rollbackAndError(409, 'Assistido ja possui matricula ativa/espera nesta turma', {
           code: 'duplicate_active_enrollment',
         });
       }
@@ -1386,8 +1400,7 @@ router.post('/enrollments/upsert', authorizeEnrollmentsWrite, async (req, res) =
       );
       const activeCount = Number(capacityResult.rows[0]?.ativos || 0);
       if (activeCount >= Number(classData.capacidade_maxima || 0)) {
-        return toError(
-          res,
+        return rollbackAndError(
           409,
           'Turma lotada para matricula ativa. Utilize aguardando_vaga ou ajuste capacidade.',
           { code: 'class_capacity_exceeded' }
@@ -1439,9 +1452,19 @@ router.post('/enrollments/upsert', authorizeEnrollmentsWrite, async (req, res) =
       ]
     );
 
+    await client.query('COMMIT');
+    transactionStarted = false;
+
     return res.json({ success: true, enrollment: mapEnrollmentRow(result.rows[0]) });
   } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK');
+
     if (error?.code === '23505') {
+      if (error?.constraint === 'idx_unit_class_enrollments_active_unique') {
+        return toError(res, 409, 'Assistido ja possui matricula ativa/espera nesta turma', {
+          code: 'duplicate_active_enrollment',
+        });
+      }
       return toError(res, 409, 'Conflito de unicidade ao salvar matricula', {
         code: 'enrollment_duplicate',
       });

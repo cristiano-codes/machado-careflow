@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { AgendaLabSyncBanner } from "@/features/agendaLab/components/AgendaLabSyncBanner";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
@@ -48,7 +49,7 @@ function createDraft(classId: string, studentId: string): EnrollmentDraft {
 
 export function EnrollmentsLabPage() {
   const { toast } = useToast();
-  const { classes, students, enrollments, classOccupancy, enrollmentConflicts, upsertEnrollment } = useAgendaLab();
+  const { classes, students, enrollments, classOccupancy, enrollmentConflicts, upsertEnrollment, isWriteEnabled } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("enrollments");
   const [classFilter, setClassFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
@@ -148,12 +149,14 @@ export function EnrollmentsLabPage() {
         title="Matriculas Teste"
         subtitle="Ambiente de homologacao para controle do vinculo aluno-turma com prioridade e alertas."
         actions={
-          <Button size="sm" className="h-9" onClick={openCreate}>
+          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova matricula
           </Button>
         }
       />
+
+      <AgendaLabSyncBanner />
 
       <FiltersHeaderRow
         summary={`${filtered.length} matriculas no recorte atual.`}
@@ -202,7 +205,7 @@ export function EnrollmentsLabPage() {
                           <TableCell>{item.dataEntrada || "-"}</TableCell>
                           <TableCell>{item.prioridade}</TableCell>
                           <TableCell>{conflict?.hasConflict ? <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700"><AlertTriangle className="h-3.5 w-3.5" />Conflito horario</span> : <span className="text-xs text-muted-foreground">Sem conflito</span>}</TableCell>
-                          <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => openEdit(item)}>Editar</Button></TableCell>
+                          <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(item)}>Editar</Button></TableCell>
                         </TableRow>
                       );
                     })
@@ -240,7 +243,7 @@ export function EnrollmentsLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

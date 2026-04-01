@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { AgendaLabSyncBanner } from "@/features/agendaLab/components/AgendaLabSyncBanner";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
@@ -53,7 +54,7 @@ function createDraft(): ActivityDraft {
 
 export function ActivitiesLabPage() {
   const { toast } = useToast();
-  const { activities, upsertActivity } = useAgendaLab();
+  const { activities, upsertActivity, isWriteEnabled } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("activities");
   const [statusFilter, setStatusFilter] = useState<ActivityStatus | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
@@ -130,12 +131,14 @@ export function ActivitiesLabPage() {
         title="Atividades Teste"
         subtitle="Ambiente de homologacao para cadastro de atividades, oficinas e servicos."
         actions={
-          <Button size="sm" className="h-9" onClick={openCreate}>
+          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova atividade
           </Button>
         }
       />
+
+      <AgendaLabSyncBanner />
 
       <div className="grid gap-3 md:grid-cols-3">
         <Card className="border-slate-200 shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Total</p><p className="text-2xl font-semibold">{indicators.total}</p></CardContent></Card>
@@ -196,7 +199,7 @@ export function ActivitiesLabPage() {
                     <TableCell>{activity.duracaoPadraoMinutos} min</TableCell>
                     <TableCell>{activity.modalidade}</TableCell>
                     <TableCell><Badge variant={statusToBadgeVariant(activity.status)}>{getActivityStatusLabel(activity.status)}</Badge></TableCell>
-                    <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => openEdit(activity)}>Editar</Button></TableCell>
+                    <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(activity)}>Editar</Button></TableCell>
                   </TableRow>
                 ))
               )}
@@ -227,7 +230,7 @@ export function ActivitiesLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

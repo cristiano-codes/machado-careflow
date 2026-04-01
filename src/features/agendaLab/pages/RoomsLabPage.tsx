@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { AgendaLabSyncBanner } from "@/features/agendaLab/components/AgendaLabSyncBanner";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
@@ -55,7 +56,7 @@ function createDraft(unitId: string): RoomDraft {
 
 export function RoomsLabPage() {
   const { toast } = useToast();
-  const { units, rooms, upsertRoom } = useAgendaLab();
+  const { units, rooms, upsertRoom, isWriteEnabled } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("rooms");
   const [unitFilter, setUnitFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<RoomStatus | "all">("all");
@@ -142,12 +143,14 @@ export function RoomsLabPage() {
         title="Salas Teste"
         subtitle="Ambiente de homologacao para cadastro e revisao das salas fisicas da unidade."
         actions={
-          <Button size="sm" className="h-9" onClick={openCreate}>
+          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova sala
           </Button>
         }
       />
+
+      <AgendaLabSyncBanner />
 
       <FiltersHeaderRow
         summary={`${filtered.length} salas no recorte atual.`}
@@ -203,7 +206,7 @@ export function RoomsLabPage() {
                     <TableCell>{room.tipo}</TableCell>
                     <TableCell>{room.capacidadeRecomendada}/{room.capacidadeTotal}</TableCell>
                     <TableCell><Badge variant={statusToBadgeVariant(room.status)}>{getRoomStatusLabel(room.status)}</Badge></TableCell>
-                    <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => openEdit(room)}>Editar</Button></TableCell>
+                    <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(room)}>Editar</Button></TableCell>
                   </TableRow>
                 ))
               )}
@@ -238,7 +241,7 @@ export function RoomsLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

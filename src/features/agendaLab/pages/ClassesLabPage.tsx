@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { AgendaLabSyncBanner } from "@/features/agendaLab/components/AgendaLabSyncBanner";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
@@ -56,7 +57,7 @@ function createDraft(unitId: string, activityId: string, professionalId: string)
 
 export function ClassesLabPage() {
   const { toast } = useToast();
-  const { units, activities, professionals, classes, classOccupancy, upsertClass } = useAgendaLab();
+  const { units, activities, professionals, classes, classOccupancy, upsertClass, isWriteEnabled } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("classes");
   const [unitFilter, setUnitFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<ClassStatus | "all">("all");
@@ -143,12 +144,14 @@ export function ClassesLabPage() {
         title="Turmas Teste"
         subtitle="Ambiente de homologacao para cadastro das turmas com capacidade e equipe responsavel."
         actions={
-          <Button size="sm" className="h-9" onClick={openCreate}>
+          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova turma
           </Button>
         }
       />
+
+      <AgendaLabSyncBanner />
 
       <FiltersHeaderRow
         summary={`${filtered.length} turmas no recorte atual.`}
@@ -212,7 +215,7 @@ export function ClassesLabPage() {
                       <TableCell>{professionals.find((professional) => professional.id === item.profissionalPrincipalId)?.nome || "-"}</TableCell>
                       <TableCell><p>{activeCount}/{item.capacidadeMaxima}</p><p className="text-xs text-muted-foreground">min {item.capacidadeMinima} | ideal {item.capacidadeIdeal}</p></TableCell>
                       <TableCell><Badge variant={statusToBadgeVariant(item.status)}>{getClassStatusLabel(item.status)}</Badge></TableCell>
-                      <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => openEdit(item)}>Editar</Button></TableCell>
+                      <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(item)}>Editar</Button></TableCell>
                     </TableRow>
                   );
                 })
@@ -250,7 +253,7 @@ export function ClassesLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

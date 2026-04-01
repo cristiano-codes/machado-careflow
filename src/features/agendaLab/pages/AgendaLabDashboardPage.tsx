@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { AgendaLabSyncBanner } from "@/features/agendaLab/components/AgendaLabSyncBanner";
 import { CalendarToolbar, type CalendarViewMode } from "@/features/agendaLab/components/CalendarToolbar";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { DayCalendarView } from "@/features/agendaLab/components/DayCalendarView";
@@ -104,6 +105,7 @@ export function AgendaLabDashboardPage() {
     enrollments,
     classOccupancy,
     allocationConflicts,
+    isWriteEnabled,
   } = useAgendaLab();
 
   const [calendarMode, setCalendarMode] = useState<CalendarViewMode>("week");
@@ -340,6 +342,7 @@ export function AgendaLabDashboardPage() {
         actions={
           <Button
             size="sm"
+            disabled={!isWriteEnabled}
             className="h-9"
             onClick={() => toast({ title: "Laboratorio", description: "Use Turmas Teste para cadastrar uma nova turma." })}
           >
@@ -348,6 +351,8 @@ export function AgendaLabDashboardPage() {
           </Button>
         }
       />
+
+      <AgendaLabSyncBanner />
 
       <CalendarToolbar
         mode={calendarMode}

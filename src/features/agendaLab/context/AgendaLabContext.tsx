@@ -1,9 +1,10 @@
-﻿import {
+import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -33,10 +34,9 @@ import {
   buildStudentScheduleConflictMap,
   countClassOccupancy,
 } from "@/features/agendaLab/utils/conflicts";
-import { clearLabStorage, readLabStorage, writeLabStorage } from "@/features/agendaLab/utils/storage";
 import { unitOperationsApi } from "@/features/agendaLab/services/unitOperationsApi";
 
-type AgendaLabDataSource = "api" | "fallback";
+type AgendaLabDataSource = "api" | "dev_fallback";
 
 type AgendaLabContextValue = {
   units: Unit[];
@@ -60,15 +60,26 @@ type AgendaLabContextValue = {
   isLoading: boolean;
   syncError: string | null;
   dataSource: AgendaLabDataSource;
+  isWriteEnabled: boolean;
+  devFallbackEnabled: boolean;
   refreshFromServer: () => Promise<void>;
 };
 
-type PersistedLabData = {
-  rooms?: Room[];
-  activities?: Activity[];
-  classes?: GroupClass[];
-  allocations?: Allocation[];
-  enrollments?: StudentEnrollment[];
+const DEV_LOCAL_FALLBACK_ENABLED =
+  import.meta.env.DEV &&
+  String(import.meta.env?.VITE_UNIT_OPS_DEV_LOCAL_FALLBACK || "false")
+    .trim()
+    .toLowerCase() === "true";
+
+const EMPTY_DATASET: LabDataset = {
+  units: [],
+  professionals: [],
+  students: [],
+  rooms: [],
+  activities: [],
+  classes: [],
+  allocations: [],
+  enrollments: [],
 };
 
 const AgendaLabContext = createContext<AgendaLabContextValue | undefined>(undefined);
@@ -81,63 +92,46 @@ function upsertById<T extends { id: string }>(items: T[], nextItem: T) {
   return clone;
 }
 
-function readFallbackDataset(persisted: PersistedLabData | null): LabDataset {
+function buildDevFallbackDataset(): LabDataset {
   return {
     units: DEFAULT_UNITS,
     professionals: DEFAULT_PROFESSIONALS,
     students: DEFAULT_STUDENTS,
-    rooms:
-      Array.isArray(persisted?.rooms) && persisted.rooms.length > 0
-        ? persisted.rooms
-        : DEFAULT_ROOMS,
-    activities:
-      Array.isArray(persisted?.activities) && persisted.activities.length > 0
-        ? persisted.activities
-        : DEFAULT_ACTIVITIES,
-    classes:
-      Array.isArray(persisted?.classes) && persisted.classes.length > 0
-        ? persisted.classes
-        : DEFAULT_CLASSES,
-    allocations:
-      Array.isArray(persisted?.allocations) && persisted.allocations.length > 0
-        ? persisted.allocations
-        : DEFAULT_ALLOCATIONS,
-    enrollments:
-      Array.isArray(persisted?.enrollments) && persisted.enrollments.length > 0
-        ? persisted.enrollments
-        : DEFAULT_ENROLLMENTS,
+    rooms: DEFAULT_ROOMS,
+    activities: DEFAULT_ACTIVITIES,
+    classes: DEFAULT_CLASSES,
+    allocations: DEFAULT_ALLOCATIONS,
+    enrollments: DEFAULT_ENROLLMENTS,
   };
 }
 
 function normalizeDataset(dataset: LabDataset): LabDataset {
   return {
-    units: dataset.units.length > 0 ? dataset.units : DEFAULT_UNITS,
-    professionals: dataset.professionals,
-    students: dataset.students,
-    rooms: dataset.rooms,
-    activities: dataset.activities,
-    classes: dataset.classes,
-    allocations: dataset.allocations,
-    enrollments: dataset.enrollments,
+    units: Array.isArray(dataset.units) ? dataset.units : [],
+    professionals: Array.isArray(dataset.professionals) ? dataset.professionals : [],
+    students: Array.isArray(dataset.students) ? dataset.students : [],
+    rooms: Array.isArray(dataset.rooms) ? dataset.rooms : [],
+    activities: Array.isArray(dataset.activities) ? dataset.activities : [],
+    classes: Array.isArray(dataset.classes) ? dataset.classes : [],
+    allocations: Array.isArray(dataset.allocations) ? dataset.allocations : [],
+    enrollments: Array.isArray(dataset.enrollments) ? dataset.enrollments : [],
   };
 }
 
 export function AgendaLabProvider({ children }: { children: ReactNode }) {
-  const persisted = useMemo(() => readLabStorage(), []);
-  const fallbackDataset = useMemo(() => readFallbackDataset(persisted), [persisted]);
-
-  const [units, setUnits] = useState<Unit[]>(fallbackDataset.units);
-  const [professionals, setProfessionals] = useState<Professional[]>(fallbackDataset.professionals);
-  const [students, setStudents] = useState<Student[]>(fallbackDataset.students);
-  const [rooms, setRooms] = useState<Room[]>(fallbackDataset.rooms);
-  const [activities, setActivities] = useState<Activity[]>(fallbackDataset.activities);
-  const [classes, setClasses] = useState<GroupClass[]>(fallbackDataset.classes);
-  const [allocations, setAllocations] = useState<Allocation[]>(fallbackDataset.allocations);
-  const [enrollments, setEnrollments] = useState<StudentEnrollment[]>(fallbackDataset.enrollments);
+  const [units, setUnits] = useState<Unit[]>(EMPTY_DATASET.units);
+  const [professionals, setProfessionals] = useState<Professional[]>(EMPTY_DATASET.professionals);
+  const [students, setStudents] = useState<Student[]>(EMPTY_DATASET.students);
+  const [rooms, setRooms] = useState<Room[]>(EMPTY_DATASET.rooms);
+  const [activities, setActivities] = useState<Activity[]>(EMPTY_DATASET.activities);
+  const [classes, setClasses] = useState<GroupClass[]>(EMPTY_DATASET.classes);
+  const [allocations, setAllocations] = useState<Allocation[]>(EMPTY_DATASET.allocations);
+  const [enrollments, setEnrollments] = useState<StudentEnrollment[]>(EMPTY_DATASET.enrollments);
 
   const [isLoading, setIsLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<AgendaLabDataSource>("fallback");
+  const [dataSource, setDataSource] = useState<AgendaLabDataSource>("api");
+  const hasSyncedOnceRef = useRef(false);
 
   const applyDataset = useCallback((dataset: LabDataset) => {
     const normalized = normalizeDataset(dataset);
@@ -158,11 +152,21 @@ export function AgendaLabProvider({ children }: { children: ReactNode }) {
       applyDataset(dataset);
       setDataSource("api");
       setSyncError(null);
+      hasSyncedOnceRef.current = true;
     } catch (error) {
-      const fallback = readFallbackDataset(readLabStorage());
-      applyDataset(fallback);
-      setDataSource("fallback");
-      setSyncError(error instanceof Error ? error.message : "Falha ao sincronizar dados operacionais");
+      const message =
+        error instanceof Error ? error.message : "Falha ao sincronizar dados operacionais";
+
+      if (DEV_LOCAL_FALLBACK_ENABLED && !hasSyncedOnceRef.current) {
+        applyDataset(buildDevFallbackDataset());
+        setDataSource("dev_fallback");
+        setSyncError(
+          `${message}. Fallback local habilitado apenas para desenvolvimento e em modo somente leitura.`
+        );
+      } else {
+        setDataSource("api");
+        setSyncError(message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -172,116 +176,83 @@ export function AgendaLabProvider({ children }: { children: ReactNode }) {
     void refreshFromServer();
   }, [refreshFromServer]);
 
-  useEffect(() => {
-    if (dataSource !== "fallback") return;
-    writeLabStorage({
-      rooms,
-      activities,
-      classes,
-      allocations,
-      enrollments,
-    });
-  }, [rooms, activities, classes, allocations, enrollments, dataSource]);
-
   const allocationConflicts = useMemo(
     () => buildAllocationConflictMap(allocations),
     [allocations]
   );
-  const classOccupancy = useMemo(
-    () => countClassOccupancy(enrollments),
-    [enrollments]
-  );
+  const classOccupancy = useMemo(() => countClassOccupancy(enrollments), [enrollments]);
   const enrollmentConflicts = useMemo(
     () => buildStudentScheduleConflictMap(enrollments, allocations, classes),
     [enrollments, allocations, classes]
   );
 
+  const assertWriteEnabled = useCallback(() => {
+    if (dataSource !== "api") {
+      throw new Error(
+        "Modo somente leitura: API oficial indisponivel. Nenhum dado operacional foi salvo."
+      );
+    }
+  }, [dataSource]);
+
   const upsertRoom = useCallback(
     async (item: Room) => {
-      if (dataSource === "api") {
-        const saved = await unitOperationsApi.upsertRoom(item);
-        setRooms((current) => upsertById(current, saved));
-        return;
-      }
-
-      setRooms((current) => upsertById(current, item));
+      assertWriteEnabled();
+      const saved = await unitOperationsApi.upsertRoom(item);
+      setRooms((current) => upsertById(current, saved));
     },
-    [dataSource]
+    [assertWriteEnabled]
   );
 
   const upsertActivity = useCallback(
     async (item: Activity) => {
-      if (dataSource === "api") {
-        const saved = await unitOperationsApi.upsertActivity(item);
-        setActivities((current) => upsertById(current, saved));
-        return;
-      }
-
-      setActivities((current) => upsertById(current, item));
+      assertWriteEnabled();
+      const saved = await unitOperationsApi.upsertActivity(item);
+      setActivities((current) => upsertById(current, saved));
     },
-    [dataSource]
+    [assertWriteEnabled]
   );
 
   const upsertClass = useCallback(
     async (item: GroupClass) => {
-      if (dataSource === "api") {
-        const saved = await unitOperationsApi.upsertClass(item);
-        setClasses((current) => upsertById(current, saved));
-        return;
-      }
-
-      setClasses((current) => upsertById(current, item));
+      assertWriteEnabled();
+      const saved = await unitOperationsApi.upsertClass(item);
+      setClasses((current) => upsertById(current, saved));
     },
-    [dataSource]
+    [assertWriteEnabled]
   );
 
   const upsertAllocation = useCallback(
     async (item: Allocation) => {
-      if (dataSource === "api") {
-        const saved = await unitOperationsApi.upsertAllocation(item);
-        setAllocations((current) => upsertById(current, saved));
-        return;
-      }
-
-      setAllocations((current) => upsertById(current, item));
+      assertWriteEnabled();
+      const saved = await unitOperationsApi.upsertAllocation(item);
+      setAllocations((current) => upsertById(current, saved));
     },
-    [dataSource]
+    [assertWriteEnabled]
   );
 
   const upsertEnrollment = useCallback(
     async (item: StudentEnrollment) => {
-      if (dataSource === "api") {
-        const saved = await unitOperationsApi.upsertEnrollment(item);
-        setEnrollments((current) => upsertById(current, saved));
-        return;
-      }
-
-      setEnrollments((current) => upsertById(current, item));
+      assertWriteEnabled();
+      const saved = await unitOperationsApi.upsertEnrollment(item);
+      setEnrollments((current) => upsertById(current, saved));
     },
-    [dataSource]
+    [assertWriteEnabled]
   );
 
   const removeAllocation = useCallback(
     async (id: string) => {
-      if (dataSource === "api") {
-        await unitOperationsApi.removeAllocation(id);
-      }
-
+      assertWriteEnabled();
+      await unitOperationsApi.removeAllocation(id);
       setAllocations((current) => current.filter((item) => item.id !== id));
     },
-    [dataSource]
+    [assertWriteEnabled]
   );
 
   const resetLabData = useCallback(async () => {
-    clearLabStorage();
-    if (dataSource === "api") {
-      await refreshFromServer();
-      return;
-    }
+    await refreshFromServer();
+  }, [refreshFromServer]);
 
-    const fallback = readFallbackDataset(null);
-    applyDataset(fallback);
-  }, [applyDataset, dataSource, refreshFromServer]);
+  const isWriteEnabled = dataSource === "api";
 
   const value = useMemo<AgendaLabContextValue>(
     () => ({
@@ -306,6 +277,8 @@ export function AgendaLabProvider({ children }: { children: ReactNode }) {
       isLoading,
       syncError,
       dataSource,
+      isWriteEnabled,
+      devFallbackEnabled: DEV_LOCAL_FALLBACK_ENABLED,
       refreshFromServer,
     }),
     [
@@ -330,6 +303,7 @@ export function AgendaLabProvider({ children }: { children: ReactNode }) {
       isLoading,
       syncError,
       dataSource,
+      isWriteEnabled,
       refreshFromServer,
     ]
   );

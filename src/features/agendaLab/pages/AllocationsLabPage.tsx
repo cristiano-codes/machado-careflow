@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { AgendaLabSyncBanner } from "@/features/agendaLab/components/AgendaLabSyncBanner";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { WeeklyAllocationGrid } from "@/features/agendaLab/components/WeeklyAllocationGrid";
@@ -67,6 +68,7 @@ export function AllocationsLabPage() {
     allocationConflicts,
     upsertAllocation,
     removeAllocation,
+    isWriteEnabled,
   } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("allocations");
   const [roomFilter, setRoomFilter] = useState("all");
@@ -215,12 +217,14 @@ export function AllocationsLabPage() {
         title="Grade Teste"
         subtitle="Ambiente de homologacao para alocacao de turmas por dia, horario, sala e profissional."
         actions={
-          <Button size="sm" className="h-9" onClick={openCreate}>
+          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova alocacao
           </Button>
         }
       />
+
+      <AgendaLabSyncBanner />
 
       <FiltersHeaderRow
         summary={`${filtered.length} alocacoes no recorte atual.`}
@@ -268,7 +272,7 @@ export function AllocationsLabPage() {
                       <TableCell>{item.professional?.nome || "-"}</TableCell>
                       <TableCell><Badge variant={statusToBadgeVariant(item.allocation.status)}>{getAllocationStatusLabel(item.allocation.status)}</Badge></TableCell>
                       <TableCell>{conflict?.hasConflict ? <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700"><AlertTriangle className="h-3.5 w-3.5" />Conflito detectado</span> : <span className="text-xs text-muted-foreground">Sem conflito</span>}</TableCell>
-                      <TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => openEdit(item.allocation)}>Editar</Button><Button size="sm" variant="outline" onClick={() => void handleRemoveAllocation(item.allocation.id)}>Remover</Button></div></TableCell>
+                      <TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(item.allocation)}>Editar</Button><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => void handleRemoveAllocation(item.allocation.id)}>Remover</Button></div></TableCell>
                     </TableRow>
                   );
                 })
@@ -297,7 +301,7 @@ export function AllocationsLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

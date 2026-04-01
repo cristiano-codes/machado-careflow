@@ -91,13 +91,18 @@ async function requestUnitOperations<T>(
   init: RequestInit,
   fallbackError: string
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}/unit-operations${path}`, {
-    ...init,
-    headers: {
-      ...buildHeaders(init.body !== undefined),
-      ...(init.headers || {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/unit-operations${path}`, {
+      ...init,
+      headers: {
+        ...buildHeaders(init.body !== undefined),
+        ...(init.headers || {}),
+      },
+    });
+  } catch {
+    throw new Error("API operacional indisponivel no momento. Verifique a conexao.");
+  }
 
   const payload = await parseJsonSafe(response);
   if (!response.ok) {

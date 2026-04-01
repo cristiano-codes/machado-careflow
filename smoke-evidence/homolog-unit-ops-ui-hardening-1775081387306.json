@@ -1,0 +1,131 @@
+{
+  "generatedAt": "2026-04-01T22:09:47.305Z",
+  "baseUrl": "http://localhost:3000",
+  "checks": [
+    {
+      "user": "admin",
+      "routePath": "/operacao-unidade/turmas",
+      "interceptDatasetStatus": null,
+      "finalUrl": "/operacao-unidade/turmas",
+      "datasetStatuses": [
+        200
+      ],
+      "hasAcessoRestrito": false,
+      "hasSyncBanner": false,
+      "syncBannerState": null,
+      "syncBannerText": null,
+      "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir M"
+    },
+    {
+      "user": "denied",
+      "routePath": "/operacao-unidade/turmas",
+      "interceptDatasetStatus": null,
+      "finalUrl": "/",
+      "datasetStatuses": [],
+      "hasAcessoRestrito": true,
+      "hasSyncBanner": false,
+      "syncBannerState": null,
+      "syncBannerText": null,
+      "bodySample": "Toggle Sidebar Instituto Lauir Machado HO Acesso Restrito Voce nao tem permissao para acessar esta funcionalidade. Entre em contato com o administrador para solicitar acesso."
+    },
+    {
+      "user": "legacy_agenda_view",
+      "routePath": "/operacao-unidade/turmas",
+      "interceptDatasetStatus": null,
+      "finalUrl": "/",
+      "datasetStatuses": [],
+      "hasAcessoRestrito": true,
+      "hasSyncBanner": false,
+      "syncBannerState": null,
+      "syncBannerText": null,
+      "bodySample": "SERVICO SOCIAL Agenda Toggle Sidebar Instituto Lauir Machado HO Acesso Restrito Voce nao tem permissao para acessar esta funcionalidade. Entre em contato com o administrador para solicitar acesso."
+    },
+    {
+      "user": "admin_dataset_503",
+      "routePath": "/operacao-unidade/turmas",
+      "interceptDatasetStatus": 503,
+      "finalUrl": "/operacao-unidade/turmas",
+      "datasetStatuses": [
+        503
+      ],
+      "hasAcessoRestrito": false,
+      "hasSyncBanner": true,
+      "syncBannerState": "error",
+      "syncBannerText": "Estado de sincronizacao da APIFalha operacional simuladaTentar sincronizar novamente",
+      "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir M"
+    },
+    {
+      "user": "admin_dataset_401",
+      "routePath": "/operacao-unidade/turmas",
+      "interceptDatasetStatus": 401,
+      "finalUrl": "/",
+      "datasetStatuses": [
+        401
+      ],
+      "hasAcessoRestrito": false,
+      "hasSyncBanner": false,
+      "syncBannerState": null,
+      "syncBannerText": null,
+      "bodySample": "Instituto Lauir Machado AcolherFlow — Sistema de Gestão do Atendimento Social Usuário Senha Entrar"
+    }
+  ],
+  "assertions": [
+    {
+      "name": "admin acessa operacao-unidade",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/turmas"
+      }
+    },
+    {
+      "name": "admin sem acesso restrito",
+      "pass": true,
+      "detail": {
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "denied bloqueado no frontend",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/",
+        "hasAcessoRestrito": true
+      }
+    },
+    {
+      "name": "legado agenda:view bloqueado no novo dominio",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/",
+        "hasAcessoRestrito": true
+      }
+    },
+    {
+      "name": "erro API 503 exibe banner sem fallback silencioso",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasSyncBanner": true,
+        "syncBannerState": "error",
+        "datasetStatuses": [
+          503
+        ]
+      }
+    },
+    {
+      "name": "erro API 401 derruba sessao e redireciona",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/",
+        "datasetStatuses": [
+          401
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0
+  }
+}

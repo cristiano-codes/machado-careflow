@@ -82,6 +82,30 @@ async function main() {
     message: deniedDatasetResp.payload?.message,
   });
 
+  const deniedRoomsResp = await request('GET', '/unit-operations/rooms', { token: deniedToken });
+  record('rooms denied bloqueado', deniedRoomsResp.status === 403, {
+    status: deniedRoomsResp.status,
+    message: deniedRoomsResp.payload?.message,
+  });
+
+  const deniedRoomWriteResp = await request('POST', '/unit-operations/rooms/upsert', {
+    token: deniedToken,
+    body: {
+      id: buildId('deny-room'),
+      unitId: unitId || 'u-centro',
+      codigo: 'DENY',
+      nome: 'Sala negada',
+      tipo: 'multifuncional',
+      capacidadeTotal: 10,
+      capacidadeRecomendada: 8,
+      status: 'ativa',
+    },
+  });
+  record('rooms upsert denied bloqueado', deniedRoomWriteResp.status === 403, {
+    status: deniedRoomWriteResp.status,
+    message: deniedRoomWriteResp.payload?.message,
+  });
+
   if (!unitId || professionals.length < 2 || students.length < 2) {
     throw new Error('Fixtures insuficientes no dataset para executar cenarios operacionais');
   }
