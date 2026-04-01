@@ -3,23 +3,56 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Building2, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePermissions } from "@/hooks/usePermissions";
+import {
+  UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES,
+} from "@/permissions/permissionMap";
 import { cn } from "@/lib/utils";
 
 const LAB_NAV_ITEMS = [
-  { path: "/agenda-teste", label: "Agenda Teste" },
-  { path: "/salas-teste", label: "Salas Teste" },
-  { path: "/atividades-teste", label: "Atividades Teste" },
-  { path: "/turmas-teste", label: "Turmas Teste" },
-  { path: "/grade-teste", label: "Grade Teste" },
-  { path: "/matriculas-teste", label: "Matriculas Teste" },
+  { path: "/agenda-teste", label: "Agenda Teste", requiredAnyScopes: [] as string[] },
+  { path: "/salas-teste", label: "Salas Teste", requiredAnyScopes: [] as string[] },
+  { path: "/atividades-teste", label: "Atividades Teste", requiredAnyScopes: [] as string[] },
+  { path: "/turmas-teste", label: "Turmas Teste", requiredAnyScopes: [] as string[] },
+  { path: "/grade-teste", label: "Grade Teste", requiredAnyScopes: [] as string[] },
+  { path: "/matriculas-teste", label: "Matriculas Teste", requiredAnyScopes: [] as string[] },
 ];
 const OFFICIAL_NAV_ITEMS = [
-  { path: "/operacao-unidade/agenda", label: "Agenda" },
-  { path: "/operacao-unidade/salas", label: "Salas" },
-  { path: "/operacao-unidade/atividades", label: "Atividades" },
-  { path: "/operacao-unidade/turmas", label: "Turmas" },
-  { path: "/operacao-unidade/grade", label: "Grade" },
-  { path: "/operacao-unidade/matriculas", label: "Matriculas" },
+  {
+    path: "/operacao-unidade/agenda",
+    label: "Agenda de Turmas",
+    requiredAnyScopes: UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
+  },
+  {
+    path: "/operacao-unidade/salas",
+    label: "Salas",
+    requiredAnyScopes: UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES,
+  },
+  {
+    path: "/operacao-unidade/atividades",
+    label: "Atividades",
+    requiredAnyScopes: UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES,
+  },
+  {
+    path: "/operacao-unidade/turmas",
+    label: "Turmas",
+    requiredAnyScopes: UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
+  },
+  {
+    path: "/operacao-unidade/grade",
+    label: "Grade",
+    requiredAnyScopes: UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES,
+  },
+  {
+    path: "/operacao-unidade/matriculas",
+    label: "Matriculas",
+    requiredAnyScopes: UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES,
+  },
 ];
 
 type AgendaLabHeaderProps = {
@@ -31,8 +64,11 @@ type AgendaLabHeaderProps = {
 export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { hasAnyScope } = usePermissions();
   const isOfficialContext = location.pathname.startsWith("/operacao-unidade");
-  const navItems = isOfficialContext ? OFFICIAL_NAV_ITEMS : LAB_NAV_ITEMS;
+  const navItems = (isOfficialContext ? OFFICIAL_NAV_ITEMS : LAB_NAV_ITEMS).filter(
+    (item) => item.requiredAnyScopes.length === 0 || hasAnyScope(item.requiredAnyScopes)
+  );
   const titleLabel = isOfficialContext ? title.replace(/\s*Teste\b/gi, "").trim() : title;
   const subtitleLabel = isOfficialContext
     ? subtitle
@@ -55,6 +91,11 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
             </p>
             <h1 className="text-xl font-bold leading-tight tracking-tight text-slate-900 md:text-2xl">{titleLabel}</h1>
             <p className="max-w-3xl text-sm leading-relaxed text-slate-600">{subtitleLabel}</p>
+            {isOfficialContext ? (
+              <p className="text-xs text-slate-500">
+                Uso supervisionado em paralelo. A agenda institucional segue em <strong>/agenda</strong>.
+              </p>
+            ) : null}
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             <Button variant="outline" size="sm" className="h-9" onClick={() => navigate("/agenda")}>

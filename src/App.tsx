@@ -8,7 +8,18 @@ import { SettingsProvider } from "@/contexts/SettingsContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
 import { ProtectedRoute as PermissionProtectedRoute } from "@/components/common/ProtectedRoute";
-import { AGENDA_READ_REQUIRED_SCOPES, UNIT_OPERATIONS_REQUIRED_SCOPES } from "@/permissions/permissionMap";
+import { usePermissions } from "@/hooks/usePermissions";
+import {
+  AGENDA_READ_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_LANDING_PRIORITY,
+  UNIT_OPERATIONS_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES,
+} from "@/permissions/permissionMap";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -68,6 +79,16 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       {children}
     </Layout>
   );
+};
+
+const UnitOperationsLandingRoute = () => {
+  const { hasAnyScope } = usePermissions();
+  const nextPath =
+    UNIT_OPERATIONS_LANDING_PRIORITY.find((entry) =>
+      hasAnyScope(entry.requiredAnyScopes)
+    )?.path || "/";
+
+  return <Navigate to={nextPath} replace />;
 };
 
 const AppContent = () => {
@@ -207,14 +228,22 @@ const AppContent = () => {
         />
         <Route
           path="/operacao-unidade"
-          element={<Navigate to="/operacao-unidade/turmas" replace />}
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+              >
+                <UnitOperationsLandingRoute />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/operacao-unidade/agenda"
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+                requiredAnyScopes={UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES}
               >
                 <AgendaTeste />
               </PermissionProtectedRoute>
@@ -226,7 +255,7 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+                requiredAnyScopes={UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES}
               >
                 <SalasTeste />
               </PermissionProtectedRoute>
@@ -238,7 +267,7 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+                requiredAnyScopes={UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES}
               >
                 <AtividadesTeste />
               </PermissionProtectedRoute>
@@ -250,7 +279,7 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+                requiredAnyScopes={UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES}
               >
                 <TurmasTeste />
               </PermissionProtectedRoute>
@@ -262,7 +291,7 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+                requiredAnyScopes={UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES}
               >
                 <GradeTeste />
               </PermissionProtectedRoute>
@@ -274,7 +303,7 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+                requiredAnyScopes={UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES}
               >
                 <MatriculasTeste />
               </PermissionProtectedRoute>

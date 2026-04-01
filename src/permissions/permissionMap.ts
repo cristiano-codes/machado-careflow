@@ -49,6 +49,24 @@ export const UNIT_OPERATIONS_PRIMARY_SCOPES: string[] = [
   "matriculas:view",
 ];
 export const UNIT_OPERATIONS_REQUIRED_SCOPES: string[] = [...UNIT_OPERATIONS_PRIMARY_SCOPES];
+export const UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES: string[] = ["grade:view"];
+export const UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES: string[] = ["salas:view"];
+export const UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES: string[] = ["atividades_unidade:view"];
+export const UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES: string[] = ["turmas:view"];
+export const UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES: string[] = ["grade:view"];
+export const UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES: string[] = ["matriculas:view"];
+
+export const UNIT_OPERATIONS_LANDING_PRIORITY: Array<{
+  path: string;
+  requiredAnyScopes: string[];
+}> = [
+  { path: "/operacao-unidade/turmas", requiredAnyScopes: UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/grade", requiredAnyScopes: UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/matriculas", requiredAnyScopes: UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/salas", requiredAnyScopes: UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/atividades", requiredAnyScopes: UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/agenda", requiredAnyScopes: UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES },
+];
 
 export const STANDARD_PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "access"] as const;
 export const ADMIN_MACRO_PERMISSION_NAMES = new Set([
@@ -170,8 +188,8 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
   },
   {
     id: "operacao_unidade",
-    title: "Operacao de Turmas",
-    url: "/operacao-unidade/turmas",
+    title: "Operacao da Unidade",
+    url: "/operacao-unidade",
     icon: BookOpen,
     requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES,
   },
@@ -270,12 +288,12 @@ export const ROUTE_PERMISSION_MAP: RoutePermissionConfig[] = [
   { path: "/grade-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/alocacoes-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/matriculas-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/agenda", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/salas", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/atividades", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/turmas", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/grade", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/matriculas", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/agenda", requiredAnyScopes: UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/salas", requiredAnyScopes: UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/atividades", requiredAnyScopes: UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/turmas", requiredAnyScopes: UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/grade", requiredAnyScopes: UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/matriculas", requiredAnyScopes: UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES },
   { path: "/operacao-unidade", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES, match: "prefix" },
   { path: "/fila-de-espera", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },
   { path: "/pre-agendamento", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },

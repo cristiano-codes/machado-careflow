@@ -43,6 +43,11 @@ function isMappedSidebarUrl(url: string) {
   return MAPPED_ROUTE_PATHS.has(normalizePath(url));
 }
 
+function shouldUseExactMatch(url: string) {
+  const normalized = normalizePath(url);
+  return normalized !== "/operacao-unidade";
+}
+
 function isPublicSidebarItem(item: SidebarItemConfig) {
   return !Array.isArray(item.requiredAnyScopes) || item.requiredAnyScopes.length === 0;
 }
@@ -100,7 +105,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild className="h-10">
                       <NavLink
                         to={item.url}
-                        end
+                        end={shouldUseExactMatch(item.url)}
                         className={({ isActive }) =>
                           `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
                             { isActive }
@@ -130,7 +135,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild className="h-10">
                       <NavLink
                         to={item.url}
-                        end
+                        end={shouldUseExactMatch(item.url)}
                         className={({ isActive }) =>
                           `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
                             { isActive }
@@ -160,7 +165,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild className="h-10">
                       <NavLink
                         to={item.url}
-                        end
+                        end={shouldUseExactMatch(item.url)}
                         className={({ isActive }) =>
                           `flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${getNavClass(
                             { isActive }
