@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PeriodDatePicker } from "@/features/agendaLab/components/PeriodDatePicker";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -14,9 +14,6 @@ type CalendarToolbarProps = {
   onPrevious: () => void;
   onToday: () => void;
   onNext: () => void;
-  filtersOpen: boolean;
-  activeFiltersCount: number;
-  onToggleFilters: () => void;
 };
 
 export function CalendarToolbar({
@@ -28,9 +25,6 @@ export function CalendarToolbar({
   onPrevious,
   onToday,
   onNext,
-  filtersOpen,
-  activeFiltersCount,
-  onToggleFilters,
 }: CalendarToolbarProps) {
   return (
     <div className="rounded-lg border bg-background p-3">
@@ -72,11 +66,6 @@ export function CalendarToolbar({
 
         <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
           <p className="text-sm font-semibold text-slate-700">{periodLabel}</p>
-          <Button type="button" size="sm" variant="outline" onClick={onToggleFilters}>
-            <Filter className="h-4 w-4" />
-            {filtersOpen ? "Ocultar filtros" : "Mostrar filtros"}
-            {activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ""}
-          </Button>
         </div>
       </div>
     </div>

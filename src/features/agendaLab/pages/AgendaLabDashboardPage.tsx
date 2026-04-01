@@ -14,6 +14,7 @@ import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader
 import { CalendarToolbar, type CalendarViewMode } from "@/features/agendaLab/components/CalendarToolbar";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { DayCalendarView } from "@/features/agendaLab/components/DayCalendarView";
+import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { LabMultiSelect } from "@/features/agendaLab/components/LabMultiSelect";
 import { MonthCalendarView } from "@/features/agendaLab/components/MonthCalendarView";
 import { WeekCalendarView } from "@/features/agendaLab/components/WeekCalendarView";
@@ -189,6 +190,7 @@ export function AgendaLabDashboardPage() {
 
     return labels;
   }, [activityIds, calendarMode, professionalIds, roomId, rooms, search, statuses, unitId, units, weekdayFilter]);
+  const recorteSummaryText = `${classRows.length} turmas e ${filtered.length} alocacoes no recorte.`;
 
   const periodLabel = useMemo(() => getPeriodLabel(calendarMode, referenceDate), [calendarMode, referenceDate]);
 
@@ -352,15 +354,18 @@ export function AgendaLabDashboardPage() {
         onPrevious={handlePreviousPeriod}
         onToday={handleToday}
         onNext={handleNextPeriod}
-        filtersOpen={filtersOpen}
+      />
+
+      <FiltersHeaderRow
+        summary={recorteSummaryText}
+        open={filtersOpen}
         activeFiltersCount={activeFilterLabels.length}
-        onToggleFilters={() => setFiltersOpen((current) => !current)}
+        onToggle={() => setFiltersOpen((current) => !current)}
       />
 
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        summaryText={`${classRows.length} turmas e ${filtered.length} alocacoes no recorte.`}
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1">

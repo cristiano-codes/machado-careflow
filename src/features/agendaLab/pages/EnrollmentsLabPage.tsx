@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
-import { FilterToggleButton } from "@/features/agendaLab/components/FilterToggleButton";
+import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { EnrollmentPriority, EnrollmentStatus, StudentEnrollment } from "@/features/agendaLab/types";
@@ -147,19 +147,17 @@ export function EnrollmentsLabPage() {
         }
       />
 
-      <div className="flex justify-end">
-        <FilterToggleButton
-          open={filtersOpen}
-          activeCount={activeFilterLabels.length}
-          onClick={() => setFiltersOpen((current) => !current)}
-        />
-      </div>
+      <FiltersHeaderRow
+        summary={`${filtered.length} matriculas no recorte.`}
+        open={filtersOpen}
+        activeFiltersCount={activeFilterLabels.length}
+        onToggle={() => setFiltersOpen((current) => !current)}
+      />
 
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
         description="Filtros locais para leitura operacional de matriculas."
-        summaryText={`${filtered.length} matricula(s) no recorte.`}
       >
         <div className="grid gap-3 md:grid-cols-4">
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Turma</Label><Select value={classFilter} onValueChange={setClassFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>

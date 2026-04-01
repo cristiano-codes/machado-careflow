@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
-import { FilterToggleButton } from "@/features/agendaLab/components/FilterToggleButton";
+import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { Room, RoomStatus, RoomType } from "@/features/agendaLab/types";
@@ -141,19 +141,17 @@ export function RoomsLabPage() {
         }
       />
 
-      <div className="flex justify-end">
-        <FilterToggleButton
-          open={filtersOpen}
-          activeCount={activeFilterLabels.length}
-          onClick={() => setFiltersOpen((current) => !current)}
-        />
-      </div>
+      <FiltersHeaderRow
+        summary={`${filtered.length} salas no recorte.`}
+        open={filtersOpen}
+        activeFiltersCount={activeFilterLabels.length}
+        onToggle={() => setFiltersOpen((current) => !current)}
+      />
 
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
         description="Filtros locais para leitura operacional de salas."
-        summaryText={`${filtered.length} registro(s) no recorte.`}
       >
         <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-1">

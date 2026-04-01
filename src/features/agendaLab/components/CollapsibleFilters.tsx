@@ -23,15 +23,6 @@ export function CollapsibleFilters({
 }: CollapsibleFiltersProps) {
   return (
     <Collapsible open={open}>
-      {!open ? (
-        <Card>
-          <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <ActiveFiltersSummary filters={filters} />
-            {summaryText ? <p className="text-xs text-muted-foreground">{summaryText}</p> : null}
-          </CardContent>
-        </Card>
-      ) : null}
-
       <CollapsibleContent>
         <Card>
           <CardHeader className="pb-2">
