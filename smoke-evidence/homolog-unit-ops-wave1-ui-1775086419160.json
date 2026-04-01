@@ -1,0 +1,287 @@
+{
+  "generatedAt": "2026-04-01T23:33:39.159Z",
+  "baseUrl": "http://localhost:3000",
+  "summary": {
+    "total": 18,
+    "passed": 18,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "admin acessa /operacao-unidade",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "admin acessa /operacao-unidade/agenda",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/agenda",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "admin acessa /operacao-unidade/salas",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/salas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "admin acessa /operacao-unidade/atividades",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/atividades",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "admin acessa /operacao-unidade/turmas",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "admin acessa /operacao-unidade/grade",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/grade",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "admin acessa /operacao-unidade/matriculas",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/matriculas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "coordenacao acessa /operacao-unidade",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "coordenacao acessa /operacao-unidade/agenda",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/agenda",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "coordenacao acessa /operacao-unidade/salas",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/salas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "coordenacao acessa /operacao-unidade/atividades",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/atividades",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "coordenacao acessa /operacao-unidade/turmas",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "coordenacao acessa /operacao-unidade/grade",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/grade",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "coordenacao acessa /operacao-unidade/matriculas",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/operacao-unidade/matriculas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "perfil negado bloqueado na rota operacional",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/",
+        "hasAcessoRestrito": true
+      }
+    },
+    {
+      "name": "perfil negado sem menu indevido de operacao",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/dashboard",
+        "hasOperacaoMenu": false
+      }
+    },
+    {
+      "name": "refresh preserva rota operacional no admin",
+      "pass": true,
+      "detail": {
+        "routePath": "/operacao-unidade/turmas",
+        "beforeReload": "/operacao-unidade/turmas",
+        "afterReload": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false
+      }
+    },
+    {
+      "name": "agenda oficial continua acessivel",
+      "pass": true,
+      "detail": {
+        "finalUrl": "/agenda",
+        "hasAcessoRestrito": false,
+        "hasAgendaTitle": true
+      }
+    }
+  ],
+  "artifacts": {
+    "coordUserId": "eeac859b-6a3d-447b-bbc7-82df042dda93",
+    "adminResults": [
+      {
+        "user": "admin",
+        "routePath": "/operacao-unidade",
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false,
+        "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao da Unidade Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir"
+      },
+      {
+        "user": "admin",
+        "routePath": "/operacao-unidade/agenda",
+        "finalUrl": "/operacao-unidade/agenda",
+        "hasAcessoRestrito": false,
+        "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao da Unidade Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir"
+      },
+      {
+        "user": "admin",
+        "routePath": "/operacao-unidade/salas",
+        "finalUrl": "/operacao-unidade/salas",
+        "hasAcessoRestrito": false,
+        "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao da Unidade Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir"
+      },
+      {
+        "user": "admin",
+        "routePath": "/operacao-unidade/atividades",
+        "finalUrl": "/operacao-unidade/atividades",
+        "hasAcessoRestrito": false,
+        "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao da Unidade Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir"
+      },
+      {
+        "user": "admin",
+        "routePath": "/operacao-unidade/turmas",
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false,
+        "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao da Unidade Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir"
+      },
+      {
+        "user": "admin",
+        "routePath": "/operacao-unidade/grade",
+        "finalUrl": "/operacao-unidade/grade",
+        "hasAcessoRestrito": false,
+        "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao da Unidade Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir"
+      },
+      {
+        "user": "admin",
+        "routePath": "/operacao-unidade/matriculas",
+        "finalUrl": "/operacao-unidade/matriculas",
+        "hasAcessoRestrito": false,
+        "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao da Unidade Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sidebar Instituto Lauir"
+      }
+    ],
+    "coordResults": [
+      {
+        "user": "coordenacao",
+        "routePath": "/operacao-unidade",
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false,
+        "bodySample": "SERVICO SOCIAL Agenda Operacao da Unidade Toggle Sidebar Instituto Lauir Machado HO OPERACAO DE TURMAS DA UNIDADE Turmas Operacao da unidade para cadastro das turmas com capacidade e equipe responsavel. Uso supervisionado em paralelo. A agenda instituciona"
+      },
+      {
+        "user": "coordenacao",
+        "routePath": "/operacao-unidade/agenda",
+        "finalUrl": "/operacao-unidade/agenda",
+        "hasAcessoRestrito": false,
+        "bodySample": "SERVICO SOCIAL Agenda Operacao da Unidade Toggle Sidebar Instituto Lauir Machado HO OPERACAO DE TURMAS DA UNIDADE Agenda Operacao da unidade para validar grade operacional, turmas, salas e alocacoes. Uso supervisionado em paralelo. A agenda institucional s"
+      },
+      {
+        "user": "coordenacao",
+        "routePath": "/operacao-unidade/salas",
+        "finalUrl": "/operacao-unidade/salas",
+        "hasAcessoRestrito": false,
+        "bodySample": "SERVICO SOCIAL Agenda Operacao da Unidade Toggle Sidebar Instituto Lauir Machado HO OPERACAO DE TURMAS DA UNIDADE Salas Operacao da unidade para cadastro e revisao das salas fisicas da unidade. Uso supervisionado em paralelo. A agenda institucional segue e"
+      },
+      {
+        "user": "coordenacao",
+        "routePath": "/operacao-unidade/atividades",
+        "finalUrl": "/operacao-unidade/atividades",
+        "hasAcessoRestrito": false,
+        "bodySample": "SERVICO SOCIAL Agenda Operacao da Unidade Toggle Sidebar Instituto Lauir Machado HO OPERACAO DE TURMAS DA UNIDADE Atividades Operacao da unidade para cadastro de atividades, oficinas e servicos. Uso supervisionado em paralelo. A agenda institucional segue"
+      },
+      {
+        "user": "coordenacao",
+        "routePath": "/operacao-unidade/turmas",
+        "finalUrl": "/operacao-unidade/turmas",
+        "hasAcessoRestrito": false,
+        "bodySample": "SERVICO SOCIAL Agenda Operacao da Unidade Toggle Sidebar Instituto Lauir Machado HO OPERACAO DE TURMAS DA UNIDADE Turmas Operacao da unidade para cadastro das turmas com capacidade e equipe responsavel. Uso supervisionado em paralelo. A agenda instituciona"
+      },
+      {
+        "user": "coordenacao",
+        "routePath": "/operacao-unidade/grade",
+        "finalUrl": "/operacao-unidade/grade",
+        "hasAcessoRestrito": false,
+        "bodySample": "SERVICO SOCIAL Agenda Operacao da Unidade Toggle Sidebar Instituto Lauir Machado HO OPERACAO DE TURMAS DA UNIDADE Grade Operacao da unidade para alocacao de turmas por dia, horario, sala e profissional. Uso supervisionado em paralelo. A agenda instituciona"
+      },
+      {
+        "user": "coordenacao",
+        "routePath": "/operacao-unidade/matriculas",
+        "finalUrl": "/operacao-unidade/matriculas",
+        "hasAcessoRestrito": false,
+        "bodySample": "SERVICO SOCIAL Agenda Operacao da Unidade Toggle Sidebar Instituto Lauir Machado HO OPERACAO DE TURMAS DA UNIDADE Matriculas Operacao da unidade para controle do vinculo aluno-turma com prioridade e alertas. Uso supervisionado em paralelo. A agenda institu"
+      }
+    ],
+    "deniedRoute": {
+      "user": "denied",
+      "routePath": "/operacao-unidade/turmas",
+      "finalUrl": "/",
+      "hasAcessoRestrito": true,
+      "bodySample": "Toggle Sidebar Instituto Lauir Machado HO Acesso Restrito Voce nao tem permissao para acessar esta funcionalidade. Entre em contato com o administrador para solicitar acesso."
+    },
+    "deniedMenu": {
+      "finalUrl": "/dashboard",
+      "hasOperacaoMenu": false,
+      "hasAcessoRestrito": true,
+      "bodySample": "Toggle Sidebar Instituto Lauir Machado HO Acesso Restrito Voce nao tem permissao para acessar esta funcionalidade. Entre em contato com o administrador para solicitar acesso."
+    },
+    "refreshResult": {
+      "routePath": "/operacao-unidade/turmas",
+      "beforeReload": "/operacao-unidade/turmas",
+      "afterReload": "/operacao-unidade/turmas",
+      "hasAcessoRestrito": false
+    },
+    "legacyAgenda": {
+      "finalUrl": "/agenda",
+      "hasAcessoRestrito": false,
+      "hasAgendaTitle": true
+    }
+  }
+}

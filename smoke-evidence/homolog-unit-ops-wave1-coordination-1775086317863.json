@@ -1,0 +1,353 @@
+{
+  "generatedAt": "2026-04-01T23:31:57.862Z",
+  "baseUrl": "http://localhost:3000/api",
+  "profile": {
+    "coordUsername": "homol_ops_legacy",
+    "deniedUsername": "homol_ops_denied"
+  },
+  "summary": {
+    "total": 24,
+    "passed": 24,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "coordenacao possui escopos minimos de leitura",
+      "pass": true,
+      "detail": {
+        "scopes": [
+          "salas:view",
+          "turmas:edit",
+          "turmas:view",
+          "turmas:create",
+          "turmas:status",
+          "atividades_unidade:view",
+          "agenda:view",
+          "matriculas:enroll",
+          "matriculas:edit",
+          "matriculas:view",
+          "matriculas:create",
+          "matriculas:status",
+          "grade:edit",
+          "grade:view",
+          "grade:create",
+          "grade:allocate",
+          "grade:status"
+        ]
+      }
+    },
+    {
+      "name": "coordenacao dataset 200",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "success": true
+      }
+    },
+    {
+      "name": "perfil negado bloqueado no dataset",
+      "pass": true,
+      "detail": {
+        "status": 403,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "name": "dataset coordenacao possui unidade",
+      "pass": true,
+      "detail": {
+        "unitId": "u-centro"
+      }
+    },
+    {
+      "name": "dataset coordenacao possui >=2 salas",
+      "pass": true,
+      "detail": {
+        "rooms": 4
+      }
+    },
+    {
+      "name": "dataset coordenacao possui >=1 atividade",
+      "pass": true,
+      "detail": {
+        "activities": 2
+      }
+    },
+    {
+      "name": "dataset coordenacao possui >=2 profissionais",
+      "pass": true,
+      "detail": {
+        "professionals": 18
+      }
+    },
+    {
+      "name": "dataset coordenacao possui >=2 assistidos",
+      "pass": true,
+      "detail": {
+        "students": 29
+      }
+    },
+    {
+      "name": "coordenacao lista salas",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "coordenacao lista atividades",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "coordenacao lista turmas",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "coordenacao lista grade",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "coordenacao lista matriculas",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "coordenacao bloqueada para criar sala (escopo nao liberado)",
+      "pass": true,
+      "detail": {
+        "status": 403,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "name": "coordenacao bloqueada para criar atividade (escopo nao liberado)",
+      "pass": true,
+      "detail": {
+        "status": 403,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "name": "coordenacao cria turma",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "classId": "wave1-coord-class-base-1775086317778-9524"
+      }
+    },
+    {
+      "name": "coordenacao edita turma",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "classId": "wave1-coord-class-base-1775086317778-9524"
+      }
+    },
+    {
+      "name": "coordenacao cria turma auxiliar",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "classId": "wave1-coord-class-aux-1775086317778-6712"
+      }
+    },
+    {
+      "name": "coordenacao cria alocacao valida",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "slotId": "wave1-coord-slot-base-1775086317778-5964"
+      }
+    },
+    {
+      "name": "coordenacao bloqueio conflito de sala",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "room_conflict"
+      }
+    },
+    {
+      "name": "coordenacao bloqueio conflito de profissional",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "professional_conflict"
+      }
+    },
+    {
+      "name": "coordenacao cria matricula valida",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "enrollmentId": "wave1-coord-enrollment-base-1775086317809-7742"
+      }
+    },
+    {
+      "name": "coordenacao bloqueio matricula duplicada",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "duplicate_active_enrollment"
+      }
+    },
+    {
+      "name": "coordenacao bloqueio superlotacao",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "class_capacity_exceeded"
+      }
+    }
+  ],
+  "artifacts": {
+    "coordUserId": "eeac859b-6a3d-447b-bbc7-82df042dda93",
+    "coordUserEmail": "homol_ops_legacy@test.local",
+    "coordProfileMode": "simulado_por_permissoes_em_usuario_legacy",
+    "beforeScopes": [
+      "agenda:view"
+    ],
+    "permissionSync": {
+      "revoked": [],
+      "granted": [
+        {
+          "moduleName": "salas",
+          "permissionName": "view"
+        },
+        {
+          "moduleName": "atividades_unidade",
+          "permissionName": "view"
+        },
+        {
+          "moduleName": "turmas",
+          "permissionName": "view"
+        },
+        {
+          "moduleName": "grade",
+          "permissionName": "view"
+        },
+        {
+          "moduleName": "matriculas",
+          "permissionName": "view"
+        },
+        {
+          "moduleName": "turmas",
+          "permissionName": "create"
+        },
+        {
+          "moduleName": "turmas",
+          "permissionName": "edit"
+        },
+        {
+          "moduleName": "turmas",
+          "permissionName": "status"
+        },
+        {
+          "moduleName": "grade",
+          "permissionName": "create"
+        },
+        {
+          "moduleName": "grade",
+          "permissionName": "edit"
+        },
+        {
+          "moduleName": "grade",
+          "permissionName": "status"
+        },
+        {
+          "moduleName": "grade",
+          "permissionName": "allocate"
+        },
+        {
+          "moduleName": "matriculas",
+          "permissionName": "create"
+        },
+        {
+          "moduleName": "matriculas",
+          "permissionName": "edit"
+        },
+        {
+          "moduleName": "matriculas",
+          "permissionName": "status"
+        },
+        {
+          "moduleName": "matriculas",
+          "permissionName": "enroll"
+        }
+      ],
+      "before": [
+        "agenda:view"
+      ],
+      "after": [
+        "atividades_unidade:view",
+        "grade:allocate",
+        "grade:create",
+        "grade:edit",
+        "grade:status",
+        "grade:view",
+        "matriculas:create",
+        "matriculas:edit",
+        "matriculas:enroll",
+        "matriculas:status",
+        "matriculas:view",
+        "salas:view",
+        "turmas:create",
+        "turmas:edit",
+        "turmas:status",
+        "turmas:view"
+      ]
+    },
+    "coordScopes": [
+      "salas:view",
+      "turmas:edit",
+      "turmas:view",
+      "turmas:create",
+      "turmas:status",
+      "atividades_unidade:view",
+      "agenda:view",
+      "matriculas:enroll",
+      "matriculas:edit",
+      "matriculas:view",
+      "matriculas:create",
+      "matriculas:status",
+      "grade:edit",
+      "grade:view",
+      "grade:create",
+      "grade:allocate",
+      "grade:status"
+    ],
+    "afterTestScopes": [
+      "agenda:view",
+      "atividades_unidade:view",
+      "grade:allocate",
+      "grade:create",
+      "grade:edit",
+      "grade:status",
+      "grade:view",
+      "matriculas:create",
+      "matriculas:edit",
+      "matriculas:enroll",
+      "matriculas:status",
+      "matriculas:view",
+      "salas:view",
+      "turmas:create",
+      "turmas:edit",
+      "turmas:status",
+      "turmas:view"
+    ],
+    "finalScopes": [
+      "agenda:view"
+    ]
+  }
+}

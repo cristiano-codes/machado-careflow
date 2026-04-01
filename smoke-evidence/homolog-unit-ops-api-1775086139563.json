@@ -1,0 +1,294 @@
+{
+  "generatedAt": "2026-04-01T23:28:59.562Z",
+  "baseUrl": "http://localhost:3000/api",
+  "summary": {
+    "total": 35,
+    "passed": 33,
+    "failed": 2
+  },
+  "checks": [
+    {
+      "name": "dataset admin 200",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "success": true
+      }
+    },
+    {
+      "name": "dataset contem unidade",
+      "pass": true,
+      "detail": {
+        "unitId": "u-centro"
+      }
+    },
+    {
+      "name": "dataset contem >=2 profissionais",
+      "pass": true,
+      "detail": {
+        "professionals": 18
+      }
+    },
+    {
+      "name": "dataset contem >=2 assistidos",
+      "pass": true,
+      "detail": {
+        "students": 29
+      }
+    },
+    {
+      "name": "dataset denied bloqueado",
+      "pass": true,
+      "detail": {
+        "status": 403,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "name": "rooms denied bloqueado",
+      "pass": true,
+      "detail": {
+        "status": 403,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "name": "rooms upsert denied bloqueado",
+      "pass": true,
+      "detail": {
+        "status": 403,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "name": "criar sala 1",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "roomId": "homol-room-1-1775086139444-9706"
+      }
+    },
+    {
+      "name": "criar sala 2",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "roomId": "homol-room-2-1775086139444-126"
+      }
+    },
+    {
+      "name": "criar atividade",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "activityId": "homol-activity-1775086139444-2895"
+      }
+    },
+    {
+      "name": "criar turma",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "classId": "homol-class-1775086139444-6127"
+      }
+    },
+    {
+      "name": "validacao turma capacidade invalida",
+      "pass": true,
+      "detail": {
+        "status": 400,
+        "message": "Capacidades invalidas: minimo <= ideal <= maximo"
+      }
+    },
+    {
+      "name": "criar alocacao base",
+      "pass": false,
+      "detail": {
+        "status": 409
+      }
+    },
+    {
+      "name": "bloqueio conflito sala",
+      "pass": false,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "bloqueio conflito profissional",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "professional_conflict"
+      }
+    },
+    {
+      "name": "validacao horario invalido",
+      "pass": true,
+      "detail": {
+        "status": 400,
+        "message": "Intervalo de horario invalido para alocacao"
+      }
+    },
+    {
+      "name": "validacao turma inexistente em alocacao",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "validacao sala inexistente em alocacao",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "validacao profissional inexistente em alocacao",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "criar alocacao auxiliar",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "update alocacao com conflito bloqueado",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "room_conflict"
+      }
+    },
+    {
+      "name": "criar matricula base",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "enrollmentId": "homol-enrollment-1-1775086139444-7213"
+      }
+    },
+    {
+      "name": "bloqueio matricula duplicada ativa",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "duplicate_active_enrollment"
+      }
+    },
+    {
+      "name": "bloqueio superlotacao",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "class_capacity_exceeded"
+      }
+    },
+    {
+      "name": "validacao patient inexistente em matricula",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "validacao turma inexistente em matricula",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "listagem salas",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 4
+      }
+    },
+    {
+      "name": "listagem atividades",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 2
+      }
+    },
+    {
+      "name": "listagem turmas",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 2
+      }
+    },
+    {
+      "name": "listagem alocacoes",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "listagem matriculas",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 2
+      }
+    },
+    {
+      "name": "delete alocacao (soft)",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "removedId": "homol-slot-4-1775086139444-1398"
+      }
+    },
+    {
+      "name": "delete alocacao inexistente retorna 404",
+      "pass": true,
+      "detail": {
+        "status": 404
+      }
+    },
+    {
+      "name": "regressao agenda oficial - profissionais for_agenda",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "regressao agenda oficial - agenda range",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "success": true
+      }
+    }
+  ],
+  "artifacts": {
+    "created": {
+      "unitId": "u-centro",
+      "prof1Id": "03695554-61f5-47f2-bae9-f3bc4e1842e8",
+      "prof2Id": "8364b3cc-93d4-4700-9397-2748b092ead9",
+      "student1Id": "62fc36db-02c4-4059-b130-b94f77282d99",
+      "student2Id": "8896c12d-9828-41d1-9011-3baf938724a1",
+      "room1Id": "homol-room-1-1775086139444-9706",
+      "room2Id": "homol-room-2-1775086139444-126",
+      "activityId": "homol-activity-1775086139444-2895",
+      "classId": "homol-class-1775086139444-6127",
+      "slot1Id": "homol-slot-1-1775086139444-8077",
+      "slot4Id": "homol-slot-4-1775086139444-1398",
+      "enrollment1Id": "homol-enrollment-1-1775086139444-7213"
+    }
+  }
+}

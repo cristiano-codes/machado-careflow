@@ -1,0 +1,219 @@
+{
+  "generatedAt": "2026-04-01T23:35:51.212Z",
+  "baseUrl": "http://localhost:3000/api",
+  "summary": {
+    "total": 24,
+    "passed": 24,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "admin acessa dataset",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "success": true
+      }
+    },
+    {
+      "name": "negado bloqueado no dataset",
+      "pass": true,
+      "detail": {
+        "status": 403
+      }
+    },
+    {
+      "name": "admin cria sala",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "roomId": "wave1-admin-room-1-1775086551110-2350"
+      }
+    },
+    {
+      "name": "admin edita sala",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "roomId": "wave1-admin-room-1-1775086551110-2350"
+      }
+    },
+    {
+      "name": "admin cria sala auxiliar",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "roomId": "wave1-admin-room-2-1775086551110-1005"
+      }
+    },
+    {
+      "name": "admin cria atividade",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "activityId": "wave1-admin-activity-1775086551110-3532"
+      }
+    },
+    {
+      "name": "admin edita atividade",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "activityId": "wave1-admin-activity-1775086551110-3532"
+      }
+    },
+    {
+      "name": "admin cria turma",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "classId": "wave1-admin-class-base-1775086551110-9058"
+      }
+    },
+    {
+      "name": "admin edita turma",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "classId": "wave1-admin-class-base-1775086551110-9058"
+      }
+    },
+    {
+      "name": "admin cria turma auxiliar",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "classId": "wave1-admin-class-aux-1775086551110-7215"
+      }
+    },
+    {
+      "name": "admin cria alocacao valida",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "slotId": "wave1-admin-slot-base-1775086551110-9163"
+      }
+    },
+    {
+      "name": "admin bloqueio conflito de sala",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "room_conflict"
+      }
+    },
+    {
+      "name": "admin bloqueio conflito de profissional",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "professional_conflict"
+      }
+    },
+    {
+      "name": "admin cria matricula valida",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "enrollmentId": "wave1-admin-enrollment-base-1775086551110-9412"
+      }
+    },
+    {
+      "name": "admin bloqueio matricula duplicada",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "duplicate_active_enrollment"
+      }
+    },
+    {
+      "name": "admin bloqueio superlotacao",
+      "pass": true,
+      "detail": {
+        "status": 409,
+        "code": "class_capacity_exceeded"
+      }
+    },
+    {
+      "name": "admin listagem salas",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 6
+      }
+    },
+    {
+      "name": "admin listagem atividades",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 3
+      }
+    },
+    {
+      "name": "admin listagem turmas",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 6
+      }
+    },
+    {
+      "name": "admin listagem grade",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 4
+      }
+    },
+    {
+      "name": "admin listagem matriculas",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "count": 4
+      }
+    },
+    {
+      "name": "negado bloqueado em escrita",
+      "pass": true,
+      "detail": {
+        "status": 403
+      }
+    },
+    {
+      "name": "regressao agenda oficial - profissionais for_agenda",
+      "pass": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "regressao agenda oficial - agenda range",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "success": true
+      }
+    }
+  ],
+  "artifacts": {
+    "unitId": "u-centro",
+    "professional1Id": "03695554-61f5-47f2-bae9-f3bc4e1842e8",
+    "professional2Id": "8364b3cc-93d4-4700-9397-2748b092ead9",
+    "student1Id": "62fc36db-02c4-4059-b130-b94f77282d99",
+    "student2Id": "8896c12d-9828-41d1-9011-3baf938724a1",
+    "room1Id": "wave1-admin-room-1-1775086551110-2350",
+    "room2Id": "wave1-admin-room-2-1775086551110-1005",
+    "activityId": "wave1-admin-activity-1775086551110-3532",
+    "classBaseId": "wave1-admin-class-base-1775086551110-9058",
+    "classAuxId": "wave1-admin-class-aux-1775086551110-7215",
+    "slotBaseId": "wave1-admin-slot-base-1775086551110-9163",
+    "enrollmentBaseId": "wave1-admin-enrollment-base-1775086551110-9412",
+    "operationalWindow": {
+      "weekday": "qua",
+      "horaInicial": "11:00",
+      "horaFinal": "12:00"
+    }
+  }
+}
