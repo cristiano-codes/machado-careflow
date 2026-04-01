@@ -19,7 +19,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
+import { FilterToggleButton } from "@/features/agendaLab/components/FilterToggleButton";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
+import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { Room, RoomStatus, RoomType } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getRoomStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
@@ -53,6 +56,7 @@ function createDraft(unitId: string): RoomDraft {
 export function RoomsLabPage() {
   const { toast } = useToast();
   const { units, rooms, upsertRoom } = useAgendaLab();
+  const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("rooms");
   const [unitFilter, setUnitFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<RoomStatus | "all">("all");
   const [search, setSearch] = useState("");
@@ -72,14 +76,20 @@ export function RoomsLabPage() {
     [rooms, search, statusFilter, unitFilter]
   );
 
-  const indicators = useMemo(
-    () => ({
-      total: rooms.length,
-      active: rooms.filter((room) => room.status === "ativa").length,
-      shared: rooms.filter((room) => room.permiteUsoCompartilhado).length,
-    }),
-    [rooms]
-  );
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (unitFilter !== "all") {
+      const unit = units.find((item) => item.id === unitFilter);
+      labels.push(`Unidade: ${unit?.nome || unitFilter}`);
+    }
+    if (statusFilter !== "all") {
+      labels.push(`Status: ${getRoomStatusLabel(statusFilter)}`);
+    }
+    if (search.trim()) {
+      labels.push(`Busca: ${search.trim()}`);
+    }
+    return labels;
+  }, [search, statusFilter, unitFilter, units]);
 
   function openCreate() {
     setEditing(null);
@@ -131,15 +141,21 @@ export function RoomsLabPage() {
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Total</p><p className="text-2xl font-semibold">{indicators.total}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ativas</p><p className="text-2xl font-semibold">{indicators.active}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Uso compartilhado</p><p className="text-2xl font-semibold">{indicators.shared}</p></CardContent></Card>
+      <div className="flex justify-end">
+        <FilterToggleButton
+          open={filtersOpen}
+          activeCount={activeFilterLabels.length}
+          onClick={() => setFiltersOpen((current) => !current)}
+        />
       </div>
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Filtros</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
+      <CollapsibleFilters
+        open={filtersOpen}
+        filters={activeFilterLabels}
+        description="Filtros locais para leitura operacional de salas."
+        summaryText={`${filtered.length} registro(s) no recorte.`}
+      >
+        <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Unidade</Label>
             <Select value={unitFilter} onValueChange={setUnitFilter}>
@@ -158,8 +174,8 @@ export function RoomsLabPage() {
             <Label className="text-xs text-muted-foreground">Busca</Label>
             <div className="relative"><Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="h-9 pl-8" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Codigo, nome, tipo, uso" /></div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleFilters>
 
       <Card>
         <CardHeader className="pb-2">

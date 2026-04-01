@@ -18,8 +18,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
+import { FilterToggleButton } from "@/features/agendaLab/components/FilterToggleButton";
 import { WeeklyAllocationGrid } from "@/features/agendaLab/components/WeeklyAllocationGrid";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
+import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { Allocation, AllocationRecurrence, AllocationStatus, Weekday } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { parseTimeToMinutes } from "@/features/agendaLab/utils/time";
@@ -65,6 +68,7 @@ export function AllocationsLabPage() {
     upsertAllocation,
     removeAllocation,
   } = useAgendaLab();
+  const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("allocations");
   const [roomFilter, setRoomFilter] = useState("all");
   const [professionalFilter, setProfessionalFilter] = useState("all");
   const [weekdayFilter, setWeekdayFilter] = useState<Weekday | "all">("all");
@@ -130,6 +134,26 @@ export function AllocationsLabPage() {
     [allocationConflicts, classOccupancy, filtered]
   );
 
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (classFilter !== "all") {
+      const classItem = classes.find((item) => item.id === classFilter);
+      labels.push(`Turma: ${classItem?.nome || classFilter}`);
+    }
+    if (roomFilter !== "all") {
+      const room = rooms.find((item) => item.id === roomFilter);
+      labels.push(`Sala: ${room?.nome || roomFilter}`);
+    }
+    if (professionalFilter !== "all") {
+      const professional = professionals.find((item) => item.id === professionalFilter);
+      labels.push(`Profissional: ${professional?.nome || professionalFilter}`);
+    }
+    if (weekdayFilter !== "all") labels.push(`Dia: ${getWeekdayLabel(weekdayFilter)}`);
+    if (statusFilter !== "all") labels.push(`Status: ${getAllocationStatusLabel(statusFilter)}`);
+    if (search.trim()) labels.push(`Busca: ${search.trim()}`);
+    return labels;
+  }, [classFilter, classes, professionalFilter, professionals, roomFilter, rooms, search, statusFilter, weekdayFilter]);
+
   function openCreate() {
     setEditing(null);
     setDraft(createDraft(classes[0]?.id || "", rooms[0]?.id || "", professionals[0]?.id || ""));
@@ -177,17 +201,29 @@ export function AllocationsLabPage() {
         }
       />
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Filtros</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="flex justify-end">
+        <FilterToggleButton
+          open={filtersOpen}
+          activeCount={activeFilterLabels.length}
+          onClick={() => setFiltersOpen((current) => !current)}
+        />
+      </div>
+
+      <CollapsibleFilters
+        open={filtersOpen}
+        filters={activeFilterLabels}
+        description="Filtros locais para leitura operacional de alocacoes."
+        summaryText={`${filtered.length} alocacao(oes) no recorte.`}
+      >
+        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Turma</Label><Select value={classFilter} onValueChange={setClassFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Sala</Label><Select value={roomFilter} onValueChange={setRoomFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{rooms.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Profissional</Label><Select value={professionalFilter} onValueChange={setProfessionalFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{professionals.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Dia</Label><Select value={weekdayFilter} onValueChange={(value) => setWeekdayFilter(value as Weekday | "all")}><SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{LAB_WEEKDAYS.map((item) => <SelectItem key={item.key} value={item.key}>{item.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Status</Label><Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as AllocationStatus | "all")}><SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{STATUS.map((item) => <SelectItem key={item} value={item}>{getAllocationStatusLabel(item)}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Busca</Label><div className="relative"><Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="h-9 pl-8" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Turma, sala, profissional" /></div></div>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleFilters>
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><CalendarClock className="h-4 w-4" />Grade semanal</CardTitle></CardHeader>

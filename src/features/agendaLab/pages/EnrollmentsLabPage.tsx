@@ -19,7 +19,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
+import { FilterToggleButton } from "@/features/agendaLab/components/FilterToggleButton";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
+import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { EnrollmentPriority, EnrollmentStatus, StudentEnrollment } from "@/features/agendaLab/types";
 import { hasDuplicateActiveEnrollment } from "@/features/agendaLab/utils/conflicts";
 import { makeLabId } from "@/features/agendaLab/utils/id";
@@ -46,6 +49,7 @@ function createDraft(classId: string, studentId: string): EnrollmentDraft {
 export function EnrollmentsLabPage() {
   const { toast } = useToast();
   const { classes, students, enrollments, classOccupancy, enrollmentConflicts, upsertEnrollment } = useAgendaLab();
+  const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("enrollments");
   const [classFilter, setClassFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<EnrollmentStatus | "all">("all");
@@ -71,6 +75,23 @@ export function EnrollmentsLabPage() {
 
   const classesById = useMemo(() => new Map(classes.map((item) => [item.id, item])), [classes]);
   const studentsById = useMemo(() => new Map(students.map((item) => [item.id, item])), [students]);
+
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (classFilter !== "all") {
+      labels.push(`Turma: ${classesById.get(classFilter)?.nome || classFilter}`);
+    }
+    if (studentFilter !== "all") {
+      labels.push(`Aluno: ${studentsById.get(studentFilter)?.nome || studentFilter}`);
+    }
+    if (statusFilter !== "all") {
+      labels.push(`Status: ${getEnrollmentStatusLabel(statusFilter)}`);
+    }
+    if (search.trim()) {
+      labels.push(`Busca: ${search.trim()}`);
+    }
+    return labels;
+  }, [classFilter, classesById, search, statusFilter, studentFilter, studentsById]);
 
   function openCreate() {
     setEditing(null);
@@ -126,15 +147,27 @@ export function EnrollmentsLabPage() {
         }
       />
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Filtros</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+      <div className="flex justify-end">
+        <FilterToggleButton
+          open={filtersOpen}
+          activeCount={activeFilterLabels.length}
+          onClick={() => setFiltersOpen((current) => !current)}
+        />
+      </div>
+
+      <CollapsibleFilters
+        open={filtersOpen}
+        filters={activeFilterLabels}
+        description="Filtros locais para leitura operacional de matriculas."
+        summaryText={`${filtered.length} matricula(s) no recorte.`}
+      >
+        <div className="grid gap-3 md:grid-cols-4">
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Turma</Label><Select value={classFilter} onValueChange={setClassFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Aluno</Label><Select value={studentFilter} onValueChange={setStudentFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{students.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Status</Label><Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as EnrollmentStatus | "all")}><SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem>{STATUS.map((item) => <SelectItem key={item} value={item}>{getEnrollmentStatusLabel(item)}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Busca</Label><div className="relative"><Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="h-9 pl-8" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Turma, aluno, origem" /></div></div>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleFilters>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid w-full max-w-[500px] grid-cols-3">

@@ -19,6 +19,7 @@ import { MonthCalendarView } from "@/features/agendaLab/components/MonthCalendar
 import { WeekCalendarView } from "@/features/agendaLab/components/WeekCalendarView";
 import type { AgendaCalendarEvent } from "@/features/agendaLab/components/calendarTypes";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
+import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { ClassStatus, Weekday } from "@/features/agendaLab/types";
 import {
   allocationOccursOnDate,
@@ -33,10 +34,6 @@ import {
   statusToBadgeVariant,
 } from "@/features/agendaLab/utils/presentation";
 import { enrichAllocations } from "@/features/agendaLab/utils/selectors";
-import {
-  readAgendaLabDashboardFiltersOpen,
-  writeAgendaLabDashboardFiltersOpen,
-} from "@/features/agendaLab/utils/storage";
 
 type EnrichedItem = ReturnType<typeof enrichAllocations>[number];
 
@@ -110,7 +107,7 @@ export function AgendaLabDashboardPage() {
 
   const [calendarMode, setCalendarMode] = useState<CalendarViewMode>("week");
   const [referenceDate, setReferenceDate] = useState<Date>(() => startOfDay(new Date()));
-  const [filtersOpen, setFiltersOpen] = useState<boolean>(() => readAgendaLabDashboardFiltersOpen(false));
+  const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("agenda-dashboard");
 
   const [unitId, setUnitId] = useState("all");
   const [roomId, setRoomId] = useState("all");
@@ -120,10 +117,6 @@ export function AgendaLabDashboardPage() {
   const [statuses, setStatuses] = useState<ClassStatus[]>([]);
   const [search, setSearch] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<AgendaCalendarEvent | null>(null);
-
-  useEffect(() => {
-    writeAgendaLabDashboardFiltersOpen(filtersOpen);
-  }, [filtersOpen]);
 
   useEffect(() => {
     if (calendarMode !== "month" && weekdayFilter !== "all") {
@@ -367,8 +360,7 @@ export function AgendaLabDashboardPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        classCount={classRows.length}
-        allocationCount={filtered.length}
+        summaryText={`${classRows.length} turmas e ${filtered.length} alocacoes no recorte.`}
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1">

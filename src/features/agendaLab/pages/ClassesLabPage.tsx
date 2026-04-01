@@ -19,7 +19,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
+import { FilterToggleButton } from "@/features/agendaLab/components/FilterToggleButton";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
+import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { ClassStatus, GroupClass } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getClassStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
@@ -54,6 +57,7 @@ function createDraft(unitId: string, activityId: string, professionalId: string)
 export function ClassesLabPage() {
   const { toast } = useToast();
   const { units, activities, professionals, classes, classOccupancy, upsertClass } = useAgendaLab();
+  const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("classes");
   const [unitFilter, setUnitFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<ClassStatus | "all">("all");
   const [activityFilter, setActivityFilter] = useState("all");
@@ -75,6 +79,25 @@ export function ClassesLabPage() {
       }),
     [activityFilter, classes, search, statusFilter, unitFilter]
   );
+
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (unitFilter !== "all") {
+      const unit = units.find((item) => item.id === unitFilter);
+      labels.push(`Unidade: ${unit?.nome || unitFilter}`);
+    }
+    if (activityFilter !== "all") {
+      const activity = activities.find((item) => item.id === activityFilter);
+      labels.push(`Atividade: ${activity?.nome || activityFilter}`);
+    }
+    if (statusFilter !== "all") {
+      labels.push(`Status: ${getClassStatusLabel(statusFilter)}`);
+    }
+    if (search.trim()) {
+      labels.push(`Busca: ${search.trim()}`);
+    }
+    return labels;
+  }, [activities, activityFilter, search, statusFilter, unitFilter, units]);
 
   function openCreate() {
     setEditing(null);
@@ -119,9 +142,21 @@ export function ClassesLabPage() {
         }
       />
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Filtros</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+      <div className="flex justify-end">
+        <FilterToggleButton
+          open={filtersOpen}
+          activeCount={activeFilterLabels.length}
+          onClick={() => setFiltersOpen((current) => !current)}
+        />
+      </div>
+
+      <CollapsibleFilters
+        open={filtersOpen}
+        filters={activeFilterLabels}
+        description="Filtros locais para leitura operacional de turmas."
+        summaryText={`${filtered.length} registro(s) no recorte.`}
+      >
+        <div className="grid gap-3 md:grid-cols-4">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Unidade</Label>
             <Select value={unitFilter} onValueChange={setUnitFilter}>
@@ -147,8 +182,8 @@ export function ClassesLabPage() {
             <Label className="text-xs text-muted-foreground">Busca</Label>
             <div className="relative"><Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="h-9 pl-8" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, publico, faixa etaria" /></div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleFilters>
 
       <Card>
         <CardHeader className="pb-2">

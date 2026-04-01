@@ -19,7 +19,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
+import { FilterToggleButton } from "@/features/agendaLab/components/FilterToggleButton";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
+import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { Activity, ActivityAttendanceType, ActivityCategory, ActivityMode, ActivityStatus } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getActivityStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
@@ -51,6 +54,7 @@ function createDraft(): ActivityDraft {
 export function ActivitiesLabPage() {
   const { toast } = useToast();
   const { activities, upsertActivity } = useAgendaLab();
+  const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("activities");
   const [statusFilter, setStatusFilter] = useState<ActivityStatus | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategory | "all">("all");
   const [search, setSearch] = useState("");
@@ -77,6 +81,14 @@ export function ActivitiesLabPage() {
     }),
     [activities]
   );
+
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (categoryFilter !== "all") labels.push(`Categoria: ${categoryFilter}`);
+    if (statusFilter !== "all") labels.push(`Status: ${getActivityStatusLabel(statusFilter)}`);
+    if (search.trim()) labels.push(`Busca: ${search.trim()}`);
+    return labels;
+  }, [categoryFilter, search, statusFilter]);
 
   function openCreate() {
     setEditing(null);
@@ -123,9 +135,21 @@ export function ActivitiesLabPage() {
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Exigem sala especifica</p><p className="text-2xl font-semibold">{indicators.requiresSpecificRoom}</p></CardContent></Card>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Filtros</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
+      <div className="flex justify-end">
+        <FilterToggleButton
+          open={filtersOpen}
+          activeCount={activeFilterLabels.length}
+          onClick={() => setFiltersOpen((current) => !current)}
+        />
+      </div>
+
+      <CollapsibleFilters
+        open={filtersOpen}
+        filters={activeFilterLabels}
+        description="Filtros locais para leitura operacional de atividades."
+        summaryText={`${filtered.length} registro(s) no recorte.`}
+      >
+        <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Categoria</Label>
             <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as ActivityCategory | "all")}>
@@ -144,8 +168,8 @@ export function ActivitiesLabPage() {
             <Label className="text-xs text-muted-foreground">Busca</Label>
             <div className="relative"><Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="h-9 pl-8" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, descricao, faixa etaria" /></div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleFilters>
 
       <Card>
         <CardHeader className="pb-2">

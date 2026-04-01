@@ -7,16 +7,18 @@ import { ActiveFiltersSummary } from "@/features/agendaLab/components/ActiveFilt
 type CollapsibleFiltersProps = {
   open: boolean;
   filters: string[];
-  classCount: number;
-  allocationCount: number;
+  title?: string;
+  description?: string;
+  summaryText?: string;
   children: ReactNode;
 };
 
 export function CollapsibleFilters({
   open,
   filters,
-  classCount,
-  allocationCount,
+  title = "Filtros",
+  description = "Filtros locais para leitura operacional da unidade.",
+  summaryText,
   children,
 }: CollapsibleFiltersProps) {
   return (
@@ -25,9 +27,7 @@ export function CollapsibleFilters({
         <Card>
           <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
             <ActiveFiltersSummary filters={filters} />
-            <p className="text-xs text-muted-foreground">
-              {classCount} turmas e {allocationCount} alocacoes no recorte.
-            </p>
+            {summaryText ? <p className="text-xs text-muted-foreground">{summaryText}</p> : null}
           </CardContent>
         </Card>
       ) : null}
@@ -37,17 +37,15 @@ export function CollapsibleFilters({
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <Filter className="h-4 w-4" />
-              Filtros
+              {title}
             </CardTitle>
-            <CardDescription>Filtros locais para leitura operacional da unidade.</CardDescription>
+            {description ? <CardDescription>{description}</CardDescription> : null}
           </CardHeader>
           <CardContent className="space-y-3">
             {children}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <ActiveFiltersSummary filters={filters} />
-              <p className="text-xs text-muted-foreground">
-                {classCount} turmas e {allocationCount} alocacoes no recorte.
-              </p>
+              {summaryText ? <p className="text-xs text-muted-foreground">{summaryText}</p> : null}
             </div>
           </CardContent>
         </Card>

@@ -1,7 +1,7 @@
 import type { Activity, Allocation, GroupClass, Room, StudentEnrollment } from "@/features/agendaLab/types";
 
 const STORAGE_KEY = "agenda_lab_dataset_v1";
-const DASHBOARD_FILTERS_OPEN_KEY = "agenda_lab_dashboard_filters_open_v1";
+const FILTERS_OPEN_KEY_PREFIX = "agenda_lab_filters_open_v1:";
 
 type PersistedLabData = {
   rooms?: Room[];
@@ -39,9 +39,9 @@ export function clearLabStorage() {
   }
 }
 
-export function readAgendaLabDashboardFiltersOpen(defaultValue = false) {
+export function readLabFiltersOpen(pageKey: string, defaultValue = false) {
   try {
-    const raw = localStorage.getItem(DASHBOARD_FILTERS_OPEN_KEY);
+    const raw = localStorage.getItem(`${FILTERS_OPEN_KEY_PREFIX}${pageKey}`);
     if (raw === null) return defaultValue;
     return raw === "1";
   } catch {
@@ -49,10 +49,18 @@ export function readAgendaLabDashboardFiltersOpen(defaultValue = false) {
   }
 }
 
-export function writeAgendaLabDashboardFiltersOpen(isOpen: boolean) {
+export function writeLabFiltersOpen(pageKey: string, isOpen: boolean) {
   try {
-    localStorage.setItem(DASHBOARD_FILTERS_OPEN_KEY, isOpen ? "1" : "0");
+    localStorage.setItem(`${FILTERS_OPEN_KEY_PREFIX}${pageKey}`, isOpen ? "1" : "0");
   } catch {
     // Ignore storage write errors in lab mode.
   }
+}
+
+export function readAgendaLabDashboardFiltersOpen(defaultValue = false) {
+  return readLabFiltersOpen("agenda-dashboard", defaultValue);
+}
+
+export function writeAgendaLabDashboardFiltersOpen(isOpen: boolean) {
+  writeLabFiltersOpen("agenda-dashboard", isOpen);
 }

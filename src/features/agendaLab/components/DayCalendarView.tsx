@@ -1,6 +1,5 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Weekday } from "@/features/agendaLab/types";
 import type { AgendaCalendarEvent } from "@/features/agendaLab/components/calendarTypes";
@@ -41,10 +40,6 @@ export function DayCalendarView({ date, events, onEventClick }: DayCalendarViewP
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between rounded-lg border bg-slate-50 px-3 py-2 text-xs">
-        <p className="text-muted-foreground">Visao do dia selecionado</p>
-        <Badge variant="secondary">{orderedEvents.length} blocos</Badge>
-      </div>
       {orderedEvents.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
