@@ -24,8 +24,8 @@ export function CollapsibleFilters({
   return (
     <Collapsible open={open}>
       <CollapsibleContent>
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Filter className="h-4 w-4" />
               {title}

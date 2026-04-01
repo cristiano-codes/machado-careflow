@@ -189,12 +189,12 @@ export function AllocationsLabPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
         title="Grade Teste"
-        subtitle="Alocacao de turma por dia, horario, sala e profissional com deteccao de conflitos."
+        subtitle="Ambiente de homologacao para alocacao de turmas por dia, horario, sala e profissional."
         actions={
-          <Button onClick={openCreate}>
+          <Button size="sm" className="h-9" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova alocacao
           </Button>
@@ -202,7 +202,7 @@ export function AllocationsLabPage() {
       />
 
       <FiltersHeaderRow
-        summary={`${filtered.length} alocacoes no recorte.`}
+        summary={`${filtered.length} alocacoes no recorte atual.`}
         open={filtersOpen}
         activeFiltersCount={activeFilterLabels.length}
         onToggle={() => setFiltersOpen((current) => !current)}
@@ -211,7 +211,7 @@ export function AllocationsLabPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        description="Filtros locais para leitura operacional de alocacoes."
+        description="Filtros de visualizacao para leitura operacional de alocacoes."
       >
         <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Turma</Label><Select value={classFilter} onValueChange={setClassFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
@@ -223,13 +223,13 @@ export function AllocationsLabPage() {
         </div>
       </CollapsibleFilters>
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><CalendarClock className="h-4 w-4" />Grade semanal</CardTitle></CardHeader>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><CalendarClock className="h-4 w-4" />Grade semanal</CardTitle></CardHeader>
         <CardContent>{weeklyItems.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma alocacao encontrada.</p> : <WeeklyAllocationGrid items={weeklyItems} />}</CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Lista de alocacoes</CardTitle><CardDescription>Conflitos de sala/profissional ficam destacados em vermelho.</CardDescription></CardHeader>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3"><CardTitle className="text-base">Lista de alocacoes</CardTitle><CardDescription>Conflitos de sala ou profissional ficam destacados para apoio da analise operacional.</CardDescription></CardHeader>
         <CardContent>
           <Table>
             <TableHeader><TableRow><TableHead>Turma</TableHead><TableHead>Dia/horario</TableHead><TableHead>Sala</TableHead><TableHead>Profissional</TableHead><TableHead>Status</TableHead><TableHead>Conflito</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader>

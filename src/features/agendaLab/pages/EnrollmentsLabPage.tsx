@@ -135,12 +135,12 @@ export function EnrollmentsLabPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
         title="Matriculas Teste"
-        subtitle="Controle de vinculo aluno-turma com status, prioridade e alerta de conflito."
+        subtitle="Ambiente de homologacao para controle do vinculo aluno-turma com prioridade e alertas."
         actions={
-          <Button onClick={openCreate}>
+          <Button size="sm" className="h-9" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova matricula
           </Button>
@@ -148,7 +148,7 @@ export function EnrollmentsLabPage() {
       />
 
       <FiltersHeaderRow
-        summary={`${filtered.length} matriculas no recorte.`}
+        summary={`${filtered.length} matriculas no recorte atual.`}
         open={filtersOpen}
         activeFiltersCount={activeFilterLabels.length}
         onToggle={() => setFiltersOpen((current) => !current)}
@@ -157,7 +157,7 @@ export function EnrollmentsLabPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        description="Filtros locais para leitura operacional de matriculas."
+        description="Filtros de visualizacao para leitura operacional de matriculas."
       >
         <div className="grid gap-3 md:grid-cols-4">
           <div className="space-y-1"><Label className="text-xs text-muted-foreground">Turma</Label><Select value={classFilter} onValueChange={setClassFilter}><SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas</SelectItem>{classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
@@ -175,8 +175,8 @@ export function EnrollmentsLabPage() {
         </TabsList>
 
         <TabsContent value="lista" className="mt-3">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><ListChecks className="h-4 w-4" />Matriculas</CardTitle><CardDescription>{filtered.length} registro(s) no filtro atual.</CardDescription></CardHeader>
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><ListChecks className="h-4 w-4" />Registros de matriculas</CardTitle><CardDescription>{filtered.length} registro(s) encontrados no filtro atual.</CardDescription></CardHeader>
             <CardContent>
               <Table>
                 <TableHeader><TableRow><TableHead>Turma</TableHead><TableHead>Aluno</TableHead><TableHead>Status</TableHead><TableHead>Entrada</TableHead><TableHead>Prioridade</TableHead><TableHead>Conflito</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader>

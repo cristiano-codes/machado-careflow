@@ -190,7 +190,7 @@ export function AgendaLabDashboardPage() {
 
     return labels;
   }, [activityIds, calendarMode, professionalIds, roomId, rooms, search, statuses, unitId, units, weekdayFilter]);
-  const recorteSummaryText = `${classRows.length} turmas e ${filtered.length} alocacoes no recorte.`;
+  const recorteSummaryText = `${classRows.length} turmas e ${filtered.length} alocacoes no recorte atual.`;
 
   const periodLabel = useMemo(() => getPeriodLabel(calendarMode, referenceDate), [calendarMode, referenceDate]);
 
@@ -333,12 +333,16 @@ export function AgendaLabDashboardPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
         title="Agenda Teste"
-        subtitle="Area de laboratorio para validar grade operacional, turmas, salas e alocacoes."
+        subtitle="Ambiente de homologacao para validar grade operacional, turmas, salas e alocacoes."
         actions={
-          <Button onClick={() => toast({ title: "Laboratorio", description: "Use Turmas Teste para criar uma nova turma." })}>
+          <Button
+            size="sm"
+            className="h-9"
+            onClick={() => toast({ title: "Laboratorio", description: "Use Turmas Teste para cadastrar uma nova turma." })}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nova turma
           </Button>
@@ -366,6 +370,7 @@ export function AgendaLabDashboardPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
+        description="Filtros de visualizacao para leitura operacional da agenda em homologacao."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1">
@@ -482,7 +487,7 @@ export function AgendaLabDashboardPage() {
         />
       ) : null}
 
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardContent className="grid gap-2 p-4 text-xs text-muted-foreground md:grid-cols-3">
           <div className="flex items-center gap-2">
             <Users className="h-3.5 w-3.5" />

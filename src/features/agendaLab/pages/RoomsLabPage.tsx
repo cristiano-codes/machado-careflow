@@ -129,12 +129,12 @@ export function RoomsLabPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
         title="Salas Teste"
-        subtitle="Cadastro laboratorio de salas fisicas da unidade."
+        subtitle="Ambiente de homologacao para cadastro e revisao das salas fisicas da unidade."
         actions={
-          <Button onClick={openCreate}>
+          <Button size="sm" className="h-9" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova sala
           </Button>
@@ -142,7 +142,7 @@ export function RoomsLabPage() {
       />
 
       <FiltersHeaderRow
-        summary={`${filtered.length} salas no recorte.`}
+        summary={`${filtered.length} salas no recorte atual.`}
         open={filtersOpen}
         activeFiltersCount={activeFilterLabels.length}
         onToggle={() => setFiltersOpen((current) => !current)}
@@ -151,7 +151,7 @@ export function RoomsLabPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        description="Filtros locais para leitura operacional de salas."
+        description="Filtros de visualizacao para leitura operacional de salas."
       >
         <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-1">
@@ -175,10 +175,10 @@ export function RoomsLabPage() {
         </div>
       </CollapsibleFilters>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base"><Building className="h-4 w-4" />Salas cadastradas</CardTitle>
-          <CardDescription>{filtered.length} registro(s) no filtro atual.</CardDescription>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><Building className="h-4 w-4" />Registros de salas</CardTitle>
+          <CardDescription>{filtered.length} registro(s) encontrados no filtro atual.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

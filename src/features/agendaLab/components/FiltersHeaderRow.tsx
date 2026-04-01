@@ -14,9 +14,9 @@ export function FiltersHeaderRow({
   onToggle,
 }: FiltersHeaderRowProps) {
   return (
-    <div className="rounded-lg border bg-background px-3 py-2">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="min-w-0 text-sm text-muted-foreground sm:truncate">{summary}</p>
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+      <div className="flex min-h-[36px] flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <p className="min-w-0 text-sm font-medium text-slate-600 sm:truncate">{summary}</p>
         <FilterToggleButton
           open={open}
           activeCount={activeFiltersCount}

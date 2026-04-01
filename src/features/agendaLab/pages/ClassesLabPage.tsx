@@ -130,12 +130,12 @@ export function ClassesLabPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
         title="Turmas Teste"
-        subtitle="Cadastro mestre das turmas, com capacidade e equipe responsavel."
+        subtitle="Ambiente de homologacao para cadastro das turmas com capacidade e equipe responsavel."
         actions={
-          <Button onClick={openCreate}>
+          <Button size="sm" className="h-9" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova turma
           </Button>
@@ -143,7 +143,7 @@ export function ClassesLabPage() {
       />
 
       <FiltersHeaderRow
-        summary={`${filtered.length} turmas no recorte.`}
+        summary={`${filtered.length} turmas no recorte atual.`}
         open={filtersOpen}
         activeFiltersCount={activeFilterLabels.length}
         onToggle={() => setFiltersOpen((current) => !current)}
@@ -152,7 +152,7 @@ export function ClassesLabPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        description="Filtros locais para leitura operacional de turmas."
+        description="Filtros de visualizacao para leitura operacional de turmas."
       >
         <div className="grid gap-3 md:grid-cols-4">
           <div className="space-y-1">
@@ -183,10 +183,10 @@ export function ClassesLabPage() {
         </div>
       </CollapsibleFilters>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base"><GraduationCap className="h-4 w-4" />Turmas cadastradas</CardTitle>
-          <CardDescription>{filtered.length} registro(s) no filtro atual.</CardDescription>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><GraduationCap className="h-4 w-4" />Registros de turmas</CardTitle>
+          <CardDescription>{filtered.length} registro(s) encontrados no filtro atual.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

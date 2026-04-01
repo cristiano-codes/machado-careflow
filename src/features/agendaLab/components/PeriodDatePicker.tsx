@@ -47,7 +47,7 @@ export function PeriodDatePicker({ mode, selectedDate, onSelectDate }: PeriodDat
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" size="sm" variant="outline" aria-label="Selecionar data">
+        <Button type="button" size="sm" variant="outline" className="h-8 px-2.5" aria-label="Selecionar data">
           <CalendarDays className="h-4 w-4" />
           Calendario
         </Button>

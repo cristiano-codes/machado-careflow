@@ -27,14 +27,14 @@ export function CalendarToolbar({
   onNext,
 }: CalendarToolbarProps) {
   return (
-    <div className="rounded-lg border bg-background p-3">
+    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <ToggleGroup
             type="single"
             value={mode}
             onValueChange={(value) => value && onModeChange(value as CalendarViewMode)}
-            className="rounded-md border bg-muted/40 p-1"
+            className="rounded-md border border-slate-200 bg-slate-50 p-1"
             size="sm"
           >
             <ToggleGroupItem value="day" variant="outline">
@@ -48,16 +48,16 @@ export function CalendarToolbar({
             </ToggleGroupItem>
           </ToggleGroup>
 
-          <div className="hidden h-6 w-px bg-border md:block" />
+          <div className="hidden h-6 w-px bg-slate-300 md:block" />
 
-          <div className="flex items-center gap-1">
-            <Button type="button" size="sm" variant="outline" onClick={onPrevious} aria-label="Periodo anterior">
+          <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1">
+            <Button type="button" size="sm" variant="outline" className="h-8 px-2.5" onClick={onPrevious} aria-label="Periodo anterior">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={onToday}>
+            <Button type="button" size="sm" variant="outline" className="h-8 px-2.5" onClick={onToday}>
               Hoje
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={onNext} aria-label="Proximo periodo">
+            <Button type="button" size="sm" variant="outline" className="h-8 px-2.5" onClick={onNext} aria-label="Proximo periodo">
               <ChevronRight className="h-4 w-4" />
             </Button>
             <PeriodDatePicker mode={mode} selectedDate={selectedDate} onSelectDate={onSelectDate} />

@@ -117,12 +117,12 @@ export function ActivitiesLabPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
         title="Atividades Teste"
-        subtitle="Cadastro de atividades/oficinas/servicos que podem originar turmas."
+        subtitle="Ambiente de homologacao para cadastro de atividades, oficinas e servicos."
         actions={
-          <Button onClick={openCreate}>
+          <Button size="sm" className="h-9" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova atividade
           </Button>
@@ -130,13 +130,13 @@ export function ActivitiesLabPage() {
       />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Total</p><p className="text-2xl font-semibold">{indicators.total}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ativas</p><p className="text-2xl font-semibold">{indicators.active}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Exigem sala especifica</p><p className="text-2xl font-semibold">{indicators.requiresSpecificRoom}</p></CardContent></Card>
+        <Card className="border-slate-200 shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Total</p><p className="text-2xl font-semibold">{indicators.total}</p></CardContent></Card>
+        <Card className="border-slate-200 shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ativas</p><p className="text-2xl font-semibold">{indicators.active}</p></CardContent></Card>
+        <Card className="border-slate-200 shadow-sm"><CardContent className="p-4"><p className="text-xs text-muted-foreground">Exigem sala especifica</p><p className="text-2xl font-semibold">{indicators.requiresSpecificRoom}</p></CardContent></Card>
       </div>
 
       <FiltersHeaderRow
-        summary={`${filtered.length} atividades no recorte.`}
+        summary={`${filtered.length} atividades no recorte atual.`}
         open={filtersOpen}
         activeFiltersCount={activeFilterLabels.length}
         onToggle={() => setFiltersOpen((current) => !current)}
@@ -145,7 +145,7 @@ export function ActivitiesLabPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        description="Filtros locais para leitura operacional de atividades."
+        description="Filtros de visualizacao para leitura operacional de atividades."
       >
         <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-1">
@@ -169,10 +169,10 @@ export function ActivitiesLabPage() {
         </div>
       </CollapsibleFilters>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base"><ClipboardList className="h-4 w-4" />Atividades cadastradas</CardTitle>
-          <CardDescription>{filtered.length} registro(s) no filtro atual.</CardDescription>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><ClipboardList className="h-4 w-4" />Registros de atividades</CardTitle>
+          <CardDescription>{filtered.length} registro(s) encontrados no filtro atual.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
