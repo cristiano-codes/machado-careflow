@@ -105,7 +105,7 @@ export function RoomsLabPage() {
     setOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!draft.unitId || !draft.codigo.trim() || !draft.nome.trim()) {
       toast({ title: "Sala", description: "Unidade, codigo e nome sao obrigatorios.", variant: "destructive" });
       return;
@@ -123,9 +123,17 @@ export function RoomsLabPage() {
       ...draft,
       equipamentos: equipmentText.split(",").map((item) => item.trim()).filter(Boolean),
     };
-    upsertRoom(payload);
-    setOpen(false);
-    toast({ title: "Sala", description: editing ? "Sala atualizada." : "Sala criada no laboratorio." });
+    try {
+      await upsertRoom(payload);
+      setOpen(false);
+      toast({ title: "Sala", description: editing ? "Sala atualizada." : "Sala criada com sucesso." });
+    } catch (error) {
+      toast({
+        title: "Sala",
+        description: error instanceof Error ? error.message : "Nao foi possivel salvar a sala.",
+        variant: "destructive",
+      });
+    }
   }
 
   return (

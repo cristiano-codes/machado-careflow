@@ -33,6 +33,7 @@ const SOCIAL_WORK_ITEM_IDS = new Set([
   "triagem_social",
   "pre_cadastro",
   "agenda",
+  "operacao_unidade",
   "entrevistas",
   "avaliacoes",
   "analise_vagas",

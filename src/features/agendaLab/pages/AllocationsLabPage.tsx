@@ -166,7 +166,7 @@ export function AllocationsLabPage() {
     setOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!draft.classId || !draft.roomId || !draft.professionalId) {
       toast({ title: "Alocacao", description: "Turma, sala e profissional sao obrigatorios.", variant: "destructive" });
       return;
@@ -178,13 +178,34 @@ export function AllocationsLabPage() {
       return;
     }
     const id = editing?.id || makeLabId("allocation");
-    upsertAllocation({ id, ...draft });
-    setOpen(false);
-    const conflict = allocationConflicts.get(id);
-    if (conflict?.hasConflict) {
-      toast({ title: "Alocacao", description: "Alocacao salva com conflito detectado na grade.", variant: "destructive" });
-    } else {
-      toast({ title: "Alocacao", description: editing ? "Alocacao atualizada." : "Alocacao criada no laboratorio." });
+    try {
+      await upsertAllocation({ id, ...draft });
+      setOpen(false);
+      const conflict = allocationConflicts.get(id);
+      if (conflict?.hasConflict) {
+        toast({ title: "Alocacao", description: "Alocacao salva com conflito detectado na grade.", variant: "destructive" });
+      } else {
+        toast({ title: "Alocacao", description: editing ? "Alocacao atualizada." : "Alocacao criada com sucesso." });
+      }
+    } catch (error) {
+      toast({
+        title: "Alocacao",
+        description: error instanceof Error ? error.message : "Nao foi possivel salvar a alocacao.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleRemoveAllocation(id: string) {
+    try {
+      await removeAllocation(id);
+      toast({ title: "Alocacao", description: "Alocacao removida." });
+    } catch (error) {
+      toast({
+        title: "Alocacao",
+        description: error instanceof Error ? error.message : "Nao foi possivel remover a alocacao.",
+        variant: "destructive",
+      });
     }
   }
 
@@ -247,7 +268,7 @@ export function AllocationsLabPage() {
                       <TableCell>{item.professional?.nome || "-"}</TableCell>
                       <TableCell><Badge variant={statusToBadgeVariant(item.allocation.status)}>{getAllocationStatusLabel(item.allocation.status)}</Badge></TableCell>
                       <TableCell>{conflict?.hasConflict ? <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700"><AlertTriangle className="h-3.5 w-3.5" />Conflito detectado</span> : <span className="text-xs text-muted-foreground">Sem conflito</span>}</TableCell>
-                      <TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => openEdit(item.allocation)}>Editar</Button><Button size="sm" variant="outline" onClick={() => removeAllocation(item.allocation.id)}>Remover</Button></div></TableCell>
+                      <TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => openEdit(item.allocation)}>Editar</Button><Button size="sm" variant="outline" onClick={() => void handleRemoveAllocation(item.allocation.id)}>Remover</Button></div></TableCell>
                     </TableRow>
                   );
                 })

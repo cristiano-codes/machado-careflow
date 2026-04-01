@@ -45,6 +45,7 @@ const evaluationsRoutes = require('./routes/evaluations');
 const vagaDecisionsRoutes = require('./routes/vagaDecisions');
 const socialTriageRoutes = require('./routes/socialTriage');
 const debugDbInfoRoutes = require('./routes/debugDbInfo');
+const unitOperationsRoutes = require('./routes/unitOperations');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -64,6 +65,7 @@ app.use('/api/evaluations', evaluationsRoutes);
 app.use('/api/vaga-decisions', vagaDecisionsRoutes);
 app.use('/api/social-triage', socialTriageRoutes);
 app.use('/api/_debug/dbinfo', debugDbInfoRoutes);
+app.use('/api/unit-operations', unitOperationsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({

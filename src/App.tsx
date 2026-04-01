@@ -8,7 +8,7 @@ import { SettingsProvider } from "@/contexts/SettingsContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
 import { ProtectedRoute as PermissionProtectedRoute } from "@/components/common/ProtectedRoute";
-import { AGENDA_READ_REQUIRED_SCOPES } from "@/permissions/permissionMap";
+import { AGENDA_READ_REQUIRED_SCOPES, UNIT_OPERATIONS_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -199,6 +199,82 @@ const AppContent = () => {
             <ProtectedRoute>
               <PermissionProtectedRoute
                 requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+              >
+                <MatriculasTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operacao-unidade"
+          element={<Navigate to="/operacao-unidade/turmas" replace />}
+        />
+        <Route
+          path="/operacao-unidade/agenda"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+              >
+                <AgendaTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operacao-unidade/salas"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+              >
+                <SalasTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operacao-unidade/atividades"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+              >
+                <AtividadesTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operacao-unidade/turmas"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+              >
+                <TurmasTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operacao-unidade/grade"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
+              >
+                <GradeTeste />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operacao-unidade/matriculas"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={UNIT_OPERATIONS_REQUIRED_SCOPES}
               >
                 <MatriculasTeste />
               </PermissionProtectedRoute>

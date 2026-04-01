@@ -111,7 +111,7 @@ export function ClassesLabPage() {
     setOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!draft.unitId || !draft.nome.trim() || !draft.activityId || !draft.profissionalPrincipalId) {
       toast({ title: "Turma", description: "Unidade, nome, atividade e profissional principal sao obrigatorios.", variant: "destructive" });
       return;
@@ -124,9 +124,17 @@ export function ClassesLabPage() {
       });
       return;
     }
-    upsertClass({ id: editing?.id || makeLabId("class"), ...draft });
-    setOpen(false);
-    toast({ title: "Turma", description: editing ? "Turma atualizada." : "Turma criada no laboratorio." });
+    try {
+      await upsertClass({ id: editing?.id || makeLabId("class"), ...draft });
+      setOpen(false);
+      toast({ title: "Turma", description: editing ? "Turma atualizada." : "Turma criada com sucesso." });
+    } catch (error) {
+      toast({
+        title: "Turma",
+        description: error instanceof Error ? error.message : "Nao foi possivel salvar a turma.",
+        variant: "destructive",
+      });
+    }
   }
 
   return (

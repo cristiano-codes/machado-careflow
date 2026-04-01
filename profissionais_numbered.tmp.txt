@@ -1,0 +1,4308 @@
+    1: const express = require('express');
+    2: const { randomUUID } = require('crypto');
+    3: const router = express.Router();
+    4: const pool = require('../config/pg');
+    5: const bcrypt = require('bcryptjs');
+    6: const authMiddleware = require('../middleware/auth');
+    7: const { authorize } = require('../middleware/authorize');
+    8: const {
+    9:   DEFAULT_ACCESS_SETTINGS,
+   10:   readAccessSettings,
+   11: } = require('../lib/accessSettings');
+   12: const {
+   13:   AGENDA_PRIMARY_SCOPE,
+   14:   AGENDA_LEGACY_COMPAT_SCOPE,
+   15:   AGENDA_LEGACY_COMPAT_PHASE,
+   16:   AGENDA_LEGACY_FALLBACK_ENABLED,
+   17:   AGENDA_READ_ACCESS_MODE,
+   18:   AGENDA_LEGACY_SCOPE_REASON,
+   19:   AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+   20:   buildAgendaInstitutionalContext,
+   21:   buildAgendaReadMetadata,
+   22:   prepareAgendaWriteGuard,
+   23:   prepareAgendaWriteValidation,
+   24:   resolveAgendaWriteEnforcementMode,
+   25:   summarizeWriteValidation,
+   26:   toAgendaWriteValidationPayload,
+   27:   normalizeJourneyStatus,
+   28: } = require('../services/agendaInstitutionalService');
+   29: 
+   30: router.use(authMiddleware);
+   31: 
+   32: const authorizeProfessionalsView = authorize('profissionais', 'view');
+   33: const LEGACY_ACCESS_SIGNAL_THROTTLE_MS = 5 * 60 * 1000;
+   34: function readAgendaBooleanFlag(envName, fallback = false) {
+   35:   const rawValue = process.env[envName];
+   36:   if (rawValue === undefined || rawValue === null || rawValue === '') {
+   37:     return fallback;
+   38:   }
+   39: 
+   40:   return ['1', 'true', 'sim', 'yes', 'on'].includes(
+   41:     rawValue.toString().trim().toLowerCase()
+   42:   );
+   43: }
+   44: 
+   45: // Flags operacionais da agenda institucional (rollout controlado).
+   46: const AGENDA_VALIDATE_WRITE_ALLOW_LEGACY = readAgendaBooleanFlag(
+   47:   'AGENDA_VALIDATE_WRITE_ALLOW_LEGACY',
+   48:   false
+   49: );
+   50: const AGENDA_CREATE_WRITE_ALLOW_LEGACY = readAgendaBooleanFlag(
+   51:   'AGENDA_CREATE_WRITE_ALLOW_LEGACY',
+   52:   false
+   53: );
+   54: const AGENDA_CREATE_PERSIST_ENABLED = readAgendaBooleanFlag(
+   55:   'AGENDA_CREATE_PERSIST_ENABLED',
+   56:   true
+   57: );
+   58: const AGENDA_CREATE_ALLOW_CONFIRMED_STATUS = readAgendaBooleanFlag(
+   59:   'AGENDA_CREATE_ALLOW_CONFIRMED_STATUS',
+   60:   false
+   61: );
+   62: const AGENDA_STATUS_UPDATE_ALLOW_LEGACY = readAgendaBooleanFlag(
+   63:   'AGENDA_STATUS_UPDATE_ALLOW_LEGACY',
+   64:   false
+   65: );
+   66: const AGENDA_STATUS_UPDATE_ENABLED = readAgendaBooleanFlag(
+   67:   'AGENDA_STATUS_UPDATE_ENABLED',
+   68:   true
+   69: );
+   70: 
+   71: let patientsStatusJornadaColumnCache = null;
+   72: const legacyAgendaAccessSignalCache = new Map();
+   73: 
+   74: function normalizeDateParam(value) {
+   75:   const text = (value || '').toString().trim();
+   76:   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+   77:   return text;
+   78: }
+   79: 
+   80: function daysBetweenInclusive(startDate, endDate) {
+   81:   const start = new Date(`${startDate}T00:00:00Z`);
+   82:   const end = new Date(`${endDate}T00:00:00Z`);
+   83:   const diffMs = end.getTime() - start.getTime();
+   84:   if (Number.isNaN(diffMs)) return null;
+   85:   return Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1;
+   86: }
+   87: 
+   88: function normalizeOptionalText(value) {
+   89:   const text = (value || '').toString().trim();
+   90:   return text || null;
+   91: }
+   92: 
+   93: function normalizeEntityId(value) {
+   94:   const text = normalizeOptionalText(value);
+   95:   return text || null;
+   96: }
+   97: 
+   98: function normalizeEntityIdList(value) {
+   99:   if (Array.isArray(value)) {
+  100:     return value
+  101:       .map((entry) => normalizeEntityId(entry))
+  102:       .filter(Boolean);
+  103:   }
+  104: 
+  105:   const text = normalizeOptionalText(value);
+  106:   if (!text) return [];
+  107:   return text
+  108:     .split(',')
+  109:     .map((entry) => normalizeEntityId(entry))
+  110:     .filter(Boolean);
+  111: }
+  112: 
+  113: function normalizeAppointmentStatus(value) {
+  114:   const normalized = (value || '').toString().trim().toLowerCase();
+  115:   if (!normalized) return 'scheduled';
+  116: 
+  117:   if (['scheduled', 'agendado'].includes(normalized)) return 'scheduled';
+  118:   if (['confirmed', 'confirmado'].includes(normalized)) return 'confirmed';
+  119:   if (['completed', 'concluido'].includes(normalized)) return 'completed';
+  120:   if (['cancelled', 'canceled', 'cancelado'].includes(normalized)) return 'cancelled';
+  121:   return null;
+  122: }
+  123: 
+  124: function normalizeAppointmentTime(value) {
+  125:   const text = (value || '').toString().trim();
+  126:   if (!text) return null;
+  127:   if (!/^\d{2}:\d{2}$/.test(text)) return null;
+  128:   if (parseTimeToMinutes(text) === null) return null;
+  129:   return text;
+  130: }
+  131: 
+  132: function normalizeAppointmentStatusAction(value) {
+  133:   const normalized = (value || '').toString().trim().toLowerCase();
+  134:   if (!normalized) return null;
+  135:   if (['confirm', 'confirmar', 'confirmed', 'confirmado'].includes(normalized)) return 'confirm';
+  136:   if (['cancel', 'cancelar', 'cancelled', 'cancelado'].includes(normalized)) return 'cancel';
+  137:   return null;
+  138: }
+  139: 
+  140: function mapAppointmentStatusActionToTarget(action) {
+  141:   if (action === 'confirm') return 'confirmed';
+  142:   if (action === 'cancel') return 'cancelled';
+  143:   return null;
+  144: }
+  145: 
+  146: function resolveStatusWriteCandidates(targetStatus) {
+  147:   if (targetStatus === 'confirmed') {
+  148:     return ['confirmed', 'confirmado'];
+  149:   }
+  150:   if (targetStatus === 'cancelled') {
+  151:     return ['cancelled', 'cancelado', 'canceled'];
+  152:   }
+  153:   return [targetStatus];
+  154: }
+  155: 
+  156: function isStatusWriteCompatibilityError(error) {
+  157:   const code = (error?.code || '').toString().trim();
+  158:   if (['22P02', '23514', '42804'].includes(code)) {
+  159:     return true;
+  160:   }
+  161:   const message = (error?.message || '').toString().toLowerCase();
+  162:   if (!message) return false;
+  163:   return (
+  164:     message.includes('status') &&
+  165:     (message.includes('constraint') || message.includes('enum') || message.includes('violates'))
+  166:   );
+  167: }
+  168: 
+  169: function getAllowedCreateAppointmentStatuses() {
+  170:   return AGENDA_CREATE_ALLOW_CONFIRMED_STATUS === true
+  171:     ? ['scheduled', 'confirmed']
+  172:     : ['scheduled'];
+  173: }
+  174: 
+  175: function buildCreateStatusAllowedLabel() {
+  176:   const allowed = getAllowedCreateAppointmentStatuses();
+  177:   if (allowed.includes('confirmed')) {
+  178:     return 'scheduled/agendado ou confirmed/confirmado';
+  179:   }
+  180:   return 'scheduled/agendado';
+  181: }
+  182: 
+  183: function buildStatusUpdatePolicyPayload() {
+  184:   return {
+  185:     allowed_actions: ['confirm', 'cancel'],
+  186:     allowed_target_statuses: ['confirmed', 'cancelled'],
+  187:     immutable_statuses: ['completed'],
+  188:     cancellation_guard_bypass_controlled: true,
+  189:   };
+  190: }
+  191: 
+  192: function buildAgendaScopePayload(access, extra = {}) {
+  193:   return {
+  194:     ...buildAgendaReadMetadata({
+  195:       accessMode: access?.mode || null,
+  196:       compatibilityMode: access?.compatibilityMode === true,
+  197:       legacyReason: access?.legacyReason || null,
+  198:     }),
+  199:     ...extra,
+  200:   };
+  201: }
+  202: 
+  203: function canAccessAgendaWriteTarget(accessContext, professionalId) {
+  204:   const isOwnAgenda =
+  205:     accessContext?.linkedProfessionalId &&
+  206:     String(accessContext.linkedProfessionalId) === String(professionalId);
+  207: 
+  208:   if (
+  209:     accessContext?.linkedProfessionalId &&
+  210:     !isOwnAgenda &&
+  211:     !accessContext?.canViewOtherProfessionals
+  212:   ) {
+  213:     return false;
+  214:   }
+  215: 
+  216:   return true;
+  217: }
+  218: 
+  219: function buildAgendaWriteScopeWithSummary({
+  220:   agendaReadAccess,
+  221:   accessContext,
+  222:   writeEnforcement,
+  223:   validationPayload,
+  224:   writeValidationSummary,
+  225: }) {
+  226:   return buildAgendaScopePayload(agendaReadAccess, {
+  227:     professional_id: accessContext?.linkedProfessionalId || null,
+  228:     can_view_all_professionals: accessContext?.canViewOtherProfessionals === true,
+  229:     allow_professional_view_others: accessContext?.allowProfessionalViewOthers === true,
+  230:     write_validation_summary: {
+  231:       mode: validationPayload?.mode || writeEnforcement?.configuredMode || null,
+  232:       effective_mode:
+  233:         validationPayload?.effective_mode || writeEnforcement?.effectiveMode || null,
+  234:       rollout_phase: validationPayload?.rollout_phase || writeEnforcement?.rolloutPhase || null,
+  235:       hard_block_enabled: validationPayload?.hard_block_enabled === true,
+  236:       legacy_mode_alias: validationPayload?.legacy_mode_alias || null,
+  237:       ...(writeValidationSummary || {}),
+  238:       blocking_active: validationPayload?.blocking_active === true,
+  239:       enforcement_ready: validationPayload?.enforcement_ready === true,
+  240:     },
+  241:   });
+  242: }
+  243: 
+  244: function buildAgendaWriteOverridePayload({
+  245:   requestedEnforcementMode,
+  246:   canOverrideEnforcementMode,
+  247:   writeEnforcement,
+  248: }) {
+  249:   return {
+  250:     requested_enforcement_mode: requestedEnforcementMode || null,
+  251:     override_allowed: canOverrideEnforcementMode === true,
+  252:     override_ignored: Boolean(requestedEnforcementMode && !canOverrideEnforcementMode),
+  253:     configured_mode: writeEnforcement?.configuredMode || null,
+  254:     effective_mode: writeEnforcement?.effectiveMode || null,
+  255:   };
+  256: }
+  257: 
+  258: function buildAgendaWriteResponseBase({
+  259:   dryRun,
+  260:   persisted,
+  261:   endpoint,
+  262:   blocked,
+  263:   canProceed,
+  264:   validationPayload,
+  265:   resolvedContext,
+  266:   overridePayload,
+  267:   scopePayload,
+  268:   extra = {},
+  269: }) {
+  270:   return {
+  271:     dry_run: dryRun === true,
+  272:     persisted: persisted === true,
+  273:     endpoint: endpoint || null,
+  274:     blocked: blocked === true,
+  275:     can_proceed: canProceed === true,
+  276:     validation: validationPayload || null,
+  277:     resolved_context: resolvedContext || null,
+  278:     override: overridePayload || null,
+  279:     scope: scopePayload || null,
+  280:     ...extra,
+  281:   };
+  282: }
+  283: 
+  284: function buildAgendaLegacyWriteScopeError({
+  285:   code,
+  286:   message,
+  287:   agendaReadAccess,
+  288:   accessContext,
+  289: }) {
+  290:   return {
+  291:     success: false,
+  292:     code,
+  293:     message,
+  294:     scope: buildAgendaScopePayload(agendaReadAccess, {
+  295:       professional_id: accessContext?.linkedProfessionalId || null,
+  296:       can_view_all_professionals: accessContext?.canViewOtherProfessionals === true,
+  297:       allow_professional_view_others: accessContext?.allowProfessionalViewOthers === true,
+  298:     }),
+  299:   };
+  300: }
+  301: 
+  302: function resolveAgendaReadAccess(user) {
+  303:   const hasAgendaViewScope = hasPermissionScope(user?.permissions, AGENDA_PRIMARY_SCOPE);
+  304:   if (hasAgendaViewScope) {
+  305:     return {
+  306:       allowed: true,
+  307:       mode: AGENDA_READ_ACCESS_MODE.AGENDA_SCOPE,
+  308:       compatibilityMode: false,
+  309:       legacyReason: null,
+  310:     };
+  311:   }
+  312: 
+  313:   if (AGENDA_LEGACY_FALLBACK_ENABLED !== true) {
+  314:     return {
+  315:       allowed: false,
+  316:       mode: null,
+  317:       compatibilityMode: false,
+  318:       legacyReason: null,
+  319:     };
+  320:   }
+  321: 
+  322:   // Compatibilidade temporaria: manter leitura com profissionais:view enquanto
+  323:   // os perfis de agenda sao saneados para escopo explicito agenda:view.
+  324:   const hasLegacyProfessionalsViewScope = hasPermissionScope(
+  325:     user?.permissions,
+  326:     AGENDA_LEGACY_COMPAT_SCOPE
+  327:   );
+  328:   if (hasLegacyProfessionalsViewScope) {
+  329:     return {
+  330:       allowed: true,
+  331:       mode: AGENDA_READ_ACCESS_MODE.LEGACY_PROFISSIONAIS_SCOPE,
+  332:       compatibilityMode: true,
+  333:       legacyReason: AGENDA_LEGACY_SCOPE_REASON.LEGACY_SCOPE_PERMISSION,
+  334:     };
+  335:   }
+  336: 
+  337:   if (isAdminUser(user)) {
+  338:     return {
+  339:       allowed: true,
+  340:       mode: AGENDA_READ_ACCESS_MODE.ADMIN_ROLE_COMPAT,
+  341:       compatibilityMode: true,
+  342:       legacyReason: AGENDA_LEGACY_SCOPE_REASON.ADMIN_ROLE_COMPATIBILITY,
+  343:     };
+  344:   }
+  345: 
+  346:   return {
+  347:     allowed: false,
+  348:     mode: null,
+  349:     compatibilityMode: false,
+  350:     legacyReason: null,
+  351:   };
+  352: }
+  353: 
+  354: function emitLegacyAgendaAccessSignal(req, access) {
+  355:   if (!access || access.compatibilityMode !== true) return;
+  356: 
+  357:   const userId = (req?.user?.id || 'unknown').toString();
+  358:   const accessMode = (access?.mode || 'unknown').toString();
+  359:   const cacheKey = `${userId}:${accessMode}`;
+  360:   const now = Date.now();
+  361:   const lastSignalAt = legacyAgendaAccessSignalCache.get(cacheKey) || 0;
+  362: 
+  363:   if (now - lastSignalAt < LEGACY_ACCESS_SIGNAL_THROTTLE_MS) {
+  364:     return;
+  365:   }
+  366: 
+  367:   legacyAgendaAccessSignalCache.set(cacheKey, now);
+  368:   if (legacyAgendaAccessSignalCache.size > 1000) {
+  369:     for (const [key, timestamp] of legacyAgendaAccessSignalCache.entries()) {
+  370:       if (now - timestamp > LEGACY_ACCESS_SIGNAL_THROTTLE_MS * 4) {
+  371:         legacyAgendaAccessSignalCache.delete(key);
+  372:       }
+  373:     }
+  374:   }
+  375: 
+  376:   console.warn('[agenda][legacy_scope_compatibility_active]', {
+  377:     user_id: userId,
+  378:     access_mode: accessMode,
+  379:     legacy_scope_reason: access?.legacyReason || null,
+  380:     legacy_scope_required: AGENDA_LEGACY_COMPAT_SCOPE,
+  381:     primary_scope_required: AGENDA_PRIMARY_SCOPE,
+  382:     legacy_scope_deprecation_phase: AGENDA_LEGACY_COMPAT_PHASE,
+  383:     endpoint: req?.originalUrl || req?.path || null,
+  384:     method: req?.method || null,
+  385:     timestamp: new Date(now).toISOString(),
+  386:   });
+  387: }
+  388: 
+  389: function authorizeAgendaRead(req, res, next) {
+  390:   if (!req.user) {
+  391:     return res.status(401).json({ success: false, message: 'Nao autenticado' });
+  392:   }
+  393: 
+  394:   const access = resolveAgendaReadAccess(req.user);
+  395:   if (!access.allowed) {
+  396:     return res.status(403).json({
+  397:       success: false,
+  398:       message: 'Acesso negado para visualizar agenda',
+  399:     });
+  400:   }
+  401: 
+  402:   req.agendaReadAccess = access;
+  403:   emitLegacyAgendaAccessSignal(req, access);
+  404:   return next();
+  405: }
+  406: 
+  407: function authorizeProfessionalsListView(req, res, next) {
+  408:   const forAgenda = ['1', 'true', 'sim', 'yes'].includes(
+  409:     (req.query.for_agenda || '').toString().trim().toLowerCase()
+  410:   );
+  411: 
+  412:   if (forAgenda) {
+  413:     return authorizeAgendaRead(req, res, next);
+  414:   }
+  415: 
+  416:   return authorizeProfessionalsView(req, res, next);
+  417: }
+  418: 
+  419: const DEFAULT_CONTRACT_TYPES = ['CLT', 'PJ', 'VoluntÃ¡rio', 'EstÃ¡gio', 'TemporÃ¡rio'];
+  420: const SCALE_KEYS = ['seg', 'ter', 'qua', 'qui', 'sex'];
+  421: const DEFAULT_WEEK_SCALE = { seg: true, ter: true, qua: true, qui: true, sex: true };
+  422: const DEFAULT_DAY_START_TIME = '08:00';
+  423: const DEFAULT_DAY_END_TIME = '17:20';
+  424: const ADMIN_ROLE_ALIASES = ['coordenador geral', 'administrador', 'admin', 'gestao', 'gestÃƒÂ£o', 'gestor'];
+  425: 
+  426: async function readAccessSettingsSafe(contextLabel = 'profissionais') {
+  427:   try {
+  428:     return await readAccessSettings(pool);
+  429:   } catch (error) {
+  430:     if (!['42703', '42P01'].includes(error?.code)) {
+  431:       console.warn(`[${contextLabel}] Falha ao carregar configuracoes de acesso:`, error?.message || error);
+  432:     }
+  433:     return { ...DEFAULT_ACCESS_SETTINGS };
+  434:   }
+  435: }
+  436: 
+  437: function isAdminUser(user) {
+  438:   const role = (user?.role || '').toString().trim().toLowerCase();
+  439:   if (ADMIN_ROLE_ALIASES.includes(role)) return true;
+  440: 
+  441:   const scopes = Array.isArray(user?.permissions)
+  442:     ? user.permissions
+  443:         .map((scope) => (typeof scope === 'string' ? scope.trim().toLowerCase() : ''))
+  444:         .filter(Boolean)
+  445:     : [];
+  446: 
+  447:   return scopes.some((scope) =>
+  448:     ['admin:all', 'admin', 'users:manage', 'manage:users', 'permissions:manage', 'manage:permissions'].includes(scope)
+  449:   );
+  450: }
+  451: 
+  452: function normalizeText(value) {
+  453:   return (value || '')
+  454:     .toString()
+  455:     .normalize('NFD')
+  456:     .replace(/[\u0300-\u036f]/g, '')
+  457:     .trim()
+  458:     .toLowerCase();
+  459: }
+  460: 
+  461: function normalizeStatus(value) {
+  462:   const raw = (value || '').toString().trim().toLowerCase();
+  463:   if (!raw) return null;
+  464: 
+  465:   if (['ativo', 'active', 'plantao', 'onboarding'].includes(raw)) return 'ATIVO';
+  466:   if (['inativo', 'inactive', 'afastado'].includes(raw)) return 'INATIVO';
+  467:   return null;
+  468: }
+  469: 
+  470: function parseTimeToMinutes(value) {
+  471:   if (typeof value !== 'string') return null;
+  472:   const trimmed = value.trim();
+  473:   if (!/^\d{2}:\d{2}$/.test(trimmed)) return null;
+  474: 
+  475:   const [hoursRaw, minutesRaw] = trimmed.split(':');
+  476:   const hours = Number(hoursRaw);
+  477:   const minutes = Number(minutesRaw);
+  478:   if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  479:   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  480: 
+  481:   return hours * 60 + minutes;
+  482: }
+  483: 
+  484: async function getProfessionalsRuntimeConfig() {
+  485:   try {
+  486:     const { rows } = await pool.query(
+  487:       'SELECT business_hours, professionals_config FROM system_settings LIMIT 1'
+  488:     );
+  489: 
+  490:     const row = rows[0] || {};
+  491:     const config = row.professionals_config && typeof row.professionals_config === 'object'
+  492:       ? row.professionals_config
+  493:       : {};
+  494:     const businessHours = row.business_hours && typeof row.business_hours === 'object'
+  495:       ? row.business_hours
+  496:       : {};
+  497: 
+  498:     const allowedContractTypes = Array.isArray(config.allowed_contract_types)
+  499:       ? config.allowed_contract_types
+  500:           .map((item) => (item || '').toString().trim())
+  501:           .filter(Boolean)
+  502:       : [];
+  503: 
+  504:     const operatingDays = businessHours.operating_days && typeof businessHours.operating_days === 'object'
+  505:       ? businessHours.operating_days
+  506:       : {};
+  507: 
+  508:     const defaultWeekScale = { ...DEFAULT_WEEK_SCALE };
+  509:     for (const key of SCALE_KEYS) {
+  510:       if (typeof operatingDays[key] === 'boolean') {
+  511:         defaultWeekScale[key] = operatingDays[key];
+  512:       }
+  513:     }
+  514: 
+  515:     const openingTime = typeof businessHours.opening_time === 'string' ? businessHours.opening_time.trim() : '';
+  516:     const closingTime = typeof businessHours.closing_time === 'string' ? businessHours.closing_time.trim() : '';
+  517: 
+  518:     const defaultStartTime = parseTimeToMinutes(openingTime) === null ? DEFAULT_DAY_START_TIME : openingTime;
+  519:     const defaultEndTime = parseTimeToMinutes(closingTime) === null ? DEFAULT_DAY_END_TIME : closingTime;
+  520: 
+  521:     return {
+  522:       allowedContractTypes: allowedContractTypes.length > 0 ? allowedContractTypes : DEFAULT_CONTRACT_TYPES,
+  523:       defaultWeekScale,
+  524:       defaultStartTime,
+  525:       defaultEndTime,
+  526:     };
+  527:   } catch (error) {
+  528:     return {
+  529:       allowedContractTypes: DEFAULT_CONTRACT_TYPES,
+  530:       defaultWeekScale: { ...DEFAULT_WEEK_SCALE },
+  531:       defaultStartTime: DEFAULT_DAY_START_TIME,
+  532:       defaultEndTime: DEFAULT_DAY_END_TIME,
+  533:     };
+  534:   }
+  535: }
+  536: 
+  537: async function hasPatientsStatusJornadaColumn(client) {
+  538:   if (patientsStatusJornadaColumnCache !== null) {
+  539:     return patientsStatusJornadaColumnCache;
+  540:   }
+  541: 
+  542:   const db = client || pool;
+  543:   try {
+  544:     const { rows } = await db.query(
+  545:       `
+  546:         SELECT 1
+  547:         FROM information_schema.columns
+  548:         WHERE table_schema = 'public'
+  549:           AND table_name = 'patients'
+  550:           AND column_name = 'status_jornada'
+  551:         LIMIT 1
+  552:       `
+  553:     );
+  554:     patientsStatusJornadaColumnCache = rows.length > 0;
+  555:   } catch (error) {
+  556:     if (!['42P01', '42703'].includes(error?.code)) {
+  557:       console.error(
+  558:         '[profissionais] Falha ao verificar coluna patients.status_jornada:',
+  559:         error
+  560:       );
+  561:     }
+  562:     patientsStatusJornadaColumnCache = false;
+  563:   }
+  564: 
+  565:   return patientsStatusJornadaColumnCache;
+  566: }
+  567: 
+  568: async function resolveAgendaWriteProfessionalContext({ professionalId, client }) {
+  569:   const normalizedProfessionalId = normalizeEntityId(professionalId);
+  570:   if (!normalizedProfessionalId) {
+  571:     return {
+  572:       professionalId: null,
+  573:       professionalName: null,
+  574:       professionalRole: null,
+  575:       professionalSpecialty: null,
+  576:       source: 'not_provided',
+  577:       found: null,
+  578:     };
+  579:   }
+  580: 
+  581:   const db = client || pool;
+  582:   const result = await db.query(
+  583:     `
+  584:       SELECT
+  585:         p.id::text AS professional_id,
+  586:         COALESCE(
+  587:           u.name,
+  588:           p.email,
+  589:           p.funcao,
+  590:           p.specialty,
+  591:           'Profissional ' || p.id::text
+  592:         ) AS professional_name,
+  593:         COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+  594:         p.specialty AS professional_specialty
+  595:       FROM public.professionals p
+  596:       LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+  597:       LEFT JOIN public.users u
+  598:         ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+  599:       WHERE p.id::text = $1
+  600:       LIMIT 1
+  601:     `,
+  602:     [normalizedProfessionalId]
+  603:   );
+  604: 
+  605:   const row = result.rows[0];
+  606:   if (!row) {
+  607:     return {
+  608:       professionalId: normalizedProfessionalId,
+  609:       professionalName: null,
+  610:       professionalRole: null,
+  611:       professionalSpecialty: null,
+  612:       source: 'professional_not_found',
+  613:       found: false,
+  614:     };
+  615:   }
+  616: 
+  617:   return {
+  618:     professionalId: row?.professional_id || normalizedProfessionalId,
+  619:     professionalName: row?.professional_name || null,
+  620:     professionalRole: row?.professional_role || null,
+  621:     professionalSpecialty: row?.professional_specialty || null,
+  622:     source: 'professionals.catalog',
+  623:     found: true,
+  624:   };
+  625: }
+  626: 
+  627: async function resolveAgendaWritePatientContext({
+  628:   patientId,
+  629:   journeyStatusInput = null,
+  630:   client,
+  631: }) {
+  632:   const normalizedPatientId = normalizeEntityId(patientId);
+  633:   const normalizedJourneyStatus = normalizeJourneyStatus(journeyStatusInput);
+  634:   if (!normalizedPatientId) {
+  635:     if (normalizedJourneyStatus) {
+  636:       return {
+  637:         patientId: null,
+  638:         patientName: null,
+  639:         journeyStatus: normalizedJourneyStatus,
+  640:         source: 'request_body_journey_status',
+  641:         found: null,
+  642:       };
+  643:     }
+  644: 
+  645:     return {
+  646:       patientId: null,
+  647:       patientName: null,
+  648:       journeyStatus: null,
+  649:       source: 'not_provided',
+  650:       found: null,
+  651:     };
+  652:   }
+  653: 
+  654:   const db = client || pool;
+  655:   const hasStatusJornada = await hasPatientsStatusJornadaColumn(db);
+  656:   const patientQuery = hasStatusJornada
+  657:     ? `
+  658:         SELECT
+  659:           pa.id::text AS patient_id,
+  660:           pa.name AS patient_name,
+  661:           pa.status_jornada AS status_jornada
+  662:         FROM public.patients pa
+  663:         WHERE pa.id::text = $1
+  664:         LIMIT 1
+  665:       `
+  666:     : `
+  667:         SELECT
+  668:           pa.id::text AS patient_id,
+  669:           pa.name AS patient_name,
+  670:           NULL::text AS status_jornada
+  671:         FROM public.patients pa
+  672:         WHERE pa.id::text = $1
+  673:         LIMIT 1
+  674:       `;
+  675: 
+  676:   const result = await db.query(patientQuery, [normalizedPatientId]);
+  677:   const row = result.rows[0];
+  678:   if (!row) {
+  679:     return {
+  680:       patientId: normalizedPatientId,
+  681:       patientName: null,
+  682:       journeyStatus: null,
+  683:       source: 'patient_not_found',
+  684:       found: false,
+  685:     };
+  686:   }
+  687: 
+  688:   const journeyStatusFromPatient = normalizeJourneyStatus(row?.status_jornada || null);
+  689:   return {
+  690:     patientId: row?.patient_id || normalizedPatientId,
+  691:     patientName: row?.patient_name || null,
+  692:     journeyStatus: journeyStatusFromPatient,
+  693:     source: hasStatusJornada
+  694:       ? journeyStatusFromPatient
+  695:         ? 'patients.status_jornada'
+  696:         : 'patients.status_jornada_missing'
+  697:       : 'patients.status_jornada_column_unavailable',
+  698:     found: true,
+  699:   };
+  700: }
+  701: 
+  702: async function resolveAgendaWriteServiceContext({
+  703:   serviceId,
+  704:   serviceNameInput = null,
+  705:   client,
+  706: }) {
+  707:   const normalizedServiceId = normalizeEntityId(serviceId);
+  708:   const normalizedServiceName = normalizeOptionalText(serviceNameInput);
+  709: 
+  710:   if (normalizedServiceName) {
+  711:     return {
+  712:       serviceId: normalizedServiceId,
+  713:       serviceName: normalizedServiceName,
+  714:       source: 'request_body_service_name',
+  715:       found: normalizedServiceId ? null : true,
+  716:     };
+  717:   }
+  718: 
+  719:   if (!normalizedServiceId) {
+  720:     return {
+  721:       serviceId: null,
+  722:       serviceName: null,
+  723:       source: 'not_provided',
+  724:       found: null,
+  725:     };
+  726:   }
+  727: 
+  728:   const db = client || pool;
+  729:   const result = await db.query(
+  730:     `
+  731:       SELECT s.id::text AS service_id, s.name AS service_name
+  732:       FROM public.services s
+  733:       WHERE s.id::text = $1
+  734:       LIMIT 1
+  735:     `,
+  736:     [normalizedServiceId]
+  737:   );
+  738: 
+  739:   const row = result.rows[0];
+  740:   if (!row) {
+  741:     return {
+  742:       serviceId: normalizedServiceId,
+  743:       serviceName: null,
+  744:       source: 'service_not_found',
+  745:       found: false,
+  746:     };
+  747:   }
+  748: 
+  749:   return {
+  750:     serviceId: row?.service_id || normalizedServiceId,
+  751:     serviceName: row?.service_name || null,
+  752:     source: 'services.catalog',
+  753:     found: true,
+  754:   };
+  755: }
+  756: 
+  757: async function resolveAgendaAppointmentContextById({
+  758:   appointmentId,
+  759:   professionalId,
+  760:   client,
+  761: }) {
+  762:   const normalizedAppointmentId = normalizeEntityId(appointmentId);
+  763:   const normalizedProfessionalId = normalizeEntityId(professionalId);
+  764:   if (!normalizedAppointmentId || !normalizedProfessionalId) {
+  765:     return null;
+  766:   }
+  767: 
+  768:   const db = client || pool;
+  769:   const hasStatusJornada = await hasPatientsStatusJornadaColumn(db);
+  770:   const patientJourneyProjection = hasStatusJornada
+  771:     ? 'pa.status_jornada AS status_jornada, pa.status_jornada AS journey_status,'
+  772:     : 'NULL::text AS status_jornada, NULL::text AS journey_status,';
+  773: 
+  774:   const result = await db.query(
+  775:     `
+  776:       SELECT
+  777:         a.id::text AS appointment_id,
+  778:         a.id::text AS id,
+  779:         a.professional_id::text AS professional_id,
+  780:         COALESCE(
+  781:           u.name,
+  782:           p.email,
+  783:           p.funcao,
+  784:           p.specialty,
+  785:           'Profissional ' || p.id::text
+  786:         ) AS professional_name,
+  787:         COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+  788:         p.specialty AS professional_specialty,
+  789:         a.appointment_date,
+  790:         to_char(a.appointment_time, 'HH24:MI') AS appointment_time,
+  791:         a.status AS appointment_status,
+  792:         a.status,
+  793:         a.notes,
+  794:         pa.id::text AS patient_id,
+  795:         pa.name AS patient_name,
+  796:         ${patientJourneyProjection}
+  797:         s.id::text AS service_id,
+  798:         s.name AS service_name,
+  799:         COALESCE(pr.nome, p.specialty, p.funcao, NULL) AS sector_responsible,
+  800:         COALESCE(
+  801:           u.name,
+  802:           p.email,
+  803:           p.funcao,
+  804:           p.specialty,
+  805:           NULL
+  806:         ) AS responsible_name
+  807:       FROM public.appointments a
+  808:       JOIN public.patients pa ON pa.id = a.patient_id
+  809:       JOIN public.professionals p ON p.id = a.professional_id
+  810:       LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+  811:       LEFT JOIN public.users u
+  812:         ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+  813:       LEFT JOIN public.services s ON s.id = a.service_id
+  814:       WHERE a.id::text = $1
+  815:         AND a.professional_id::text = $2
+  816:       LIMIT 1
+  817:       FOR UPDATE OF a
+  818:     `,
+  819:     [normalizedAppointmentId, normalizedProfessionalId]
+  820:   );
+  821: 
+  822:   return result.rows[0] || null;
+  823: }
+  824: 
+  825: function normalizeContractType(value, allowedContractTypes = DEFAULT_CONTRACT_TYPES) {
+  826:   const raw = normalizeText(value);
+  827:   if (!raw) return null;
+  828:   return allowedContractTypes.find((item) => normalizeText(item) === raw) || null;
+  829: }
+  830: 
+  831: function isValidDateValue(value) {
+  832:   if (!value) return true;
+  833:   const text = value.toString().trim();
+  834:   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  835:   const date = new Date(`${text}T00:00:00Z`);
+  836:   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+  837: }
+  838: 
+  839: function normalizeWeeklyScale(
+  840:   value,
+  841:   defaultWeekScale = DEFAULT_WEEK_SCALE,
+  842:   defaultStartTime = DEFAULT_DAY_START_TIME,
+  843:   defaultEndTime = DEFAULT_DAY_END_TIME
+  844: ) {
+  845:   const startDefaultMinutes = parseTimeToMinutes(defaultStartTime);
+  846:   const endDefaultMinutes = parseTimeToMinutes(defaultEndTime);
+  847: 
+  848:   const safeDefaultStart = startDefaultMinutes === null ? DEFAULT_DAY_START_TIME : defaultStartTime;
+  849:   const safeDefaultEnd = endDefaultMinutes === null ? DEFAULT_DAY_END_TIME : defaultEndTime;
+  850: 
+  851:   if (value === undefined || value === null || value === '') {
+  852:     const fallback = {};
+  853:     for (const key of SCALE_KEYS) {
+  854:       fallback[key] = {
+  855:         ativo: Boolean(defaultWeekScale[key]),
+  856:         inicio: safeDefaultStart,
+  857:         fim: safeDefaultEnd,
+  858:       };
+  859:     }
+  860:     return fallback;
+  861:   }
+  862: 
+  863:   let raw = value;
+  864:   if (typeof raw === 'string') {
+  865:     try {
+  866:       raw = JSON.parse(raw);
+  867:     } catch (error) {
+  868:       return null;
+  869:     }
+  870:   }
+  871: 
+  872:   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+  873:     return null;
+  874:   }
+  875: 
+  876:   const normalized = {};
+  877:   for (const key of SCALE_KEYS) {
+  878:     const defaultDay = {
+  879:       ativo: Boolean(defaultWeekScale[key]),
+  880:       inicio: safeDefaultStart,
+  881:       fim: safeDefaultEnd,
+  882:     };
+  883: 
+  884:     const current = raw[key];
+  885:     if (current === undefined) {
+  886:       normalized[key] = defaultDay;
+  887:       continue;
+  888:     }
+  889: 
+  890:     if (typeof current === 'boolean') {
+  891:       normalized[key] = {
+  892:         ...defaultDay,
+  893:         ativo: current,
+  894:       };
+  895:       continue;
+  896:     }
+  897: 
+  898:     if (!current || typeof current !== 'object' || Array.isArray(current)) {
+  899:       return null;
+  900:     }
+  901: 
+  902:     const activeValue =
+  903:       current.ativo !== undefined
+  904:         ? current.ativo
+  905:         : current.active !== undefined
+  906:           ? current.active
+  907:           : current.enabled !== undefined
+  908:             ? current.enabled
+  909:             : undefined;
+  910: 
+  911:     if (activeValue !== undefined && typeof activeValue !== 'boolean') {
+  912:       return null;
+  913:     }
+  914: 
+  915:     const inicioValue =
+  916:       typeof current.inicio === 'string'
+  917:         ? current.inicio.trim()
+  918:         : typeof current.start === 'string'
+  919:           ? current.start.trim()
+  920:           : defaultDay.inicio;
+  921: 
+  922:     const fimValue =
+  923:       typeof current.fim === 'string'
+  924:         ? current.fim.trim()
+  925:         : typeof current.end === 'string'
+  926:           ? current.end.trim()
+  927:           : defaultDay.fim;
+  928: 
+  929:     const inicioMinutes = parseTimeToMinutes(inicioValue);
+  930:     const fimMinutes = parseTimeToMinutes(fimValue);
+  931:     if (inicioMinutes === null || fimMinutes === null) {
+  932:       return null;
+  933:     }
+  934: 
+  935:     const ativo = typeof activeValue === 'boolean' ? activeValue : defaultDay.ativo;
+  936:     if (ativo && inicioMinutes >= fimMinutes) {
+  937:       return null;
+  938:     }
+  939: 
+  940:     normalized[key] = {
+  941:       ativo,
+  942:       inicio: inicioValue,
+  943:       fim: fimValue,
+  944:     };
+  945:   }
+  946: 
+  947:   return normalized;
+  948: }
+  949: 
+  950: function parsePositiveInteger(value) {
+  951:   if (value === undefined || value === null || value === '') {
+  952:     return null;
+  953:   }
+  954:   const parsed = Number(value);
+  955:   if (!Number.isInteger(parsed) || parsed <= 0) {
+  956:     return null;
+  957:   }
+  958:   return parsed;
+  959: }
+  960: 
+  961: async function fetchProfessionalRoleById(client, roleId) {
+  962:   if (!roleId) return null;
+  963:   const db = client || pool;
+  964:   const { rows } = await db.query(
+  965:     `
+  966:       SELECT id, nome, ativo
+  967:       FROM public.professional_roles
+  968:       WHERE id = $1
+  969:       LIMIT 1
+  970:     `,
+  971:     [roleId]
+  972:   );
+  973:   return rows[0] || null;
+  974: }
+  975: 
+  976: function validateProfessionalPayload(payload, options = {}) {
+  977:   const requireUserIdentity = options.requireUserIdentity ?? false;
+  978:   const allowedContractTypes = options.allowedContractTypes ?? DEFAULT_CONTRACT_TYPES;
+  979:   const defaultWeekScale = options.defaultWeekScale ?? DEFAULT_WEEK_SCALE;
+  980:   const defaultStartTime = options.defaultStartTime ?? DEFAULT_DAY_START_TIME;
+  981:   const defaultEndTime = options.defaultEndTime ?? DEFAULT_DAY_END_TIME;
+  982: 
+  983:   const name = (payload?.name || '').toString().trim();
+  984:   const email = (payload?.email || '').toString().trim().toLowerCase();
+  985:   const username = (payload?.username || '').toString().trim();
+  986:   const role = (payload?.role || 'UsuÃ¡rio').toString().trim() || 'UsuÃ¡rio';
+  987:   const phone = (payload?.phone || '').toString().trim() || null;
+  988:   const crp = (payload?.crp || '').toString().trim() || null;
+  989:   const specialty = (payload?.specialty || '').toString().trim() || null;
+  990:   const funcao = (payload?.funcao || '').toString().trim();
+  991:   const roleId = parsePositiveInteger(payload?.role_id);
+  992:   const tipoContrato = normalizeContractType(payload?.tipo_contrato, allowedContractTypes);
+  993:   const status = normalizeStatus(payload?.status || 'ATIVO');
+  994:   const weeklyScale = normalizeWeeklyScale(
+  995:     payload?.escala_semanal,
+  996:     defaultWeekScale,
+  997:     defaultStartTime,
+  998:     defaultEndTime
+  999:   );
+ 1000:   const weeklyHours = parsePositiveInteger(payload?.horas_semanais);
+ 1001:   const birthDate = payload?.data_nascimento ? payload.data_nascimento.toString().trim() : null;
+ 1002: 
+ 1003:   if (!name) {
+ 1004:     return { ok: false, message: 'Nome Ã© obrigatÃ³rio' };
+ 1005:   }
+ 1006: 
+ 1007:   if (
+ 1008:     payload?.role_id !== undefined &&
+ 1009:     payload?.role_id !== null &&
+ 1010:     payload?.role_id !== '' &&
+ 1011:     roleId === null
+ 1012:   ) {
+ 1013:     return { ok: false, message: 'role_id deve ser um inteiro positivo' };
+ 1014:   }
+ 1015: 
+ 1016:   if (!funcao && roleId === null) {
+ 1017:     return { ok: false, message: 'Funcao obrigatoria: informe role_id ou funcao' };
+ 1018:   }
+ 1019: 
+ 1020:   if (!tipoContrato) {
+ 1021:       return {
+ 1022:       ok: false,
+ 1023:       message: `tipo_contrato obrigatÃ³rio. Valores aceitos: ${allowedContractTypes.join(', ')}`,
+ 1024:     };
+ 1025:   }
+ 1026: 
+ 1027:   if (payload?.horas_semanais !== undefined && payload?.horas_semanais !== null && payload?.horas_semanais !== '' && weeklyHours === null) {
+ 1028:     return { ok: false, message: 'horas_semanais deve ser um inteiro positivo' };
+ 1029:   }
+ 1030: 
+ 1031:   if (birthDate && !isValidDateValue(birthDate)) {
+ 1032:     return { ok: false, message: 'data_nascimento invÃ¡lida. Use o formato YYYY-MM-DD' };
+ 1033:   }
+ 1034: 
+ 1035:   if (!weeklyScale) {
+ 1036:     return {
+ 1037:       ok: false,
+ 1038:       message:
+ 1039:         'escala_semanal invalida. Use seg/ter/qua/qui/sex como boolean ou objeto {ativo,inicio,fim}',
+ 1040:     };
+ 1041:   }
+ 1042: 
+ 1043:   if (!status) {
+ 1044:     return { ok: false, message: 'status invÃ¡lido. Use ATIVO ou INATIVO' };
+ 1045:   }
+ 1046: 
+ 1047:   if (requireUserIdentity && (!email || !username)) {
+ 1048:     return { ok: false, message: 'E-mail e username sÃ£o obrigatÃ³rios' };
+ 1049:   }
+ 1050: 
+ 1051:   return {
+ 1052:     ok: true,
+ 1053:     data: {
+ 1054:       name,
+ 1055:       email: email || null,
+ 1056:       username: username || null,
+ 1057:       role,
+ 1058:       phone,
+ 1059:       crp,
+ 1060:       specialty,
+ 1061:       funcao,
+ 1062:       role_id: roleId,
+ 1063:       tipo_contrato: tipoContrato,
+ 1064:       status,
+ 1065:       escala_semanal: weeklyScale,
+ 1066:       horas_semanais: weeklyHours,
+ 1067:       data_nascimento: birthDate,
+ 1068:     },
+ 1069:   };
+ 1070: }
+ 1071: 
+ 1072: function normalizePermissionScopes(scopes) {
+ 1073:   if (!Array.isArray(scopes)) return [];
+ 1074:   return scopes
+ 1075:     .map((scope) => (typeof scope === 'string' ? scope.trim().toLowerCase() : ''))
+ 1076:     .filter(Boolean);
+ 1077: }
+ 1078: 
+ 1079: function hasPermissionScope(scopes, targetScope) {
+ 1080:   const normalizedTarget = (targetScope || '').toString().trim().toLowerCase();
+ 1081:   if (!normalizedTarget) return false;
+ 1082: 
+ 1083:   const normalizedScopes = normalizePermissionScopes(scopes);
+ 1084:   return (
+ 1085:     normalizedScopes.includes(normalizedTarget) ||
+ 1086:     normalizedScopes.includes('*') ||
+ 1087:     normalizedScopes.includes('*:*') ||
+ 1088:     normalizedScopes.includes('agenda:*')
+ 1089:   );
+ 1090: }
+ 1091: 
+ 1092: async function getAllowProfessionalViewOthers(client) {
+ 1093:   const db = client || pool;
+ 1094:   try {
+ 1095:     const { rows } = await db.query(
+ 1096:       'SELECT allow_professional_view_others FROM public.system_settings LIMIT 1'
+ 1097:     );
+ 1098:     return rows[0]?.allow_professional_view_others === true;
+ 1099:   } catch (error) {
+ 1100:     if (!['42703', '42P01'].includes(error?.code)) {
+ 1101:       console.error('[profissionais] Falha ao ler allow_professional_view_others:', error);
+ 1102:     }
+ 1103:     return false;
+ 1104:   }
+ 1105: }
+ 1106: 
+ 1107: async function getLinkedProfessionalByUserId(userId, client) {
+ 1108:   const db = client || pool;
+ 1109:   const normalizedUserId = (userId || '').toString().trim();
+ 1110:   if (!normalizedUserId) return null;
+ 1111: 
+ 1112:   const { rows } = await db.query(
+ 1113:     `
+ 1114:       SELECT p.id, p.status
+ 1115:       FROM public.professionals p
+ 1116:       WHERE COALESCE(
+ 1117:         to_jsonb(p)->>'user_id_int',
+ 1118:         to_jsonb(p)->>'user_id'
+ 1119:       ) = $1
+ 1120:       ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
+ 1121:       LIMIT 1
+ 1122:     `,
+ 1123:     [normalizedUserId]
+ 1124:   );
+ 1125: 
+ 1126:   return rows[0] || null;
+ 1127: }
+ 1128: 
+ 1129: async function getProfessionalLinkColumn(client) {
+ 1130:   const db = client || pool;
+ 1131:   const { rows } = await db.query(
+ 1132:     `
+ 1133:       SELECT column_name
+ 1134:       FROM information_schema.columns
+ 1135:       WHERE table_schema = 'public'
+ 1136:         AND table_name = 'professionals'
+ 1137:         AND column_name IN ('user_id_int', 'user_id')
+ 1138:       ORDER BY CASE column_name WHEN 'user_id_int' THEN 0 ELSE 1 END
+ 1139:       LIMIT 1
+ 1140:     `
+ 1141:   );
+ 1142: 
+ 1143:   return rows[0]?.column_name || null;
+ 1144: }
+ 1145: 
+ 1146: async function getColumnSqlType(client, tableName, columnName) {
+ 1147:   const db = client || pool;
+ 1148:   const { rows } = await db.query(
+ 1149:     `
+ 1150:       SELECT format_type(a.atttypid, a.atttypmod) AS sql_type
+ 1151:       FROM pg_attribute a
+ 1152:       JOIN pg_class c ON c.oid = a.attrelid
+ 1153:       JOIN pg_namespace n ON n.oid = c.relnamespace
+ 1154:       WHERE n.nspname = 'public'
+ 1155:         AND c.relname = $1
+ 1156:         AND a.attname = $2
+ 1157:         AND a.attnum > 0
+ 1158:         AND NOT a.attisdropped
+ 1159:       LIMIT 1
+ 1160:     `,
+ 1161:     [tableName, columnName]
+ 1162:   );
+ 1163: 
+ 1164:   return rows[0]?.sql_type || null;
+ 1165: }
+ 1166: 
+ 1167: async function ensureProfessionalLinkRequestsSchema(client) {
+ 1168:   const db = client || pool;
+ 1169:   const usersIdType = (await getColumnSqlType(db, 'users', 'id')) || 'uuid';
+ 1170:   const professionalsIdType =
+ 1171:     (await getColumnSqlType(db, 'professionals', 'id')) || 'uuid';
+ 1172: 
+ 1173:   try {
+ 1174:     await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+ 1175:   } catch (error) {
+ 1176:     // Alguns ambientes nao permitem CREATE EXTENSION em runtime.
+ 1177:   }
+ 1178: 
+ 1179:   await db.query(
+ 1180:     `
+ 1181:       CREATE TABLE IF NOT EXISTS public.professional_link_requests (
+ 1182:         id uuid PRIMARY KEY,
+ 1183:         user_id ${usersIdType} NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+ 1184:         professional_id ${professionalsIdType} NOT NULL REFERENCES public.professionals(id) ON DELETE CASCADE,
+ 1185:         status text NOT NULL DEFAULT 'pending',
+ 1186:         notes text NULL,
+ 1187:         decided_at timestamptz NULL,
+ 1188:         decided_by_user_id ${usersIdType} NULL REFERENCES public.users(id) ON DELETE SET NULL,
+ 1189:         created_at timestamptz NOT NULL DEFAULT NOW(),
+ 1190:         updated_at timestamptz NOT NULL DEFAULT NOW(),
+ 1191:         CONSTRAINT professional_link_requests_status_check
+ 1192:           CHECK (status IN ('pending', 'approved', 'rejected'))
+ 1193:       )
+ 1194:     `
+ 1195:   );
+ 1196: 
+ 1197:   await db.query(
+ 1198:     `
+ 1199:       CREATE UNIQUE INDEX IF NOT EXISTS idx_professional_link_requests_user_pending
+ 1200:       ON public.professional_link_requests (user_id)
+ 1201:       WHERE status = 'pending'
+ 1202:     `
+ 1203:   );
+ 1204:   await db.query(
+ 1205:     `
+ 1206:       CREATE UNIQUE INDEX IF NOT EXISTS idx_professional_link_requests_professional_pending
+ 1207:       ON public.professional_link_requests (professional_id)
+ 1208:       WHERE status = 'pending'
+ 1209:     `
+ 1210:   );
+ 1211: 
+ 1212:   await db.query(
+ 1213:     `
+ 1214:       CREATE INDEX IF NOT EXISTS idx_professional_link_requests_status_created_at
+ 1215:       ON public.professional_link_requests (status, created_at DESC)
+ 1216:     `
+ 1217:   );
+ 1218: }
+ 1219: 
+ 1220: function denyIfManualLinkRequiresAdmin(accessSettings, req, res) {
+ 1221:   if (accessSettings.link_policy !== 'MANUAL_LINK_ADMIN') {
+ 1222:     return false;
+ 1223:   }
+ 1224: 
+ 1225:   if (isAdminUser(req.user)) {
+ 1226:     return false;
+ 1227:   }
+ 1228: 
+ 1229:   res.status(403).json({
+ 1230:     success: false,
+ 1231:     message: 'Apenas administradores podem vincular ou desvincular usuarios nesta politica.',
+ 1232:   });
+ 1233:   return true;
+ 1234: }
+ 1235: 
+ 1236: function normalizeLinkRequestStatus(value) {
+ 1237:   const normalized = (value || '').toString().trim().toLowerCase();
+ 1238:   if (['pending', 'approved', 'rejected'].includes(normalized)) {
+ 1239:     return normalized;
+ 1240:   }
+ 1241:   return null;
+ 1242: }
+ 1243: 
+ 1244: async function resolveAgendaAccessContext(user, client) {
+ 1245:   const db = client || pool;
+ 1246:   const linkedProfessional = await getLinkedProfessionalByUserId(user?.id, db);
+ 1247:   const allowProfessionalViewOthers = await getAllowProfessionalViewOthers(db);
+ 1248:   const canViewAllByPermission = hasPermissionScope(
+ 1249:     user?.permissions,
+ 1250:     'agenda:view_all_professionals'
+ 1251:   );
+ 1252: 
+ 1253:   return {
+ 1254:     linkedProfessionalId: linkedProfessional?.id || null,
+ 1255:     linkedProfessionalStatus: linkedProfessional?.status || null,
+ 1256:     allowProfessionalViewOthers,
+ 1257:     canViewAllByPermission,
+ 1258:     canViewOtherProfessionals:
+ 1259:       Boolean(linkedProfessional?.id) &&
+ 1260:       allowProfessionalViewOthers &&
+ 1261:       canViewAllByPermission,
+ 1262:   };
+ 1263: }
+ 1264: 
+ 1265: // Criar novo profissional (cria usuÃ¡rio + vÃ­nculo)
+ 1266: router.post('/', authorize('profissionais', 'create'), async (req, res) => {
+ 1267:   const client = await pool.connect();
+ 1268:   try {
+ 1269:     const accessSettings = await readAccessSettingsSafe('profissionais:create');
+ 1270:     const runtimeConfig = await getProfessionalsRuntimeConfig();
+ 1271:     const validation = validateProfessionalPayload(req.body, {
+ 1272:       requireUserIdentity: accessSettings.allow_create_user_from_professional === true,
+ 1273:       allowedContractTypes: runtimeConfig.allowedContractTypes,
+ 1274:       defaultWeekScale: runtimeConfig.defaultWeekScale,
+ 1275:       defaultStartTime: runtimeConfig.defaultStartTime,
+ 1276:       defaultEndTime: runtimeConfig.defaultEndTime,
+ 1277:     });
+ 1278:     if (!validation.ok) {
+ 1279:       return res.status(400).json({ success: false, message: validation.message });
+ 1280:     }
+ 1281: 
+ 1282:     const payload = validation.data;
+ 1283:     const normalizedEmail = (payload.email || '').toString().trim().toLowerCase();
+ 1284: 
+ 1285:     await client.query('BEGIN');
+ 1286: 
+ 1287:     const linkColumn = await getProfessionalLinkColumn(client);
+ 1288:     if (!linkColumn) {
+ 1289:       await client.query('ROLLBACK');
+ 1290:       return res.status(500).json({
+ 1291:         success: false,
+ 1292:         message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+ 1293:       });
+ 1294:     }
+ 1295: 
+ 1296:     let selectedRole = null;
+ 1297:     if (payload.role_id !== null) {
+ 1298:       selectedRole = await fetchProfessionalRoleById(client, payload.role_id);
+ 1299:       if (!selectedRole) {
+ 1300:         await client.query('ROLLBACK');
+ 1301:         return res.status(400).json({ success: false, message: 'Funcao selecionada nao encontrada' });
+ 1302:       }
+ 1303:       if (!selectedRole.ativo) {
+ 1304:         await client.query('ROLLBACK');
+ 1305:         return res.status(400).json({ success: false, message: 'Funcao selecionada esta inativa' });
+ 1306:       }
+ 1307:     }
+ 1308: 
+ 1309:     const resolvedFuncao = payload.funcao || selectedRole?.nome || null;
+ 1310: 
+ 1311:     if (accessSettings.block_duplicate_email && normalizedEmail) {
+ 1312:       const duplicateProfessionalEmail = await client.query(
+ 1313:         'SELECT id FROM public.professionals WHERE LOWER(COALESCE(email, \'\')) = LOWER($1) LIMIT 1',
+ 1314:         [normalizedEmail]
+ 1315:       );
+ 1316:       if (duplicateProfessionalEmail.rows.length > 0) {
+ 1317:         await client.query('ROLLBACK');
+ 1318:         return res.status(409).json({ success: false, message: 'Ja existe profissional com este e-mail.' });
+ 1319:       }
+ 1320:     }
+ 1321: 
+ 1322:     let user = null;
+ 1323:     if (accessSettings.allow_create_user_from_professional) {
+ 1324:       const duplicateUsername = await client.query(
+ 1325:         'SELECT id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+ 1326:         [payload.username]
+ 1327:       );
+ 1328:       if (duplicateUsername.rows.length > 0) {
+ 1329:         await client.query('ROLLBACK');
+ 1330:         return res.status(409).json({ success: false, message: 'Username ja existe.' });
+ 1331:       }
+ 1332: 
+ 1333:       if (accessSettings.block_duplicate_email && normalizedEmail) {
+ 1334:         const duplicateUserEmail = await client.query(
+ 1335:           'SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+ 1336:           [normalizedEmail]
+ 1337:         );
+ 1338:         if (duplicateUserEmail.rows.length > 0) {
+ 1339:           await client.query('ROLLBACK');
+ 1340:           return res.status(409).json({ success: false, message: 'E-mail ja existe.' });
+ 1341:         }
+ 1342:       }
+ 1343: 
+ 1344:       const hashedPassword = await bcrypt.hash('123456', 10);
+ 1345:       const userResult = await client.query(
+ 1346:         'INSERT INTO users (username, email, name, phone, role, status, first_access, password) ' +
+ 1347:           'VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ' +
+ 1348:           'RETURNING id, username, email, name, role, status',
+ 1349:         [
+ 1350:           payload.username,
+ 1351:           normalizedEmail || null,
+ 1352:           payload.name,
+ 1353:           payload.phone,
+ 1354:           payload.role,
+ 1355:           'ativo',
+ 1356:           true,
+ 1357:           hashedPassword,
+ 1358:         ]
+ 1359:       );
+ 1360:       user = userResult.rows[0] || null;
+ 1361:     }
+ 1362: 
+ 1363:     const professionalInsertSql =
+ 1364:       'INSERT INTO professionals (' +
+ 1365:       linkColumn +
+ 1366:       ', crp, specialty, phone, email, status, role_id, funcao, horas_semanais, data_nascimento, tipo_contrato, escala_semanal) ' +
+ 1367:       'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb) RETURNING *';
+ 1368: 
+ 1369:     const profResult = await client.query(professionalInsertSql, [
+ 1370:       user?.id || null,
+ 1371:       payload.crp,
+ 1372:       payload.specialty,
+ 1373:       payload.phone,
+ 1374:       normalizedEmail || null,
+ 1375:       payload.status,
+ 1376:       payload.role_id,
+ 1377:       resolvedFuncao,
+ 1378:       payload.horas_semanais,
+ 1379:       payload.data_nascimento,
+ 1380:       payload.tipo_contrato,
+ 1381:       JSON.stringify(payload.escala_semanal),
+ 1382:     ]);
+ 1383: 
+ 1384:     await client.query('COMMIT');
+ 1385: 
+ 1386:     return res.json({
+ 1387:       success: true,
+ 1388:       professional: {
+ 1389:         ...profResult.rows[0],
+ 1390:         role_id: profResult.rows[0]?.role_id ?? payload.role_id ?? null,
+ 1391:         role_nome: selectedRole?.nome ?? resolvedFuncao,
+ 1392:         user_name: user?.name || null,
+ 1393:         user_email: user?.email || null,
+ 1394:         user_role: user?.role || null,
+ 1395:       },
+ 1396:     });
+ 1397:   } catch (error) {
+ 1398:     await client.query('ROLLBACK');
+ 1399:     if (error?.code === '23505') {
+ 1400:       const constraint = (error?.constraint || '').toString().toLowerCase();
+ 1401:       if (constraint.includes('users_email')) {
+ 1402:         return res.status(409).json({ success: false, message: 'E-mail ja existe.' });
+ 1403:       }
+ 1404:       if (constraint.includes('users_username')) {
+ 1405:         return res.status(409).json({ success: false, message: 'Username ja existe.' });
+ 1406:       }
+ 1407:       if (constraint.includes('professionals_user_id')) {
+ 1408:         return res.status(409).json({ success: false, message: 'Usuario ja vinculado a outro profissional.' });
+ 1409:       }
+ 1410:       return res.status(409).json({ success: false, message: 'Conflito ao criar profissional.' });
+ 1411:     }
+ 1412: 
+ 1413:     console.error('Erro ao criar profissional:', error);
+ 1414:     return res.status(500).json({ success: false, message: error?.message || 'Erro ao criar profissional' });
+ 1415:   } finally {
+ 1416:     client.release();
+ 1417:   }
+ 1418: });
+ 1419: 
+ 1420: // Lista profissionais + dados do usuÃ¡rio vinculado e carga do dia
+ 1421: router.get('/', authorizeProfessionalsListView, async (req, res) => {
+ 1422:   const date = req.query.date || new Date().toISOString().split('T')[0];
+ 1423:   const forAgenda =
+ 1424:     ['1', 'true', 'sim', 'yes'].includes(
+ 1425:       (req.query.for_agenda || '').toString().trim().toLowerCase()
+ 1426:     );
+ 1427: 
+ 1428:   try {
+ 1429:     const accessContext = forAgenda
+ 1430:       ? await resolveAgendaAccessContext(req.user, pool)
+ 1431:       : null;
+ 1432: 
+ 1433:     const query = `
+ 1434:       WITH agenda_hoje AS (
+ 1435:         SELECT professional_id, COUNT(*)::int AS total
+ 1436:         FROM appointments
+ 1437:         WHERE appointment_date = $1
+ 1438:         GROUP BY professional_id
+ 1439:       )
+ 1440:       SELECT
+ 1441:         p.id,
+ 1442:         p.crp,
+ 1443:         p.specialty,
+ 1444:         p.phone,
+ 1445:         p.email,
+ 1446:         p.status,
+ 1447:         p.role_id,
+ 1448:         p.funcao,
+ 1449:         p.horas_semanais,
+ 1450:         p.data_nascimento,
+ 1451:         p.tipo_contrato,
+ 1452:         p.escala_semanal,
+ 1453:         COALESCE(pr.nome, p.funcao) AS role_nome,
+ 1454:         u.id::text AS linked_user_id,
+ 1455:         COALESCE(u.name, p.email, '') AS user_name,
+ 1456:         COALESCE(u.email, p.email) AS user_email,
+ 1457:         COALESCE(u.role, 'Usuario') AS user_role,
+ 1458:         COALESCE(u.status, 'ativo') AS user_status,
+ 1459:         COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
+ 1460:         COALESCE(a.total, 0) AS agenda_hoje
+ 1461:       FROM professionals p
+ 1462:       LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+ 1463:       LEFT JOIN public.users u
+ 1464:         ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+ 1465:       LEFT JOIN agenda_hoje a ON a.professional_id = p.id
+ 1466:       ORDER BY COALESCE(u.name, p.email, '') NULLS LAST, p.created_at DESC;
+ 1467:     `;
+ 1468: 
+ 1469:     const result = await pool.query(query, [date]);
+ 1470:     let professionals = Array.isArray(result.rows) ? result.rows : [];
+ 1471: 
+ 1472:     if (
+ 1473:       forAgenda &&
+ 1474:       accessContext?.linkedProfessionalId &&
+ 1475:       !accessContext.canViewOtherProfessionals
+ 1476:     ) {
+ 1477:       professionals = professionals.filter(
+ 1478:         (item) => String(item.id) === String(accessContext.linkedProfessionalId)
+ 1479:       );
+ 1480:     }
+ 1481: 
+ 1482:     if (forAgenda) {
+ 1483:       professionals = professionals.map((item) => ({
+ 1484:         id: item.id,
+ 1485:         user_name: item.user_name,
+ 1486:         role_nome: item.role_nome,
+ 1487:         funcao: item.funcao,
+ 1488:         status: item.status,
+ 1489:       }));
+ 1490:     }
+ 1491: 
+ 1492:     const agendaReadAccess = forAgenda
+ 1493:       ? req.agendaReadAccess || resolveAgendaReadAccess(req.user)
+ 1494:       : null;
+ 1495: 
+ 1496:     res.json({
+ 1497:       success: true,
+ 1498:       professionals,
+ 1499:       ...(forAgenda
+ 1500:         ? {
+ 1501:             scope: buildAgendaScopePayload(agendaReadAccess),
+ 1502:           }
+ 1503:         : {}),
+ 1504:     });
+ 1505:   } catch (error) {
+ 1506:     console.error('Erro ao listar profissionais:', error);
+ 1507:     res.status(500).json({
+ 1508:       success: false,
+ 1509:       message: error?.message || 'Erro ao listar profissionais',
+ 1510:       professionals: [],
+ 1511:     });
+ 1512:   }
+ 1513: });
+ 1514: 
+ 1515: // Lista usuarios elegiveis para vinculo (ativos e sem vinculo, incluindo o atual se houver)
+ 1516: router.get('/linkable-users', authorize('profissionais', 'edit'), async (req, res) => {
+ 1517:   const professionalId = (req.query?.professional_id || req.query?.professionalId || '')
+ 1518:     .toString()
+ 1519:     .trim();
+ 1520: 
+ 1521:   const client = await pool.connect();
+ 1522:   try {
+ 1523:     await client.query('BEGIN');
+ 1524: 
+ 1525:     if (professionalId) {
+ 1526:       const professionalExists = await client.query(
+ 1527:         'SELECT id FROM public.professionals WHERE id = $1 LIMIT 1 FOR UPDATE',
+ 1528:         [professionalId]
+ 1529:       );
+ 1530:       if (professionalExists.rows.length === 0) {
+ 1531:         await client.query('ROLLBACK');
+ 1532:         return res.status(404).json({
+ 1533:           success: false,
+ 1534:           message: 'Profissional nao encontrado',
+ 1535:         });
+ 1536:       }
+ 1537:     }
+ 1538: 
+ 1539:     const params = [];
+ 1540:     const professionalFilter = professionalId
+ 1541:       ? (() => {
+ 1542:           params.push(professionalId);
+ 1543:           return 'OR p.id = $1';
+ 1544:         })()
+ 1545:       : '';
+ 1546:     const includeCurrentLinkedFilter = professionalId
+ 1547:       ? (() => {
+ 1548:           params.push(professionalId);
+ 1549:           return 'OR p.id = $2';
+ 1550:         })()
+ 1551:       : '';
+ 1552: 
+ 1553:     const usersResult = await client.query(
+ 1554:       `
+ 1555:         SELECT
+ 1556:           u.id::text AS id,
+ 1557:           u.name,
+ 1558:           u.email,
+ 1559:           u.username,
+ 1560:           u.status,
+ 1561:           p.id::text AS professional_id
+ 1562:         FROM public.users u
+ 1563:         LEFT JOIN public.professionals p
+ 1564:           ON COALESCE(
+ 1565:             to_jsonb(p)->>'user_id_int',
+ 1566:             to_jsonb(p)->>'user_id'
+ 1567:           ) = u.id::text
+ 1568:         WHERE u.deleted_at IS NULL
+ 1569:           AND (
+ 1570:             p.id IS NULL
+ 1571:             ${professionalFilter}
+ 1572:           )
+ 1573:           AND (
+ 1574:             LOWER(COALESCE(u.status, '')) = 'ativo'
+ 1575:             ${includeCurrentLinkedFilter}
+ 1576:           )
+ 1577:         ORDER BY u.name ASC, u.email ASC
+ 1578:       `,
+ 1579:       params
+ 1580:     );
+ 1581: 
+ 1582:     await client.query('COMMIT');
+ 1583:     return res.json({
+ 1584:       success: true,
+ 1585:       users: usersResult.rows,
+ 1586:     });
+ 1587:   } catch (error) {
+ 1588:     await client.query('ROLLBACK');
+ 1589:     console.error('Erro ao listar usuarios elegiveis para vinculo:', error);
+ 1590:     return res.status(500).json({
+ 1591:       success: false,
+ 1592:       message: 'Erro ao listar usuarios elegiveis para vinculo',
+ 1593:     });
+ 1594:   } finally {
+ 1595:     client.release();
+ 1596:   }
+ 1597: });
+ 1598: // Atualizar profissional (dados principais)
+ 1599: router.put('/:id', authorize('profissionais', 'edit'), async (req, res) => {
+ 1600:   const { id } = req.params;
+ 1601:   const client = await pool.connect();
+ 1602: 
+ 1603:   try {
+ 1604:     const accessSettings = await readAccessSettingsSafe('profissionais:update');
+ 1605:     const existingResult = await client.query(
+ 1606:       `SELECT
+ 1607:          p.*,
+ 1608:          COALESCE(pr.nome, p.funcao) AS role_nome,
+ 1609:          u.id::text AS linked_user_id,
+ 1610:          COALESCE(u.name, p.email, '') AS user_name,
+ 1611:          COALESCE(u.email, p.email) AS user_email,
+ 1612:          COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
+ 1613:          COALESCE(u.role, 'Usuario') AS user_role,
+ 1614:          COALESCE(u.status, 'ativo') AS user_status
+ 1615:        FROM professionals p
+ 1616:        LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+ 1617:        LEFT JOIN public.users u
+ 1618:          ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+ 1619:        WHERE p.id = $1`,
+ 1620:       [id]
+ 1621:     );
+ 1622:     if (existingResult.rows.length === 0) {
+ 1623:       return res.status(404).json({ success: false, message: 'Profissional nÃ£o encontrado' });
+ 1624:     }
+ 1625: 
+ 1626:     const existing = existingResult.rows[0];
+ 1627:     const mergedPayload = {
+ 1628:       ...req.body,
+ 1629:       name: req.body?.name ?? existing.user_name,
+ 1630:       email: req.body?.email ?? existing.user_email ?? existing.email,
+ 1631:       username: req.body?.username ?? existing.user_username,
+ 1632:       role: req.body?.role ?? existing.user_role ?? 'UsuÃ¡rio',
+ 1633:       phone: req.body?.phone ?? existing.phone,
+ 1634:       crp: req.body?.crp ?? existing.crp,
+ 1635:       specialty: req.body?.specialty ?? existing.specialty,
+ 1636:       role_id: req.body?.role_id ?? existing.role_id ?? null,
+ 1637:       funcao: req.body?.funcao ?? existing.role_nome ?? existing.funcao ?? existing.specialty,
+ 1638:       horas_semanais: req.body?.horas_semanais ?? existing.horas_semanais,
+ 1639:       data_nascimento: req.body?.data_nascimento ?? existing.data_nascimento,
+ 1640:       tipo_contrato: req.body?.tipo_contrato ?? existing.tipo_contrato,
+ 1641:       escala_semanal: req.body?.escala_semanal ?? existing.escala_semanal,
+ 1642:       status: req.body?.status ?? existing.status,
+ 1643:     };
+ 1644: 
+ 1645:     const runtimeConfig = await getProfessionalsRuntimeConfig();
+ 1646:     const validation = validateProfessionalPayload(mergedPayload, {
+ 1647:       requireUserIdentity: Boolean(existing.linked_user_id),
+ 1648:       allowedContractTypes: runtimeConfig.allowedContractTypes,
+ 1649:       defaultWeekScale: runtimeConfig.defaultWeekScale,
+ 1650:       defaultStartTime: runtimeConfig.defaultStartTime,
+ 1651:       defaultEndTime: runtimeConfig.defaultEndTime,
+ 1652:     });
+ 1653: 
+ 1654:     if (!validation.ok) {
+ 1655:       return res.status(400).json({ success: false, message: validation.message });
+ 1656:     }
+ 1657: 
+ 1658:     const payload = validation.data;
+ 1659: 
+ 1660:     await client.query('BEGIN');
+ 1661: 
+ 1662:     let selectedRole = null;
+ 1663:     if (payload.role_id !== null) {
+ 1664:       selectedRole = await fetchProfessionalRoleById(client, payload.role_id);
+ 1665:       if (!selectedRole) {
+ 1666:         await client.query('ROLLBACK');
+ 1667:         return res.status(400).json({ success: false, message: 'Funcao selecionada nao encontrada' });
+ 1668:       }
+ 1669:       if (!selectedRole.ativo && payload.role_id !== existing.role_id) {
+ 1670:         await client.query('ROLLBACK');
+ 1671:         return res.status(400).json({ success: false, message: 'Funcao selecionada esta inativa' });
+ 1672:       }
+ 1673:     }
+ 1674: 
+ 1675:     const resolvedFuncao =
+ 1676:       payload.funcao ||
+ 1677:       selectedRole?.nome ||
+ 1678:       existing.role_nome ||
+ 1679:       existing.funcao ||
+ 1680:       existing.specialty ||
+ 1681:       null;
+ 1682: 
+ 1683:     if (accessSettings.block_duplicate_email && payload.email) {
+ 1684:       const duplicateProfessionalEmail = await client.query(
+ 1685:         `
+ 1686:           SELECT id
+ 1687:           FROM public.professionals
+ 1688:           WHERE id <> $1
+ 1689:             AND LOWER(COALESCE(email, '')) = LOWER($2)
+ 1690:           LIMIT 1
+ 1691:         `,
+ 1692:         [id, payload.email]
+ 1693:       );
+ 1694:       if (duplicateProfessionalEmail.rows.length > 0) {
+ 1695:         await client.query('ROLLBACK');
+ 1696:         return res.status(409).json({
+ 1697:           success: false,
+ 1698:           message: 'Ja existe profissional com este e-mail.',
+ 1699:         });
+ 1700:       }
+ 1701:     }
+ 1702: 
+ 1703:     if (existing.linked_user_id) {
+ 1704:       const duplicateClauses = ['LOWER(username) = LOWER($2)'];
+ 1705:       const duplicateParams = [existing.linked_user_id, payload.username];
+ 1706: 
+ 1707:       if (accessSettings.block_duplicate_email && payload.email) {
+ 1708:         duplicateParams.push(payload.email);
+ 1709:         duplicateClauses.push(`LOWER(email) = LOWER($${duplicateParams.length})`);
+ 1710:       }
+ 1711: 
+ 1712:       const duplicateIdentity = await client.query(
+ 1713:         `
+ 1714:           SELECT 1
+ 1715:           FROM users
+ 1716:           WHERE id <> $1
+ 1717:             AND (${duplicateClauses.join(' OR ')})
+ 1718:           LIMIT 1
+ 1719:         `,
+ 1720:         duplicateParams
+ 1721:       );
+ 1722: 
+ 1723:       if (duplicateIdentity.rows.length > 0) {
+ 1724:         await client.query('ROLLBACK');
+ 1725:         return res.status(409).json({
+ 1726:           success: false,
+ 1727:           message: accessSettings.block_duplicate_email
+ 1728:             ? 'Username ou e-mail ja existe.'
+ 1729:             : 'Username ja existe.',
+ 1730:         });
+ 1731:       }
+ 1732: 
+ 1733:       await client.query(
+ 1734:         `UPDATE users
+ 1735:          SET name = $1,
+ 1736:              email = $2,
+ 1737:              username = $3,
+ 1738:              phone = $4,
+ 1739:              role = $5
+ 1740:          WHERE id = $6`,
+ 1741:         [payload.name, payload.email, payload.username, payload.phone, payload.role, existing.linked_user_id]
+ 1742:       );
+ 1743:     }
+ 1744: 
+ 1745:     const updatedProfessional = await client.query(
+ 1746:       `UPDATE professionals
+ 1747:        SET crp = $1,
+ 1748:            specialty = $2,
+ 1749:            phone = $3,
+ 1750:            email = $4,
+ 1751:            status = $5,
+ 1752:            role_id = $6,
+ 1753:            funcao = $7,
+ 1754:            horas_semanais = $8,
+ 1755:            data_nascimento = $9,
+ 1756:            tipo_contrato = $10,
+ 1757:            escala_semanal = $11::jsonb,
+ 1758:            updated_at = NOW()
+ 1759:        WHERE id = $12
+ 1760:        RETURNING *`,
+ 1761:       [
+ 1762:         payload.crp,
+ 1763:         payload.specialty,
+ 1764:         payload.phone,
+ 1765:         payload.email,
+ 1766:         payload.status,
+ 1767:         payload.role_id,
+ 1768:         resolvedFuncao,
+ 1769:         payload.horas_semanais,
+ 1770:         payload.data_nascimento,
+ 1771:         payload.tipo_contrato,
+ 1772:         JSON.stringify(payload.escala_semanal),
+ 1773:         id,
+ 1774:       ]
+ 1775:     );
+ 1776: 
+ 1777:     const updatedUserResult = existing.linked_user_id
+ 1778:       ? await client.query(
+ 1779:           'SELECT id, name, email, role FROM users WHERE id = $1',
+ 1780:           [existing.linked_user_id]
+ 1781:         )
+ 1782:       : { rows: [] };
+ 1783: 
+ 1784:     const updatedUser = updatedUserResult.rows[0] || null;
+ 1785: 
+ 1786:     await client.query('COMMIT');
+ 1787: 
+ 1788:     return res.json({
+ 1789:       success: true,
+ 1790:       professional: {
+ 1791:         ...updatedProfessional.rows[0],
+ 1792:         role_id: updatedProfessional.rows[0]?.role_id ?? payload.role_id ?? null,
+ 1793:         role_nome: selectedRole?.nome ?? resolvedFuncao,
+ 1794:         user_name: updatedUser?.name ?? existing.user_name,
+ 1795:         user_email: updatedUser?.email ?? existing.user_email,
+ 1796:         user_role: updatedUser?.role ?? existing.user_role,
+ 1797:       },
+ 1798:     });
+ 1799:   } catch (error) {
+ 1800:     await client.query('ROLLBACK');
+ 1801:     if (error?.code === '23505') {
+ 1802:       const constraint = (error?.constraint || '').toString().toLowerCase();
+ 1803:       if (constraint.includes('users_email')) {
+ 1804:         return res.status(409).json({ success: false, message: 'E-mail ja existe.' });
+ 1805:       }
+ 1806:       if (constraint.includes('users_username')) {
+ 1807:         return res.status(409).json({ success: false, message: 'Username ja existe.' });
+ 1808:       }
+ 1809:       if (constraint.includes('professionals_email')) {
+ 1810:         return res.status(409).json({
+ 1811:           success: false,
+ 1812:           message: 'Ja existe profissional com este e-mail.',
+ 1813:         });
+ 1814:       }
+ 1815:       return res.status(409).json({ success: false, message: 'Conflito ao atualizar profissional.' });
+ 1816:     }
+ 1817:     console.error('Erro ao atualizar profissional:', error);
+ 1818:     return res.status(500).json({ success: false, message: error?.message || 'Erro ao atualizar profissional' });
+ 1819:   } finally {
+ 1820:     client.release();
+ 1821:   }
+ 1822: });
+ 1823: 
+ 1824: // Excluir profissional (hard delete quando sem vinculos historicos)
+ 1825: router.delete('/:id', authorize('profissionais', 'status'), async (req, res) => {
+ 1826:   const { id } = req.params;
+ 1827:   const client = await pool.connect();
+ 1828: 
+ 1829:   try {
+ 1830:     await client.query('BEGIN');
+ 1831: 
+ 1832:     const professionalLockResult = await client.query(
+ 1833:       `SELECT
+ 1834:          id,
+ 1835:          email,
+ 1836:          COALESCE(
+ 1837:            to_jsonb(professionals)->>'user_id_int',
+ 1838:            to_jsonb(professionals)->>'user_id'
+ 1839:          ) AS linked_user_candidate
+ 1840:        FROM professionals
+ 1841:        WHERE id = $1
+ 1842:        FOR UPDATE`,
+ 1843:       [id]
+ 1844:     );
+ 1845: 
+ 1846:     if (professionalLockResult.rows.length === 0) {
+ 1847:       await client.query('ROLLBACK');
+ 1848:       return res.status(404).json({ success: false, message: 'Profissional nao encontrado' });
+ 1849:     }
+ 1850: 
+ 1851:     const lockedProfessional = professionalLockResult.rows[0];
+ 1852: 
+ 1853:     const linkedUserId = lockedProfessional?.linked_user_candidate || null;
+ 1854: 
+ 1855:     const depsResult = await client.query(
+ 1856:       `SELECT
+ 1857:          (SELECT COUNT(*)::int FROM appointments WHERE professional_id = $1) AS appointments,
+ 1858:          (SELECT COUNT(*)::int FROM evaluations WHERE professional_id = $1) AS evaluations,
+ 1859:          (SELECT COUNT(*)::int FROM interviews WHERE professional_id = $1) AS interviews`,
+ 1860:       [id]
+ 1861:     );
+ 1862: 
+ 1863:     const deps = depsResult.rows[0] || {};
+ 1864:     const appointments = Number(deps.appointments || 0);
+ 1865:     const evaluations = Number(deps.evaluations || 0);
+ 1866:     const interviews = Number(deps.interviews || 0);
+ 1867:     const totalDependencies = appointments + evaluations + interviews;
+ 1868: 
+ 1869:     if (totalDependencies > 0) {
+ 1870:       await client.query('ROLLBACK');
+ 1871:       return res.status(409).json({
+ 1872:         success: false,
+ 1873:         message:
+ 1874:           `Nao foi possivel excluir: existem vinculos historicos (agendamentos: ${appointments}, ` +
+ 1875:           `avaliacoes: ${evaluations}, entrevistas: ${interviews}).`,
+ 1876:       });
+ 1877:     }
+ 1878: 
+ 1879:     await client.query('DELETE FROM professionals WHERE id = $1', [id]);
+ 1880: 
+ 1881:     if (linkedUserId) {
+ 1882:       await client.query('UPDATE users SET status = $1 WHERE id = $2', ['inativo', linkedUserId]);
+ 1883:     }
+ 1884: 
+ 1885:     await client.query('COMMIT');
+ 1886:     return res.json({ success: true, message: 'Profissional excluido com sucesso' });
+ 1887:   } catch (error) {
+ 1888:     await client.query('ROLLBACK');
+ 1889:     console.error('Erro ao excluir profissional:', error);
+ 1890: 
+ 1891:     if (error?.code === '23503') {
+ 1892:       return res.status(409).json({
+ 1893:         success: false,
+ 1894:         message: 'Nao foi possivel excluir este profissional porque existem registros vinculados.',
+ 1895:       });
+ 1896:     }
+ 1897: 
+ 1898:     return res.status(500).json({ success: false, message: error?.message || 'Erro ao excluir profissional' });
+ 1899:   } finally {
+ 1900:     client.release();
+ 1901:   }
+ 1902: });
+ 1903: 
+ 1904: // Atualizar somente status (soft disable)
+ 1905: router.patch('/:id/status', authorize('profissionais', 'status'), async (req, res) => {
+ 1906:   const { id } = req.params;
+ 1907:   const status = normalizeStatus(req.body?.status);
+ 1908: 
+ 1909:   if (!status) {
+ 1910:     return res.status(400).json({ success: false, message: 'status invÃ¡lido. Use ATIVO ou INATIVO' });
+ 1911:   }
+ 1912: 
+ 1913:   try {
+ 1914:     const result = await pool.query(
+ 1915:       `UPDATE professionals
+ 1916:        SET status = $1,
+ 1917:            updated_at = NOW()
+ 1918:        WHERE id = $2
+ 1919:        RETURNING *`,
+ 1920:       [status, id]
+ 1921:     );
+ 1922: 
+ 1923:     if (result.rows.length === 0) {
+ 1924:       return res.status(404).json({ success: false, message: 'Profissional nÃ£o encontrado' });
+ 1925:     }
+ 1926: 
+ 1927:     return res.json({ success: true, professional: result.rows[0] });
+ 1928:   } catch (error) {
+ 1929:     console.error('Erro ao atualizar status do profissional:', error);
+ 1930:     return res.status(500).json({ success: false, message: error?.message || 'Erro ao atualizar status' });
+ 1931:   }
+ 1932: });
+ 1933: 
+ 1934: router.patch('/:id/link-user', authorize('profissionais', 'edit'), async (req, res) => {
+ 1935:   const professionalId = (req.params?.id || '').toString().trim();
+ 1936:   const userIdRaw = req.body?.userId ?? req.body?.user_id ?? '';
+ 1937:   const userIdText = userIdRaw === null || userIdRaw === undefined
+ 1938:     ? ''
+ 1939:     : userIdRaw.toString().trim();
+ 1940: 
+ 1941:   if (!professionalId) {
+ 1942:     return res.status(400).json({
+ 1943:       success: false,
+ 1944:       message: 'professionalId invalido',
+ 1945:     });
+ 1946:   }
+ 1947: 
+ 1948:   if (!userIdText) {
+ 1949:     return res.status(400).json({
+ 1950:       success: false,
+ 1951:       message: 'userId e obrigatorio',
+ 1952:     });
+ 1953:   }
+ 1954: 
+ 1955:   const accessSettings = await readAccessSettingsSafe('profissionais:link-user');
+ 1956:   if (denyIfManualLinkRequiresAdmin(accessSettings, req, res)) {
+ 1957:     return;
+ 1958:   }
+ 1959: 
+ 1960:   const client = await pool.connect();
+ 1961:   try {
+ 1962:     await client.query('BEGIN');
+ 1963: 
+ 1964:     const linkColumn = await getProfessionalLinkColumn(client);
+ 1965:     if (!linkColumn) {
+ 1966:       await client.query('ROLLBACK');
+ 1967:       return res.status(500).json({
+ 1968:         success: false,
+ 1969:         message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+ 1970:       });
+ 1971:     }
+ 1972: 
+ 1973:     const professionalResult = await client.query(
+ 1974:       `
+ 1975:         SELECT
+ 1976:           p.id,
+ 1977:           COALESCE(
+ 1978:             to_jsonb(p)->>'user_id_int',
+ 1979:             to_jsonb(p)->>'user_id'
+ 1980:           ) AS linked_user_id
+ 1981:         FROM public.professionals p
+ 1982:         WHERE p.id = $1
+ 1983:         LIMIT 1
+ 1984:         FOR UPDATE
+ 1985:       `,
+ 1986:       [professionalId]
+ 1987:     );
+ 1988:     if (professionalResult.rows.length === 0) {
+ 1989:       await client.query('ROLLBACK');
+ 1990:       return res.status(404).json({
+ 1991:         success: false,
+ 1992:         message: 'Profissional nao encontrado',
+ 1993:       });
+ 1994:     }
+ 1995: 
+ 1996:     const userResult = await client.query(
+ 1997:       `
+ 1998:         SELECT id, name, email, status
+ 1999:         FROM public.users
+ 2000:         WHERE id::text = $1
+ 2001:           AND deleted_at IS NULL
+ 2002:         LIMIT 1
+ 2003:         FOR UPDATE
+ 2004:       `,
+ 2005:       [userIdText]
+ 2006:     );
+ 2007:     if (userResult.rows.length === 0) {
+ 2008:       await client.query('ROLLBACK');
+ 2009:       return res.status(404).json({
+ 2010:         success: false,
+ 2011:         message: 'Usuario nao encontrado',
+ 2012:       });
+ 2013:     }
+ 2014: 
+ 2015:     const user = userResult.rows[0];
+ 2016:     const currentProfessional = professionalResult.rows[0];
+ 2017:     if (
+ 2018:       currentProfessional.linked_user_id &&
+ 2019:       String(currentProfessional.linked_user_id) !== String(user.id)
+ 2020:     ) {
+ 2021:       await client.query('ROLLBACK');
+ 2022:       return res.status(409).json({
+ 2023:         success: false,
+ 2024:         message: 'Profissional ja vinculado a outro usuario',
+ 2025:       });
+ 2026:     }
+ 2027: 
+ 2028:     const alreadyLinkedElsewhere = await client.query(
+ 2029:       `
+ 2030:         SELECT p.id
+ 2031:         FROM public.professionals p
+ 2032:         WHERE p.id <> $2
+ 2033:           AND COALESCE(
+ 2034:             to_jsonb(p)->>'user_id_int',
+ 2035:             to_jsonb(p)->>'user_id'
+ 2036:           ) = $1
+ 2037:         LIMIT 1
+ 2038:       `,
+ 2039:       [String(user.id), professionalId]
+ 2040:     );
+ 2041:     if (alreadyLinkedElsewhere.rows.length > 0) {
+ 2042:       await client.query('ROLLBACK');
+ 2043:       return res.status(409).json({
+ 2044:         success: false,
+ 2045:         message: 'Usuario ja vinculado a outro profissional',
+ 2046:       });
+ 2047:     }
+ 2048: 
+ 2049:     await client.query(
+ 2050:       `
+ 2051:         UPDATE public.professionals
+ 2052:         SET ${linkColumn} = $1,
+ 2053:             updated_at = NOW()
+ 2054:         WHERE id = $2
+ 2055:       `,
+ 2056:       [user.id, professionalId]
+ 2057:     );
+ 2058: 
+ 2059:     await client.query('COMMIT');
+ 2060:     return res.json({
+ 2061:       success: true,
+ 2062:       message: 'Vinculo atualizado com sucesso',
+ 2063:       link: {
+ 2064:         professional_id: professionalId,
+ 2065:         user_id: String(user.id),
+ 2066:       },
+ 2067:       user: {
+ 2068:         id: String(user.id),
+ 2069:         name: user.name,
+ 2070:         email: user.email,
+ 2071:         status: user.status,
+ 2072:       },
+ 2073:     });
+ 2074:   } catch (error) {
+ 2075:     await client.query('ROLLBACK');
+ 2076:     console.error('Erro ao vincular usuario ao profissional:', error);
+ 2077:     return res.status(500).json({
+ 2078:       success: false,
+ 2079:       message: 'Erro ao vincular usuario ao profissional',
+ 2080:     });
+ 2081:   } finally {
+ 2082:     client.release();
+ 2083:   }
+ 2084: });
+ 2085: 
+ 2086: router.patch('/:id/unlink-user', authorize('profissionais', 'edit'), async (req, res) => {
+ 2087:   const professionalId = (req.params?.id || '').toString().trim();
+ 2088: 
+ 2089:   if (!professionalId) {
+ 2090:     return res.status(400).json({
+ 2091:       success: false,
+ 2092:       message: 'professionalId invalido',
+ 2093:     });
+ 2094:   }
+ 2095: 
+ 2096:   const accessSettings = await readAccessSettingsSafe('profissionais:unlink-user');
+ 2097:   if (denyIfManualLinkRequiresAdmin(accessSettings, req, res)) {
+ 2098:     return;
+ 2099:   }
+ 2100: 
+ 2101:   const client = await pool.connect();
+ 2102:   try {
+ 2103:     await client.query('BEGIN');
+ 2104: 
+ 2105:     const linkColumn = await getProfessionalLinkColumn(client);
+ 2106:     if (!linkColumn) {
+ 2107:       await client.query('ROLLBACK');
+ 2108:       return res.status(500).json({
+ 2109:         success: false,
+ 2110:         message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+ 2111:       });
+ 2112:     }
+ 2113: 
+ 2114:     const professionalResult = await client.query(
+ 2115:       `
+ 2116:         SELECT
+ 2117:           p.id,
+ 2118:           COALESCE(
+ 2119:             to_jsonb(p)->>'user_id_int',
+ 2120:             to_jsonb(p)->>'user_id'
+ 2121:           ) AS linked_user_id
+ 2122:         FROM public.professionals p
+ 2123:         WHERE p.id = $1
+ 2124:         LIMIT 1
+ 2125:         FOR UPDATE
+ 2126:       `,
+ 2127:       [professionalId]
+ 2128:     );
+ 2129: 
+ 2130:     if (professionalResult.rows.length === 0) {
+ 2131:       await client.query('ROLLBACK');
+ 2132:       return res.status(404).json({
+ 2133:         success: false,
+ 2134:         message: 'Profissional nao encontrado',
+ 2135:       });
+ 2136:     }
+ 2137: 
+ 2138:     const linkedUserId = professionalResult.rows[0]?.linked_user_id
+ 2139:       ? String(professionalResult.rows[0].linked_user_id)
+ 2140:       : null;
+ 2141: 
+ 2142:     if (!linkedUserId) {
+ 2143:       await client.query('COMMIT');
+ 2144:       return res.json({
+ 2145:         success: true,
+ 2146:         message: 'Profissional ja estava sem usuario vinculado',
+ 2147:         link: {
+ 2148:           professional_id: professionalId,
+ 2149:           user_id: null,
+ 2150:         },
+ 2151:       });
+ 2152:     }
+ 2153: 
+ 2154:     await client.query(
+ 2155:       `
+ 2156:         UPDATE public.professionals
+ 2157:         SET ${linkColumn} = NULL,
+ 2158:             updated_at = NOW()
+ 2159:         WHERE id = $1
+ 2160:       `,
+ 2161:       [professionalId]
+ 2162:     );
+ 2163: 
+ 2164:     await client.query('COMMIT');
+ 2165:     return res.json({
+ 2166:       success: true,
+ 2167:       message: 'Vinculo removido com sucesso',
+ 2168:       link: {
+ 2169:         professional_id: professionalId,
+ 2170:         user_id: null,
+ 2171:       },
+ 2172:     });
+ 2173:   } catch (error) {
+ 2174:     await client.query('ROLLBACK');
+ 2175:     console.error('Erro ao desvincular usuario do profissional:', error);
+ 2176:     return res.status(500).json({
+ 2177:       success: false,
+ 2178:       message: 'Erro ao desvincular usuario do profissional',
+ 2179:     });
+ 2180:   } finally {
+ 2181:     client.release();
+ 2182:   }
+ 2183: });
+ 2184: 
+ 2185: router.post('/:id/link-requests', authorize('profissionais', 'view'), async (req, res) => {
+ 2186:   const professionalId = (req.params?.id || '').toString().trim();
+ 2187:   const requesterUserId = (req.user?.id || '').toString().trim();
+ 2188:   const notesRaw = req.body?.notes;
+ 2189:   const notes =
+ 2190:     typeof notesRaw === 'string' && notesRaw.trim().length > 0
+ 2191:       ? notesRaw.trim().slice(0, 1000)
+ 2192:       : null;
+ 2193: 
+ 2194:   if (!professionalId) {
+ 2195:     return res.status(400).json({
+ 2196:       success: false,
+ 2197:       message: 'professionalId invalido',
+ 2198:     });
+ 2199:   }
+ 2200: 
+ 2201:   if (!requesterUserId) {
+ 2202:     return res.status(401).json({
+ 2203:       success: false,
+ 2204:       message: 'Usuario autenticado invalido',
+ 2205:     });
+ 2206:   }
+ 2207: 
+ 2208:   const accessSettings = await readAccessSettingsSafe('profissionais:link-request:create');
+ 2209:   if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+ 2210:     return res.status(403).json({
+ 2211:       success: false,
+ 2212:       message: 'Solicitacao de vinculo desativada pela politica atual.',
+ 2213:     });
+ 2214:   }
+ 2215: 
+ 2216:   const client = await pool.connect();
+ 2217:   try {
+ 2218:     await client.query('BEGIN');
+ 2219:     await ensureProfessionalLinkRequestsSchema(client);
+ 2220: 
+ 2221:     const linkColumn = await getProfessionalLinkColumn(client);
+ 2222:     if (!linkColumn) {
+ 2223:       await client.query('ROLLBACK');
+ 2224:       return res.status(500).json({
+ 2225:         success: false,
+ 2226:         message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+ 2227:       });
+ 2228:     }
+ 2229: 
+ 2230:     const userResult = await client.query(
+ 2231:       `
+ 2232:         SELECT id, name, email
+ 2233:         FROM public.users
+ 2234:         WHERE id::text = $1
+ 2235:           AND deleted_at IS NULL
+ 2236:         LIMIT 1
+ 2237:         FOR UPDATE
+ 2238:       `,
+ 2239:       [requesterUserId]
+ 2240:     );
+ 2241:     if (userResult.rows.length === 0) {
+ 2242:       await client.query('ROLLBACK');
+ 2243:       return res.status(404).json({
+ 2244:         success: false,
+ 2245:         message: 'Usuario nao encontrado',
+ 2246:       });
+ 2247:     }
+ 2248: 
+ 2249:     const professionalResult = await client.query(
+ 2250:       `
+ 2251:         SELECT
+ 2252:           p.id,
+ 2253:           COALESCE(
+ 2254:             to_jsonb(p)->>'user_id_int',
+ 2255:             to_jsonb(p)->>'user_id'
+ 2256:           ) AS linked_user_id
+ 2257:         FROM public.professionals p
+ 2258:         WHERE p.id = $1
+ 2259:         LIMIT 1
+ 2260:         FOR UPDATE
+ 2261:       `,
+ 2262:       [professionalId]
+ 2263:     );
+ 2264:     if (professionalResult.rows.length === 0) {
+ 2265:       await client.query('ROLLBACK');
+ 2266:       return res.status(404).json({
+ 2267:         success: false,
+ 2268:         message: 'Profissional nao encontrado',
+ 2269:       });
+ 2270:     }
+ 2271: 
+ 2272:     const professional = professionalResult.rows[0];
+ 2273:     if (
+ 2274:       professional.linked_user_id &&
+ 2275:       String(professional.linked_user_id) !== requesterUserId
+ 2276:     ) {
+ 2277:       await client.query('ROLLBACK');
+ 2278:       return res.status(409).json({
+ 2279:         success: false,
+ 2280:         message: 'Profissional ja vinculado a outro usuario.',
+ 2281:       });
+ 2282:     }
+ 2283: 
+ 2284:     if (String(professional.linked_user_id || '') === requesterUserId) {
+ 2285:       await client.query('ROLLBACK');
+ 2286:       return res.status(409).json({
+ 2287:         success: false,
+ 2288:         message: 'Usuario ja esta vinculado a este profissional.',
+ 2289:       });
+ 2290:     }
+ 2291: 
+ 2292:     const userLinkedElsewhere = await client.query(
+ 2293:       `
+ 2294:         SELECT p.id
+ 2295:         FROM public.professionals p
+ 2296:         WHERE COALESCE(
+ 2297:           to_jsonb(p)->>'user_id_int',
+ 2298:           to_jsonb(p)->>'user_id'
+ 2299:         ) = $1
+ 2300:           AND p.id <> $2
+ 2301:         LIMIT 1
+ 2302:       `,
+ 2303:       [requesterUserId, professionalId]
+ 2304:     );
+ 2305:     if (userLinkedElsewhere.rows.length > 0) {
+ 2306:       await client.query('ROLLBACK');
+ 2307:       return res.status(409).json({
+ 2308:         success: false,
+ 2309:         message: 'Usuario ja vinculado a outro profissional.',
+ 2310:       });
+ 2311:     }
+ 2312: 
+ 2313:     const inserted = await client.query(
+ 2314:       `
+ 2315:         INSERT INTO public.professional_link_requests (
+ 2316:           id,
+ 2317:           user_id,
+ 2318:           professional_id,
+ 2319:           status,
+ 2320:           notes
+ 2321:         )
+ 2322:         VALUES ($1, $2, $3, 'pending', $4)
+ 2323:         RETURNING id::text AS id,
+ 2324:                   user_id::text AS user_id,
+ 2325:                   professional_id::text AS professional_id,
+ 2326:                   status,
+ 2327:                   notes,
+ 2328:                   created_at,
+ 2329:                   updated_at
+ 2330:       `,
+ 2331:       [randomUUID(), requesterUserId, professionalId, notes]
+ 2332:     );
+ 2333: 
+ 2334:     await client.query('COMMIT');
+ 2335:     return res.status(201).json({
+ 2336:       success: true,
+ 2337:       message: 'Solicitacao de vinculo enviada com sucesso.',
+ 2338:       request: inserted.rows[0],
+ 2339:     });
+ 2340:   } catch (error) {
+ 2341:     await client.query('ROLLBACK');
+ 2342:     if (error?.code === '23505') {
+ 2343:       const constraint = (error?.constraint || '').toString().toLowerCase();
+ 2344:       if (constraint.includes('idx_professional_link_requests_user_pending')) {
+ 2345:         return res.status(409).json({
+ 2346:           success: false,
+ 2347:           message: 'Voce ja possui uma solicitacao pendente.',
+ 2348:         });
+ 2349:       }
+ 2350:       if (constraint.includes('idx_professional_link_requests_professional_pending')) {
+ 2351:         return res.status(409).json({
+ 2352:           success: false,
+ 2353:           message: 'Este profissional ja possui solicitacao pendente.',
+ 2354:         });
+ 2355:       }
+ 2356:     }
+ 2357: 
+ 2358:     console.error('Erro ao criar solicitacao de vinculo:', error);
+ 2359:     return res.status(500).json({
+ 2360:       success: false,
+ 2361:       message: 'Erro ao criar solicitacao de vinculo',
+ 2362:     });
+ 2363:   } finally {
+ 2364:     client.release();
+ 2365:   }
+ 2366: });
+ 2367: 
+ 2368: router.get('/link-requests', authorize('profissionais', 'edit'), async (req, res) => {
+ 2369:   const accessSettings = await readAccessSettingsSafe('profissionais:link-request:list');
+ 2370:   if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+ 2371:     return res.status(403).json({
+ 2372:       success: false,
+ 2373:       message: 'Solicitacoes de vinculo desativadas pela politica atual.',
+ 2374:     });
+ 2375:   }
+ 2376: 
+ 2377:   if (!isAdminUser(req.user)) {
+ 2378:     return res.status(403).json({
+ 2379:       success: false,
+ 2380:       message: 'Apenas administradores podem listar solicitacoes de vinculo.',
+ 2381:     });
+ 2382:   }
+ 2383: 
+ 2384:   const requestedStatus = normalizeLinkRequestStatus(req.query?.status);
+ 2385:   if (req.query?.status !== undefined && !requestedStatus) {
+ 2386:     return res.status(400).json({
+ 2387:       success: false,
+ 2388:       message: 'status invalido. Use pending, approved ou rejected.',
+ 2389:     });
+ 2390:   }
+ 2391: 
+ 2392:   const client = await pool.connect();
+ 2393:   try {
+ 2394:     await ensureProfessionalLinkRequestsSchema(client);
+ 2395: 
+ 2396:     const where = requestedStatus ? 'WHERE lr.status = $1' : '';
+ 2397:     const params = requestedStatus ? [requestedStatus] : [];
+ 2398: 
+ 2399:     const { rows } = await client.query(
+ 2400:       `
+ 2401:         SELECT
+ 2402:           lr.id::text AS id,
+ 2403:           lr.user_id::text AS user_id,
+ 2404:           lr.professional_id::text AS professional_id,
+ 2405:           lr.status,
+ 2406:           lr.notes,
+ 2407:           lr.created_at,
+ 2408:           lr.updated_at,
+ 2409:           lr.decided_at,
+ 2410:           lr.decided_by_user_id::text AS decided_by_user_id,
+ 2411:           u.name AS user_name,
+ 2412:           u.email AS user_email,
+ 2413:           COALESCE(pr.nome, p.funcao, p.specialty, p.email, 'Profissional') AS professional_name,
+ 2414:           p.email AS professional_email,
+ 2415:           d.name AS decided_by_name
+ 2416:         FROM public.professional_link_requests lr
+ 2417:         LEFT JOIN public.users u ON u.id = lr.user_id
+ 2418:         LEFT JOIN public.professionals p ON p.id = lr.professional_id
+ 2419:         LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+ 2420:         LEFT JOIN public.users d ON d.id = lr.decided_by_user_id
+ 2421:         ${where}
+ 2422:         ORDER BY lr.created_at ASC
+ 2423:       `,
+ 2424:       params
+ 2425:     );
+ 2426: 
+ 2427:     return res.json({
+ 2428:       success: true,
+ 2429:       requests: rows,
+ 2430:     });
+ 2431:   } catch (error) {
+ 2432:     console.error('Erro ao listar solicitacoes de vinculo:', error);
+ 2433:     return res.status(500).json({
+ 2434:       success: false,
+ 2435:       message: 'Erro ao listar solicitacoes de vinculo',
+ 2436:     });
+ 2437:   } finally {
+ 2438:     client.release();
+ 2439:   }
+ 2440: });
+ 2441: 
+ 2442: router.patch('/link-requests/:id/approve', authorize('profissionais', 'edit'), async (req, res) => {
+ 2443:   const requestId = (req.params?.id || '').toString().trim();
+ 2444:   const decidedByUserId = (req.user?.id || '').toString().trim();
+ 2445:   const notesRaw = req.body?.notes;
+ 2446:   const notes =
+ 2447:     typeof notesRaw === 'string' && notesRaw.trim().length > 0
+ 2448:       ? notesRaw.trim().slice(0, 1000)
+ 2449:       : null;
+ 2450: 
+ 2451:   if (!requestId) {
+ 2452:     return res.status(400).json({
+ 2453:       success: false,
+ 2454:       message: 'requestId invalido',
+ 2455:     });
+ 2456:   }
+ 2457: 
+ 2458:   const accessSettings = await readAccessSettingsSafe('profissionais:link-request:approve');
+ 2459:   if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+ 2460:     return res.status(403).json({
+ 2461:       success: false,
+ 2462:       message: 'Solicitacoes de vinculo desativadas pela politica atual.',
+ 2463:     });
+ 2464:   }
+ 2465: 
+ 2466:   if (!isAdminUser(req.user)) {
+ 2467:     return res.status(403).json({
+ 2468:       success: false,
+ 2469:       message: 'Apenas administradores podem aprovar solicitacoes de vinculo.',
+ 2470:     });
+ 2471:   }
+ 2472: 
+ 2473:   const client = await pool.connect();
+ 2474:   try {
+ 2475:     await client.query('BEGIN');
+ 2476:     await ensureProfessionalLinkRequestsSchema(client);
+ 2477: 
+ 2478:     const linkColumn = await getProfessionalLinkColumn(client);
+ 2479:     if (!linkColumn) {
+ 2480:       await client.query('ROLLBACK');
+ 2481:       return res.status(500).json({
+ 2482:         success: false,
+ 2483:         message: 'Nao foi possivel identificar coluna de vinculo em professionals',
+ 2484:       });
+ 2485:     }
+ 2486: 
+ 2487:     const requestResult = await client.query(
+ 2488:       `
+ 2489:         SELECT
+ 2490:           lr.id::text AS id,
+ 2491:           lr.user_id::text AS user_id,
+ 2492:           lr.professional_id::text AS professional_id,
+ 2493:           lr.status
+ 2494:         FROM public.professional_link_requests lr
+ 2495:         WHERE lr.id::text = $1
+ 2496:         LIMIT 1
+ 2497:         FOR UPDATE
+ 2498:       `,
+ 2499:       [requestId]
+ 2500:     );
+ 2501:     if (requestResult.rows.length === 0) {
+ 2502:       await client.query('ROLLBACK');
+ 2503:       return res.status(404).json({
+ 2504:         success: false,
+ 2505:         message: 'Solicitacao de vinculo nao encontrada',
+ 2506:       });
+ 2507:     }
+ 2508: 
+ 2509:     const requestRow = requestResult.rows[0];
+ 2510:     if (requestRow.status !== 'pending') {
+ 2511:       await client.query('ROLLBACK');
+ 2512:       return res.status(409).json({
+ 2513:         success: false,
+ 2514:         message: 'Esta solicitacao ja foi decidida.',
+ 2515:       });
+ 2516:     }
+ 2517: 
+ 2518:     const userResult = await client.query(
+ 2519:       `
+ 2520:         SELECT id
+ 2521:         FROM public.users
+ 2522:         WHERE id::text = $1
+ 2523:           AND deleted_at IS NULL
+ 2524:         LIMIT 1
+ 2525:         FOR UPDATE
+ 2526:       `,
+ 2527:       [requestRow.user_id]
+ 2528:     );
+ 2529:     if (userResult.rows.length === 0) {
+ 2530:       await client.query('ROLLBACK');
+ 2531:       return res.status(404).json({
+ 2532:         success: false,
+ 2533:         message: 'Usuario da solicitacao nao encontrado',
+ 2534:       });
+ 2535:     }
+ 2536: 
+ 2537:     const professionalResult = await client.query(
+ 2538:       `
+ 2539:         SELECT
+ 2540:           p.id,
+ 2541:           COALESCE(
+ 2542:             to_jsonb(p)->>'user_id_int',
+ 2543:             to_jsonb(p)->>'user_id'
+ 2544:           ) AS linked_user_id
+ 2545:         FROM public.professionals p
+ 2546:         WHERE p.id::text = $1
+ 2547:         LIMIT 1
+ 2548:         FOR UPDATE
+ 2549:       `,
+ 2550:       [requestRow.professional_id]
+ 2551:     );
+ 2552:     if (professionalResult.rows.length === 0) {
+ 2553:       await client.query('ROLLBACK');
+ 2554:       return res.status(404).json({
+ 2555:         success: false,
+ 2556:         message: 'Profissional da solicitacao nao encontrado',
+ 2557:       });
+ 2558:     }
+ 2559: 
+ 2560:     const currentProfessional = professionalResult.rows[0];
+ 2561:     if (
+ 2562:       currentProfessional.linked_user_id &&
+ 2563:       String(currentProfessional.linked_user_id) !== String(requestRow.user_id)
+ 2564:     ) {
+ 2565:       await client.query('ROLLBACK');
+ 2566:       return res.status(409).json({
+ 2567:         success: false,
+ 2568:         message: 'Profissional ja vinculado a outro usuario.',
+ 2569:       });
+ 2570:     }
+ 2571: 
+ 2572:     const userLinkedElsewhere = await client.query(
+ 2573:       `
+ 2574:         SELECT p.id
+ 2575:         FROM public.professionals p
+ 2576:         WHERE p.id::text <> $2
+ 2577:           AND COALESCE(
+ 2578:             to_jsonb(p)->>'user_id_int',
+ 2579:             to_jsonb(p)->>'user_id'
+ 2580:           ) = $1
+ 2581:         LIMIT 1
+ 2582:       `,
+ 2583:       [requestRow.user_id, requestRow.professional_id]
+ 2584:     );
+ 2585:     if (userLinkedElsewhere.rows.length > 0) {
+ 2586:       await client.query('ROLLBACK');
+ 2587:       return res.status(409).json({
+ 2588:         success: false,
+ 2589:         message: 'Usuario ja vinculado a outro profissional.',
+ 2590:       });
+ 2591:     }
+ 2592: 
+ 2593:     if (!currentProfessional.linked_user_id) {
+ 2594:       const linkResult = await client.query(
+ 2595:         `
+ 2596:           UPDATE public.professionals
+ 2597:           SET ${linkColumn} = $1,
+ 2598:               updated_at = NOW()
+ 2599:           WHERE id::text = $2
+ 2600:             AND COALESCE(
+ 2601:               to_jsonb(professionals)->>'user_id_int',
+ 2602:               to_jsonb(professionals)->>'user_id'
+ 2603:             ) IS NULL
+ 2604:         `,
+ 2605:         [requestRow.user_id, requestRow.professional_id]
+ 2606:       );
+ 2607: 
+ 2608:       if (linkResult.rowCount !== 1) {
+ 2609:         await client.query('ROLLBACK');
+ 2610:         return res.status(409).json({
+ 2611:           success: false,
+ 2612:           message: 'Nao foi possivel efetivar o vinculo por conflito concorrente.',
+ 2613:         });
+ 2614:       }
+ 2615:     }
+ 2616: 
+ 2617:     const approvedResult = await client.query(
+ 2618:       `
+ 2619:         UPDATE public.professional_link_requests
+ 2620:         SET status = 'approved',
+ 2621:             notes = COALESCE($2, notes),
+ 2622:             decided_at = NOW(),
+ 2623:             decided_by_user_id = $3,
+ 2624:             updated_at = NOW()
+ 2625:         WHERE id::text = $1
+ 2626:         RETURNING id::text AS id,
+ 2627:                   user_id::text AS user_id,
+ 2628:                   professional_id::text AS professional_id,
+ 2629:                   status,
+ 2630:                   notes,
+ 2631:                   created_at,
+ 2632:                   updated_at,
+ 2633:                   decided_at,
+ 2634:                   decided_by_user_id::text AS decided_by_user_id
+ 2635:       `,
+ 2636:       [requestId, notes, decidedByUserId || null]
+ 2637:     );
+ 2638: 
+ 2639:     await client.query('COMMIT');
+ 2640:     return res.json({
+ 2641:       success: true,
+ 2642:       message: 'Solicitacao aprovada e vinculo efetivado.',
+ 2643:       request: approvedResult.rows[0],
+ 2644:     });
+ 2645:   } catch (error) {
+ 2646:     await client.query('ROLLBACK');
+ 2647:     if (error?.code === '23505') {
+ 2648:       const constraint = (error?.constraint || '').toString().toLowerCase();
+ 2649:       if (constraint.includes('professionals_user_id')) {
+ 2650:         return res.status(409).json({
+ 2651:           success: false,
+ 2652:           message: 'Usuario ja vinculado a outro profissional.',
+ 2653:         });
+ 2654:       }
+ 2655:     }
+ 2656: 
+ 2657:     console.error('Erro ao aprovar solicitacao de vinculo:', error);
+ 2658:     return res.status(500).json({
+ 2659:       success: false,
+ 2660:       message: 'Erro ao aprovar solicitacao de vinculo',
+ 2661:     });
+ 2662:   } finally {
+ 2663:     client.release();
+ 2664:   }
+ 2665: });
+ 2666: 
+ 2667: router.patch('/link-requests/:id/reject', authorize('profissionais', 'edit'), async (req, res) => {
+ 2668:   const requestId = (req.params?.id || '').toString().trim();
+ 2669:   const decidedByUserId = (req.user?.id || '').toString().trim();
+ 2670:   const notesRaw = req.body?.notes;
+ 2671:   const notes =
+ 2672:     typeof notesRaw === 'string' && notesRaw.trim().length > 0
+ 2673:       ? notesRaw.trim().slice(0, 1000)
+ 2674:       : null;
+ 2675: 
+ 2676:   if (!requestId) {
+ 2677:     return res.status(400).json({
+ 2678:       success: false,
+ 2679:       message: 'requestId invalido',
+ 2680:     });
+ 2681:   }
+ 2682: 
+ 2683:   const accessSettings = await readAccessSettingsSafe('profissionais:link-request:reject');
+ 2684:   if (accessSettings.link_policy !== 'SELF_CLAIM_WITH_APPROVAL') {
+ 2685:     return res.status(403).json({
+ 2686:       success: false,
+ 2687:       message: 'Solicitacoes de vinculo desativadas pela politica atual.',
+ 2688:     });
+ 2689:   }
+ 2690: 
+ 2691:   if (!isAdminUser(req.user)) {
+ 2692:     return res.status(403).json({
+ 2693:       success: false,
+ 2694:       message: 'Apenas administradores podem rejeitar solicitacoes de vinculo.',
+ 2695:     });
+ 2696:   }
+ 2697: 
+ 2698:   const client = await pool.connect();
+ 2699:   try {
+ 2700:     await client.query('BEGIN');
+ 2701:     await ensureProfessionalLinkRequestsSchema(client);
+ 2702: 
+ 2703:     const requestResult = await client.query(
+ 2704:       `
+ 2705:         SELECT id::text AS id, status
+ 2706:         FROM public.professional_link_requests
+ 2707:         WHERE id::text = $1
+ 2708:         LIMIT 1
+ 2709:         FOR UPDATE
+ 2710:       `,
+ 2711:       [requestId]
+ 2712:     );
+ 2713:     if (requestResult.rows.length === 0) {
+ 2714:       await client.query('ROLLBACK');
+ 2715:       return res.status(404).json({
+ 2716:         success: false,
+ 2717:         message: 'Solicitacao de vinculo nao encontrada',
+ 2718:       });
+ 2719:     }
+ 2720: 
+ 2721:     if (requestResult.rows[0].status !== 'pending') {
+ 2722:       await client.query('ROLLBACK');
+ 2723:       return res.status(409).json({
+ 2724:         success: false,
+ 2725:         message: 'Esta solicitacao ja foi decidida.',
+ 2726:       });
+ 2727:     }
+ 2728: 
+ 2729:     const rejectedResult = await client.query(
+ 2730:       `
+ 2731:         UPDATE public.professional_link_requests
+ 2732:         SET status = 'rejected',
+ 2733:             notes = COALESCE($2, notes),
+ 2734:             decided_at = NOW(),
+ 2735:             decided_by_user_id = $3,
+ 2736:             updated_at = NOW()
+ 2737:         WHERE id::text = $1
+ 2738:         RETURNING id::text AS id,
+ 2739:                   user_id::text AS user_id,
+ 2740:                   professional_id::text AS professional_id,
+ 2741:                   status,
+ 2742:                   notes,
+ 2743:                   created_at,
+ 2744:                   updated_at,
+ 2745:                   decided_at,
+ 2746:                   decided_by_user_id::text AS decided_by_user_id
+ 2747:       `,
+ 2748:       [requestId, notes, decidedByUserId || null]
+ 2749:     );
+ 2750: 
+ 2751:     await client.query('COMMIT');
+ 2752:     return res.json({
+ 2753:       success: true,
+ 2754:       message: 'Solicitacao rejeitada.',
+ 2755:       request: rejectedResult.rows[0],
+ 2756:     });
+ 2757:   } catch (error) {
+ 2758:     await client.query('ROLLBACK');
+ 2759:     console.error('Erro ao rejeitar solicitacao de vinculo:', error);
+ 2760:     return res.status(500).json({
+ 2761:       success: false,
+ 2762:       message: 'Erro ao rejeitar solicitacao de vinculo',
+ 2763:     });
+ 2764:   } finally {
+ 2765:     client.release();
+ 2766:   }
+ 2767: });
+ 2768: 
+ 2769: router.get('/me', authorizeAgendaRead, async (req, res) => {
+ 2770:   try {
+ 2771:     const accessContext = await resolveAgendaAccessContext(req.user, pool);
+ 2772:     const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+ 2773:     const agendaReadMetadata = buildAgendaReadMetadata({
+ 2774:       accessMode: agendaReadAccess?.mode || null,
+ 2775:       compatibilityMode: agendaReadAccess?.compatibilityMode === true,
+ 2776:       legacyReason: agendaReadAccess?.legacyReason || null,
+ 2777:     });
+ 2778: 
+ 2779:     if (!accessContext.linkedProfessionalId) {
+ 2780:       return res.json({
+ 2781:         success: true,
+ 2782:         professional_id: null,
+ 2783:         can_view_all_professionals: false,
+ 2784:         allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+ 2785:         ...agendaReadMetadata,
+ 2786:         professional: null,
+ 2787:       });
+ 2788:     }
+ 2789: 
+ 2790:     const professionalResult = await pool.query(
+ 2791:       `
+ 2792:         SELECT
+ 2793:           p.id,
+ 2794:           p.status,
+ 2795:           p.funcao,
+ 2796:           p.email,
+ 2797:           p.phone,
+ 2798:           COALESCE(pr.nome, p.funcao) AS role_nome,
+ 2799:           u.id::text AS linked_user_id,
+ 2800:           COALESCE(u.name, p.email, '') AS user_name,
+ 2801:           COALESCE(u.email, p.email) AS user_email,
+ 2802:           COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
+ 2803:           COALESCE(u.role, 'Usuario') AS user_role
+ 2804:         FROM public.professionals p
+ 2805:         LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+ 2806:         LEFT JOIN public.users u
+ 2807:           ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+ 2808:         WHERE p.id = $1
+ 2809:         LIMIT 1
+ 2810:       `,
+ 2811:       [accessContext.linkedProfessionalId]
+ 2812:     );
+ 2813: 
+ 2814:     return res.json({
+ 2815:       success: true,
+ 2816:       professional_id: accessContext.linkedProfessionalId,
+ 2817:       can_view_all_professionals: accessContext.canViewOtherProfessionals,
+ 2818:       allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+ 2819:       ...agendaReadMetadata,
+ 2820:       professional: professionalResult.rows[0] || null,
+ 2821:     });
+ 2822:   } catch (error) {
+ 2823:     console.error('Erro ao resolver contexto do profissional logado:', error);
+ 2824:     return res.status(500).json({
+ 2825:       success: false,
+ 2826:       message: 'Erro ao carregar contexto do profissional logado',
+ 2827:     });
+ 2828:   }
+ 2829: });
+ 2830: 
+ 2831: // Agenda visual por intervalo (dia/semana/mes/lista)
+ 2832: router.get('/agenda/range', authorizeAgendaRead, async (req, res) => {
+ 2833:   const dateFrom = normalizeDateParam(req.query?.date_from || req.query?.dateFrom);
+ 2834:   const dateTo = normalizeDateParam(req.query?.date_to || req.query?.dateTo);
+ 2835:   const requestedProfessionalIds = Array.from(
+ 2836:     new Set([
+ 2837:       ...normalizeEntityIdList(req.query?.professional_ids || req.query?.professionalIds),
+ 2838:       ...normalizeEntityIdList(req.query?.professional_id || req.query?.professionalId),
+ 2839:     ])
+ 2840:   );
+ 2841: 
+ 2842:   if (!dateFrom || !dateTo) {
+ 2843:     return res.status(400).json({
+ 2844:       success: false,
+ 2845:       message: 'Parametros date_from e date_to sao obrigatorios (YYYY-MM-DD).',
+ 2846:     });
+ 2847:   }
+ 2848: 
+ 2849:   if (dateFrom > dateTo) {
+ 2850:     return res.status(400).json({
+ 2851:       success: false,
+ 2852:       message: 'date_from nao pode ser maior que date_to.',
+ 2853:     });
+ 2854:   }
+ 2855: 
+ 2856:   const rangeDays = daysBetweenInclusive(dateFrom, dateTo);
+ 2857:   if (!rangeDays || rangeDays > 62) {
+ 2858:     return res.status(400).json({
+ 2859:       success: false,
+ 2860:       message: 'Intervalo maximo permitido para agenda visual e de 62 dias.',
+ 2861:     });
+ 2862:   }
+ 2863: 
+ 2864:   try {
+ 2865:     const accessContext = await resolveAgendaAccessContext(req.user, pool);
+ 2866:     const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+ 2867:     const writeEnforcement = resolveAgendaWriteEnforcementMode();
+ 2868: 
+ 2869:     if (
+ 2870:       requestedProfessionalIds.some(
+ 2871:         (professionalId) => !canAccessAgendaWriteTarget(accessContext, professionalId)
+ 2872:       )
+ 2873:     ) {
+ 2874:       return res.status(403).json({
+ 2875:         success: false,
+ 2876:         message:
+ 2877:           'Acesso negado: voce nao pode visualizar agenda de outro profissional.',
+ 2878:       });
+ 2879:     }
+ 2880: 
+ 2881:     let targetProfessionalIds = [];
+ 2882:     if (requestedProfessionalIds.length > 0) {
+ 2883:       targetProfessionalIds = requestedProfessionalIds;
+ 2884:     } else if (
+ 2885:       accessContext.linkedProfessionalId &&
+ 2886:       !accessContext.canViewOtherProfessionals
+ 2887:     ) {
+ 2888:       targetProfessionalIds = [String(accessContext.linkedProfessionalId)];
+ 2889:     } else {
+ 2890:       const professionalsResult = await pool.query(
+ 2891:         `
+ 2892:           SELECT p.id::text AS id
+ 2893:           FROM public.professionals p
+ 2894:           ORDER BY p.created_at DESC
+ 2895:         `
+ 2896:       );
+ 2897:       targetProfessionalIds = professionalsResult.rows
+ 2898:         .map((row) => normalizeEntityId(row?.id))
+ 2899:         .filter(Boolean);
+ 2900:     }
+ 2901: 
+ 2902:     if (targetProfessionalIds.length === 0) {
+ 2903:       return res.json({
+ 2904:         success: true,
+ 2905:         date_from: dateFrom,
+ 2906:         date_to: dateTo,
+ 2907:         professionals: [],
+ 2908:         appointments: [],
+ 2909:         scope: buildAgendaScopePayload(agendaReadAccess, {
+ 2910:           professional_id: accessContext.linkedProfessionalId,
+ 2911:           can_view_all_professionals: accessContext.canViewOtherProfessionals,
+ 2912:           allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+ 2913:         }),
+ 2914:       });
+ 2915:     }
+ 2916: 
+ 2917:     const professionalRows = await pool.query(
+ 2918:       `
+ 2919:         SELECT
+ 2920:           p.id::text AS id,
+ 2921:           COALESCE(
+ 2922:             u.name,
+ 2923:             p.email,
+ 2924:             p.funcao,
+ 2925:             p.specialty,
+ 2926:             'Profissional ' || p.id::text
+ 2927:           ) AS professional_name,
+ 2928:           COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+ 2929:           p.specialty AS professional_specialty
+ 2930:         FROM public.professionals p
+ 2931:         LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+ 2932:         LEFT JOIN public.users u
+ 2933:           ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+ 2934:         WHERE p.id::text = ANY($1::text[])
+ 2935:         ORDER BY professional_name ASC, p.id::text ASC
+ 2936:       `,
+ 2937:       [targetProfessionalIds]
+ 2938:     );
+ 2939: 
+ 2940:     const hasStatusJornada = await hasPatientsStatusJornadaColumn(pool);
+ 2941:     const patientJourneyProjection = hasStatusJornada
+ 2942:       ? 'pa.status_jornada AS status_jornada, pa.status_jornada AS journey_status,'
+ 2943:       : 'NULL::text AS status_jornada, NULL::text AS journey_status,';
+ 2944: 
+ 2945:     const appointmentsResult = await pool.query(
+ 2946:       `
+ 2947:         SELECT
+ 2948:           a.id::text AS id,
+ 2949:           a.id::text AS appointment_id,
+ 2950:           a.professional_id::text AS professional_id,
+ 2951:           COALESCE(
+ 2952:             u.name,
+ 2953:             p.email,
+ 2954:             p.funcao,
+ 2955:             p.specialty,
+ 2956:             'Profissional ' || p.id::text
+ 2957:           ) AS professional_name,
+ 2958:           COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+ 2959:           p.specialty AS professional_specialty,
+ 2960:           a.appointment_date,
+ 2961:           to_char(a.appointment_time, 'HH24:MI') AS appointment_time,
+ 2962:           a.status AS appointment_status,
+ 2963:           a.status,
+ 2964:           a.notes,
+ 2965:           pa.id::text AS patient_id,
+ 2966:           pa.name AS patient_name,
+ 2967:           ${patientJourneyProjection}
+ 2968:           s.id::text AS service_id,
+ 2969:           s.name AS service_name,
+ 2970:           COALESCE(pr.nome, p.specialty, p.funcao, NULL) AS sector_responsible,
+ 2971:           COALESCE(
+ 2972:             u.name,
+ 2973:             p.email,
+ 2974:             p.funcao,
+ 2975:             p.specialty,
+ 2976:             NULL
+ 2977:           ) AS responsible_name
+ 2978:         FROM public.appointments a
+ 2979:         JOIN public.patients pa ON pa.id = a.patient_id
+ 2980:         JOIN public.professionals p ON p.id = a.professional_id
+ 2981:         LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+ 2982:         LEFT JOIN public.users u
+ 2983:           ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+ 2984:         LEFT JOIN public.services s ON s.id = a.service_id
+ 2985:         WHERE a.professional_id::text = ANY($1::text[])
+ 2986:           AND a.appointment_date BETWEEN $2::date AND $3::date
+ 2987:         ORDER BY a.appointment_date ASC, a.appointment_time ASC, professional_name ASC;
+ 2988:       `,
+ 2989:       [targetProfessionalIds, dateFrom, dateTo]
+ 2990:     );
+ 2991: 
+ 2992:     const appointments = appointmentsResult.rows.map((row) => {
+ 2993:       const journeyStatus = normalizeJourneyStatus(
+ 2994:         row?.status_jornada || row?.journey_status || null
+ 2995:       );
+ 2996:       const institutionalContext = buildAgendaInstitutionalContext({
+ 2997:         journeyStatus,
+ 2998:         serviceName: row?.service_name || null,
+ 2999:       });
+ 3000:       const writeValidation = prepareAgendaWriteValidation({
+ 3001:         journeyStatus,
+ 3002:         serviceName: row?.service_name || null,
+ 3003:         explicitEventType: institutionalContext.event_type_institutional,
+ 3004:         enforcementMode: writeEnforcement.configuredMode,
+ 3005:       });
+ 3006: 
+ 3007:       return {
+ 3008:         ...row,
+ 3009:         ...institutionalContext,
+ 3010:         write_validation_ready: true,
+ 3011:         write_validation_mode: writeValidation.mode || writeEnforcement.configuredMode,
+ 3012:         write_validation_effective_mode:
+ 3013:           writeValidation.effectiveMode || writeEnforcement.effectiveMode,
+ 3014:         write_validation_rollout_phase:
+ 3015:           writeValidation.rolloutPhase || writeEnforcement.rolloutPhase,
+ 3016:         write_validation_hard_block_enabled: writeValidation.hardBlockGloballyEnabled === true,
+ 3017:         write_validation_legacy_mode_alias: writeValidation.legacyModeAlias || null,
+ 3018:         write_validation_level: writeValidation.level || null,
+ 3019:         write_validation_action: writeValidation.action || null,
+ 3020:         write_validation_code: writeValidation.code || null,
+ 3021:         write_validation_message: writeValidation.message || null,
+ 3022:         write_validation_supported_levels:
+ 3023:           Array.isArray(writeValidation.supportedLevels) &&
+ 3024:           writeValidation.supportedLevels.length > 0
+ 3025:             ? writeValidation.supportedLevels
+ 3026:             : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+ 3027:         write_validation_would_block: writeValidation.wouldBlockWhenEnforced === true,
+ 3028:         write_validation_blocking_active: writeValidation.blockingActive === true,
+ 3029:         write_validation_enforcement_ready: writeValidation.enforcementReady === true,
+ 3030:         write_validation_should_warn: writeValidation.shouldWarn,
+ 3031:         write_validation_should_block: writeValidation.shouldBlock,
+ 3032:       };
+ 3033:     });
+ 3034: 
+ 3035:     const writeValidationSummary = summarizeWriteValidation(appointments);
+ 3036: 
+ 3037:     return res.json({
+ 3038:       success: true,
+ 3039:       date_from: dateFrom,
+ 3040:       date_to: dateTo,
+ 3041:       professionals: professionalRows.rows,
+ 3042:       appointments,
+ 3043:       scope: buildAgendaScopePayload(agendaReadAccess, {
+ 3044:         professional_id: accessContext.linkedProfessionalId,
+ 3045:         can_view_all_professionals: accessContext.canViewOtherProfessionals,
+ 3046:         allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+ 3047:         write_validation_summary: {
+ 3048:           mode: writeEnforcement.configuredMode,
+ 3049:           effective_mode: writeEnforcement.effectiveMode,
+ 3050:           rollout_phase: writeEnforcement.rolloutPhase,
+ 3051:           hard_block_enabled: writeEnforcement.hardBlockGloballyEnabled === true,
+ 3052:           legacy_mode_alias: writeEnforcement.legacyModeAlias || null,
+ 3053:           ...writeValidationSummary,
+ 3054:           blocking_active: writeEnforcement.blockingActive,
+ 3055:           enforcement_ready: true,
+ 3056:         },
+ 3057:       }),
+ 3058:     });
+ 3059:   } catch (error) {
+ 3060:     console.error('Erro ao buscar agenda por intervalo:', error);
+ 3061:     return res.status(500).json({
+ 3062:       success: false,
+ 3063:       message: 'Erro ao buscar agenda por intervalo.',
+ 3064:     });
+ 3065:   }
+ 3066: });
+ 3067: 
+ 3068: // Agenda do profissional em um dia
+ 3069: router.get('/:id/agenda', authorizeAgendaRead, async (req, res) => {
+ 3070:   const { id } = req.params;
+ 3071:   const dateCandidate = req.query.date || new Date().toISOString().split('T')[0];
+ 3072:   const date = normalizeDateParam(dateCandidate);
+ 3073: 
+ 3074:   // Fase 5: futuros endpoints de escrita da agenda institucional (POST/PUT/PATCH)
+ 3075:   // devem reutilizar prepareAgendaWriteValidation/prepareAgendaWriteGuard do service.
+ 3076: 
+ 3077:   if (!date) {
+ 3078:     return res.status(400).json({
+ 3079:       success: false,
+ 3080:       message: 'Parametro date invalido. Use YYYY-MM-DD.',
+ 3081:     });
+ 3082:   }
+ 3083: 
+ 3084:   try {
+ 3085:     const accessContext = await resolveAgendaAccessContext(req.user, pool);
+ 3086:     const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+ 3087:     const writeEnforcement = resolveAgendaWriteEnforcementMode();
+ 3088:     const isOwnAgenda =
+ 3089:       accessContext.linkedProfessionalId &&
+ 3090:       String(accessContext.linkedProfessionalId) === String(id);
+ 3091: 
+ 3092:     // Protege contra IDOR: profissional nÃ£o pode consultar agenda arbitraria sem permissÃ£o + config.
+ 3093:     if (
+ 3094:       accessContext.linkedProfessionalId &&
+ 3095:       !isOwnAgenda &&
+ 3096:       !accessContext.canViewOtherProfessionals
+ 3097:     ) {
+ 3098:       return res.status(403).json({
+ 3099:         success: false,
+ 3100:         message:
+ 3101:           'Acesso negado: voce nao pode visualizar agenda de outro profissional.',
+ 3102:       });
+ 3103:     }
+ 3104: 
+ 3105:     const hasStatusJornada = await hasPatientsStatusJornadaColumn(pool);
+ 3106:     const patientJourneyProjection = hasStatusJornada
+ 3107:       ? 'pa.status_jornada AS status_jornada, pa.status_jornada AS journey_status,'
+ 3108:       : 'NULL::text AS status_jornada, NULL::text AS journey_status,';
+ 3109: 
+ 3110:     const query = `
+ 3111:       SELECT
+ 3112:         a.id::text AS id,
+ 3113:         a.id::text AS appointment_id,
+ 3114:         a.professional_id::text AS professional_id,
+ 3115:         COALESCE(
+ 3116:           u.name,
+ 3117:           p.email,
+ 3118:           p.funcao,
+ 3119:           p.specialty,
+ 3120:           'Profissional ' || p.id::text
+ 3121:         ) AS professional_name,
+ 3122:         COALESCE(pr.nome, p.funcao, p.specialty) AS professional_role,
+ 3123:         p.specialty AS professional_specialty,
+ 3124:         a.appointment_date,
+ 3125:         to_char(a.appointment_time, 'HH24:MI') AS appointment_time,
+ 3126:         a.status AS appointment_status,
+ 3127:         a.status,
+ 3128:         a.notes,
+ 3129:         pa.id::text AS patient_id,
+ 3130:         pa.name AS patient_name,
+ 3131:         ${patientJourneyProjection}
+ 3132:         s.id::text AS service_id,
+ 3133:         s.name AS service_name,
+ 3134:         COALESCE(pr.nome, p.specialty, p.funcao, NULL) AS sector_responsible,
+ 3135:         COALESCE(
+ 3136:           u.name,
+ 3137:           p.email,
+ 3138:           p.funcao,
+ 3139:           p.specialty,
+ 3140:           NULL
+ 3141:         ) AS responsible_name
+ 3142:       FROM public.appointments a
+ 3143:       JOIN public.patients pa ON pa.id = a.patient_id
+ 3144:       JOIN public.professionals p ON p.id = a.professional_id
+ 3145:       LEFT JOIN public.professional_roles pr ON pr.id = p.role_id
+ 3146:       LEFT JOIN public.users u
+ 3147:         ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+ 3148:       LEFT JOIN public.services s ON s.id = a.service_id
+ 3149:       WHERE a.professional_id::text = $1
+ 3150:         AND a.appointment_date = $2::date
+ 3151:       ORDER BY a.appointment_time ASC;
+ 3152:     `;
+ 3153: 
+ 3154:     const result = await pool.query(query, [id, date]);
+ 3155:     const agenda = result.rows.map((row) => {
+ 3156:       const journeyStatus = normalizeJourneyStatus(
+ 3157:         row?.status_jornada || row?.journey_status || null
+ 3158:       );
+ 3159:       const institutionalContext = buildAgendaInstitutionalContext({
+ 3160:         journeyStatus,
+ 3161:         serviceName: row?.service_name || null,
+ 3162:       });
+ 3163:       // Fase 5: enforcement controlado preparado para futuras rotas de escrita (POST/PUT agenda).
+ 3164:       const writeValidation = prepareAgendaWriteValidation({
+ 3165:         journeyStatus,
+ 3166:         serviceName: row?.service_name || null,
+ 3167:         explicitEventType: institutionalContext.event_type_institutional,
+ 3168:         enforcementMode: writeEnforcement.configuredMode,
+ 3169:       });
+ 3170: 
+ 3171:       return {
+ 3172:         ...row,
+ 3173:         ...institutionalContext,
+ 3174:         write_validation_ready: true,
+ 3175:         write_validation_mode: writeValidation.mode || writeEnforcement.configuredMode,
+ 3176:         write_validation_effective_mode:
+ 3177:           writeValidation.effectiveMode || writeEnforcement.effectiveMode,
+ 3178:         write_validation_rollout_phase:
+ 3179:           writeValidation.rolloutPhase || writeEnforcement.rolloutPhase,
+ 3180:         write_validation_hard_block_enabled: writeValidation.hardBlockGloballyEnabled === true,
+ 3181:         write_validation_legacy_mode_alias: writeValidation.legacyModeAlias || null,
+ 3182:         write_validation_level: writeValidation.level || null,
+ 3183:         write_validation_action: writeValidation.action || null,
+ 3184:         write_validation_code: writeValidation.code || null,
+ 3185:         write_validation_message: writeValidation.message || null,
+ 3186:         write_validation_supported_levels:
+ 3187:           Array.isArray(writeValidation.supportedLevels) &&
+ 3188:           writeValidation.supportedLevels.length > 0
+ 3189:             ? writeValidation.supportedLevels
+ 3190:             : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+ 3191:         write_validation_would_block: writeValidation.wouldBlockWhenEnforced === true,
+ 3192:         write_validation_blocking_active: writeValidation.blockingActive === true,
+ 3193:         write_validation_enforcement_ready: writeValidation.enforcementReady === true,
+ 3194:         write_validation_should_warn: writeValidation.shouldWarn,
+ 3195:         write_validation_should_block: writeValidation.shouldBlock,
+ 3196:       };
+ 3197:     });
+ 3198:     const writeValidationSummary = summarizeWriteValidation(agenda);
+ 3199: 
+ 3200:     res.json({
+ 3201:       success: true,
+ 3202:       agenda,
+ 3203:       scope: buildAgendaScopePayload(agendaReadAccess, {
+ 3204:         professional_id: accessContext.linkedProfessionalId,
+ 3205:         can_view_all_professionals: accessContext.canViewOtherProfessionals,
+ 3206:         allow_professional_view_others: accessContext.allowProfessionalViewOthers,
+ 3207:         write_validation_summary: {
+ 3208:           mode: writeEnforcement.configuredMode,
+ 3209:           effective_mode: writeEnforcement.effectiveMode,
+ 3210:           rollout_phase: writeEnforcement.rolloutPhase,
+ 3211:           hard_block_enabled: writeEnforcement.hardBlockGloballyEnabled === true,
+ 3212:           legacy_mode_alias: writeEnforcement.legacyModeAlias || null,
+ 3213:           ...writeValidationSummary,
+ 3214:           blocking_active: writeEnforcement.blockingActive,
+ 3215:           enforcement_ready: true,
+ 3216:         },
+ 3217:       }),
+ 3218:     });
+ 3219:   } catch (error) {
+ 3220:     console.error('Erro ao buscar agenda do profissional:', error);
+ 3221:     res.status(500).json({ success: false, message: 'Erro ao buscar agenda' });
+ 3222:   }
+ 3223: });
+ 3224: 
+ 3225: // EstatÃ­sticas gerais dos profissionais
+ 3226: router.get('/stats/resumo', authorize('profissionais', 'view'), async (req, res) => {
+ 3227:   const date = req.query.date || new Date().toISOString().split('T')[0];
+ 3228: 
+ 3229:   try {
+ 3230:     const totals = await pool.query(`
+ 3231:       SELECT status, COUNT(*)::int AS count
+ 3232:       FROM professionals
+ 3233:       GROUP BY status
+ 3234:     `);
+ 3235: 
+ 3236:     const agendaHoje = await pool.query(
+ 3237:       'SELECT COUNT(*)::int AS count FROM appointments WHERE appointment_date = $1',
+ 3238:       [date]
+ 3239:     );
+ 3240: 
+ 3241:     res.json({
+ 3242:       success: true,
+ 3243:       stats: {
+ 3244:         total: totals.rows.reduce((acc, row) => acc + row.count, 0),
+ 3245:         porStatus: totals.rows,
+ 3246:         agendaHoje: agendaHoje.rows[0]?.count || 0
+ 3247:       }
+ 3248:     });
+ 3249:   } catch (error) {
+ 3250:     console.error('Erro ao buscar estatÃ­sticas de profissionais:', error);
+ 3251:     res.status(500).json({ success: false, message: 'Erro ao buscar estatÃ­sticas' });
+ 3252:   }
+ 3253: });
+ 3254: 
+ 3255: router.get('/:id', authorize('profissionais', 'view'), async (req, res) => {
+ 3256:   const { id } = req.params;
+ 3257: 
+ 3258:   try {
+ 3259:     const result = await pool.query(
+ 3260:       `
+ 3261:         SELECT
+ 3262:           p.*,
+ 3263:           COALESCE(
+ 3264:             to_jsonb(p)->>'funcao',
+ 3265:             to_jsonb(p)->>'specialty'
+ 3266:           ) AS role_nome,
+ 3267:           u.id::text AS linked_user_id,
+ 3268:           COALESCE(u.name, p.email, '') AS user_name,
+ 3269:           COALESCE(u.email, p.email) AS user_email,
+ 3270:           COALESCE(u.username, split_part(COALESCE(p.email, ''), '@', 1)) AS user_username,
+ 3271:           COALESCE(u.role, 'Usuario') AS user_role,
+ 3272:           COALESCE(u.status, 'ativo') AS user_status
+ 3273:         FROM public.professionals p
+ 3274:         LEFT JOIN public.users u
+ 3275:           ON COALESCE(to_jsonb(p)->>'user_id_int', to_jsonb(p)->>'user_id') = u.id::text
+ 3276:         WHERE p.id = $1
+ 3277:         LIMIT 1
+ 3278:       `,
+ 3279:       [id]
+ 3280:     );
+ 3281: 
+ 3282:     if (result.rows.length === 0) {
+ 3283:       return res.status(404).json({
+ 3284:         success: false,
+ 3285:         message: 'Profissional nao encontrado',
+ 3286:       });
+ 3287:     }
+ 3288: 
+ 3289:     return res.json({
+ 3290:       success: true,
+ 3291:       professional: result.rows[0],
+ 3292:     });
+ 3293:   } catch (error) {
+ 3294:     console.error('Erro ao buscar profissional por id:', error);
+ 3295:     return res.status(500).json({
+ 3296:       success: false,
+ 3297:       message: 'Erro ao buscar profissional',
+ 3298:     });
+ 3299:   }
+ 3300: });
+ 3301: 
+ 3302: // Validacao de escrita da agenda (dry-run), sem persistencia.
+ 3303: router.post('/:id/agenda/validate-write', authorizeAgendaRead, async (req, res) => {
+ 3304:   const { id } = req.params;
+ 3305: 
+ 3306:   try {
+ 3307:     const payload = req.body && typeof req.body === 'object' ? req.body : {};
+ 3308:     const accessContext = await resolveAgendaAccessContext(req.user, pool);
+ 3309:     const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+ 3310: 
+ 3311:     // Protege contra IDOR: profissional nao pode validar escrita para agenda arbitraria.
+ 3312:     if (!canAccessAgendaWriteTarget(accessContext, id)) {
+ 3313:       return res.status(403).json({
+ 3314:         success: false,
+ 3315:         message:
+ 3316:           'Acesso negado: voce nao pode validar escrita para agenda de outro profissional.',
+ 3317:       });
+ 3318:     }
+ 3319: 
+ 3320:     // Reduz dependencia pratica do legado: endpoint de escrita pode optar por nao aceitar fallback.
+ 3321:     if (agendaReadAccess?.compatibilityMode === true && AGENDA_VALIDATE_WRITE_ALLOW_LEGACY !== true) {
+ 3322:       return res.status(403).json(
+ 3323:         buildAgendaLegacyWriteScopeError({
+ 3324:           code: 'agenda_write_validation_requires_primary_scope',
+ 3325:           message:
+ 3326:             'Validacao de escrita da agenda requer escopo primario agenda:view nesta fase de rollout.',
+ 3327:           agendaReadAccess,
+ 3328:           accessContext,
+ 3329:         })
+ 3330:       );
+ 3331:     }
+ 3332: 
+ 3333:     const patientId = normalizeEntityId(payload?.patient_id);
+ 3334:     const serviceId = normalizeEntityId(payload?.service_id);
+ 3335:     const journeyStatusInput = normalizeOptionalText(payload?.journey_status);
+ 3336:     const serviceNameInput = normalizeOptionalText(payload?.service_name);
+ 3337:     const explicitEventType = normalizeOptionalText(payload?.explicit_event_type);
+ 3338:     const requestedEnforcementMode = normalizeOptionalText(payload?.enforcement_mode);
+ 3339:     const canOverrideEnforcementMode =
+ 3340:       isAdminUser(req.user) ||
+ 3341:       hasPermissionScope(req.user?.permissions, 'agenda:enforcement_control');
+ 3342:     const writeEnforcement = resolveAgendaWriteEnforcementMode({
+ 3343:       requestedMode: canOverrideEnforcementMode ? requestedEnforcementMode : null,
+ 3344:     });
+ 3345: 
+ 3346:     if (!patientId && !journeyStatusInput) {
+ 3347:       return res.status(400).json({
+ 3348:         success: false,
+ 3349:         code: 'agenda_write_validation_patient_or_journey_required',
+ 3350:         message: 'Informe patient_id ou journey_status para validar a coerencia de jornada.',
+ 3351:       });
+ 3352:     }
+ 3353: 
+ 3354:     if (!serviceId && !serviceNameInput) {
+ 3355:       return res.status(400).json({
+ 3356:         success: false,
+ 3357:         code: 'agenda_write_validation_service_required',
+ 3358:         message: 'Informe service_id ou service_name para classificar o tipo institucional.',
+ 3359:       });
+ 3360:     }
+ 3361: 
+ 3362:     const patientContext = await resolveAgendaWritePatientContext({
+ 3363:       patientId,
+ 3364:       journeyStatusInput,
+ 3365:       client: pool,
+ 3366:     });
+ 3367:     const serviceContext = await resolveAgendaWriteServiceContext({
+ 3368:       serviceId,
+ 3369:       serviceNameInput,
+ 3370:       client: pool,
+ 3371:     });
+ 3372: 
+ 3373:     if (patientId && !patientContext.journeyStatus) {
+ 3374:       return res.status(409).json({
+ 3375:         success: false,
+ 3376:         code: 'patient_journey_status_missing',
+ 3377:         message:
+ 3378:           'Nao foi possivel validar a agenda porque o assistido esta sem status_jornada persistido.',
+ 3379:         patient_id: patientContext.patientId,
+ 3380:       });
+ 3381:     }
+ 3382: 
+ 3383:     if (
+ 3384:       patientId &&
+ 3385:       journeyStatusInput &&
+ 3386:       patientContext.journeyStatus &&
+ 3387:       journeyStatusInput.toLowerCase() !== patientContext.journeyStatus.toLowerCase()
+ 3388:     ) {
+ 3389:       return res.status(409).json({
+ 3390:         success: false,
+ 3391:         code: 'agenda_journey_status_mismatch',
+ 3392:         message:
+ 3393:           'journey_status informado nao confere com o status_jornada persistido do assistido.',
+ 3394:         journey_status: patientContext.journeyStatus,
+ 3395:         requested_journey_status: journeyStatusInput,
+ 3396:         patient_id: patientContext.patientId,
+ 3397:       });
+ 3398:     }
+ 3399: 
+ 3400:     const guard = prepareAgendaWriteGuard({
+ 3401:       journeyStatus: patientContext.journeyStatus,
+ 3402:       serviceName: serviceContext.serviceName,
+ 3403:       explicitEventType,
+ 3404:       enforcementMode: writeEnforcement.configuredMode,
+ 3405:       context: {
+ 3406:         endpoint: 'POST /profissionais/:id/agenda/validate-write',
+ 3407:         professional_id: String(id),
+ 3408:         patient_id: patientContext.patientId,
+ 3409:         service_id: serviceContext.serviceId,
+ 3410:       },
+ 3411:     });
+ 3412:     const validationPayload = toAgendaWriteValidationPayload(guard);
+ 3413:     const resolvedContext = {
+ 3414:       professional_id: String(id),
+ 3415:       patient_id: patientContext.patientId,
+ 3416:       patient_name: patientContext.patientName,
+ 3417:       journey_status: patientContext.journeyStatus,
+ 3418:       journey_status_source: patientContext.source,
+ 3419:       journey_status_found: patientContext.found,
+ 3420:       service_id: serviceContext.serviceId,
+ 3421:       service_name: serviceContext.serviceName,
+ 3422:       service_name_source: serviceContext.source,
+ 3423:       service_found: serviceContext.found,
+ 3424:       explicit_event_type: explicitEventType,
+ 3425:     };
+ 3426:     const writeValidationSummary = summarizeWriteValidation([
+ 3427:       {
+ 3428:         write_validation_level: guard.level,
+ 3429:         write_validation_should_block: guard.shouldBlock === true,
+ 3430:       },
+ 3431:     ]);
+ 3432:     const scopePayload = buildAgendaWriteScopeWithSummary({
+ 3433:       agendaReadAccess,
+ 3434:       accessContext,
+ 3435:       writeEnforcement,
+ 3436:       validationPayload,
+ 3437:       writeValidationSummary,
+ 3438:     });
+ 3439:     const responseBase = buildAgendaWriteResponseBase({
+ 3440:       dryRun: true,
+ 3441:       persisted: false,
+ 3442:       endpoint: 'agenda_validate_write_v1',
+ 3443:       blocked: guard.shouldBlock === true,
+ 3444:       canProceed: guard.canProceed === true,
+ 3445:       validationPayload,
+ 3446:       resolvedContext,
+ 3447:       overridePayload: buildAgendaWriteOverridePayload({
+ 3448:         requestedEnforcementMode,
+ 3449:         canOverrideEnforcementMode,
+ 3450:         writeEnforcement,
+ 3451:       }),
+ 3452:       scopePayload,
+ 3453:     });
+ 3454: 
+ 3455:     if (guard.canProceed !== true) {
+ 3456:       return res.status(guard.statusCode || 409).json({
+ 3457:         success: false,
+ 3458:         code: guard.blockPayload?.code || 'agenda_write_blocked_by_journey',
+ 3459:         message:
+ 3460:           guard.blockPayload?.message ||
+ 3461:           validationPayload.message ||
+ 3462:           'Validacao bloqueada pelo guard institucional no modo atual.',
+ 3463:         ...responseBase,
+ 3464:       });
+ 3465:     }
+ 3466: 
+ 3467:     return res.json({
+ 3468:       success: true,
+ 3469:       message: validationPayload.should_warn
+ 3470:         ? 'Validacao concluida com alerta(s) no modo atual.'
+ 3471:         : 'Validacao concluida sem bloqueio no modo atual.',
+ 3472:       ...responseBase,
+ 3473:     });
+ 3474:   } catch (error) {
+ 3475:     console.error('Erro ao validar escrita da agenda (dry-run):', error);
+ 3476:     return res.status(500).json({
+ 3477:       success: false,
+ 3478:       message: 'Erro ao validar escrita da agenda',
+ 3479:     });
+ 3480:   }
+ 3481: });
+ 3482: 
+ 3483: // Criacao real de agendamento institucional (escopo minimo, com persistencia).
+ 3484: router.post('/:id/agenda', authorizeAgendaRead, async (req, res) => {
+ 3485:   const { id } = req.params;
+ 3486:   const client = await pool.connect();
+ 3487:   let transactionStarted = false;
+ 3488: 
+ 3489:   try {
+ 3490:     if (AGENDA_CREATE_PERSIST_ENABLED !== true) {
+ 3491:       return res.status(503).json({
+ 3492:         success: false,
+ 3493:         code: 'agenda_create_persist_disabled',
+ 3494:         message: 'Criacao de agendamento institucional desabilitada por rollout controlado.',
+ 3495:       });
+ 3496:     }
+ 3497: 
+ 3498:     const payload = req.body && typeof req.body === 'object' ? req.body : {};
+ 3499:     const accessContext = await resolveAgendaAccessContext(req.user, client);
+ 3500:     const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+ 3501: 
+ 3502:     // Protege contra IDOR: profissional nao pode criar agendamento para agenda arbitraria.
+ 3503:     if (!canAccessAgendaWriteTarget(accessContext, id)) {
+ 3504:       return res.status(403).json({
+ 3505:         success: false,
+ 3506:         message:
+ 3507:           'Acesso negado: voce nao pode criar agendamento para agenda de outro profissional.',
+ 3508:       });
+ 3509:     }
+ 3510: 
+ 3511:     // Compatibilidade legada da escrita permanece explicita e desligavel por ambiente.
+ 3512:     if (agendaReadAccess?.compatibilityMode === true && AGENDA_CREATE_WRITE_ALLOW_LEGACY !== true) {
+ 3513:       return res.status(403).json(
+ 3514:         buildAgendaLegacyWriteScopeError({
+ 3515:           code: 'agenda_create_requires_primary_scope',
+ 3516:           message:
+ 3517:             'Criacao de agendamento requer escopo primario agenda:view nesta fase de rollout.',
+ 3518:           agendaReadAccess,
+ 3519:           accessContext,
+ 3520:         })
+ 3521:       );
+ 3522:     }
+ 3523: 
+ 3524:     const patientId = normalizeEntityId(payload?.patient_id);
+ 3525:     const serviceId = normalizeEntityId(payload?.service_id);
+ 3526:     const appointmentDate = normalizeDateParam(payload?.appointment_date);
+ 3527:     const appointmentTime = normalizeAppointmentTime(payload?.appointment_time);
+ 3528:     const journeyStatusInput = normalizeOptionalText(payload?.journey_status);
+ 3529:     const explicitEventType = normalizeOptionalText(payload?.explicit_event_type);
+ 3530:     const notes = normalizeOptionalText(payload?.notes);
+ 3531:     const statusInput = normalizeOptionalText(payload?.appointment_status || payload?.status);
+ 3532:     const appointmentStatus = normalizeAppointmentStatus(statusInput);
+ 3533:     const createAllowedStatuses = getAllowedCreateAppointmentStatuses();
+ 3534:     const requestedEnforcementMode = normalizeOptionalText(payload?.enforcement_mode);
+ 3535:     const canOverrideEnforcementMode =
+ 3536:       isAdminUser(req.user) ||
+ 3537:       hasPermissionScope(req.user?.permissions, 'agenda:enforcement_control');
+ 3538:     const writeEnforcement = resolveAgendaWriteEnforcementMode({
+ 3539:       requestedMode: canOverrideEnforcementMode ? requestedEnforcementMode : null,
+ 3540:     });
+ 3541: 
+ 3542:     if (!patientId) {
+ 3543:       return res.status(400).json({
+ 3544:         success: false,
+ 3545:         code: 'agenda_create_patient_required',
+ 3546:         message: 'Informe patient_id para criar o agendamento.',
+ 3547:       });
+ 3548:     }
+ 3549: 
+ 3550:     if (!serviceId) {
+ 3551:       return res.status(400).json({
+ 3552:         success: false,
+ 3553:         code: 'agenda_create_service_required',
+ 3554:         message: 'Informe service_id para classificar e persistir o agendamento.',
+ 3555:       });
+ 3556:     }
+ 3557: 
+ 3558:     if (!appointmentDate) {
+ 3559:       return res.status(400).json({
+ 3560:         success: false,
+ 3561:         code: 'agenda_create_date_required',
+ 3562:         message: 'Informe appointment_date valido no formato YYYY-MM-DD.',
+ 3563:       });
+ 3564:     }
+ 3565: 
+ 3566:     if (!appointmentTime) {
+ 3567:       return res.status(400).json({
+ 3568:         success: false,
+ 3569:         code: 'agenda_create_time_required',
+ 3570:         message: 'Informe appointment_time valido no formato HH:MM.',
+ 3571:       });
+ 3572:     }
+ 3573: 
+ 3574:     if (!appointmentStatus) {
+ 3575:       return res.status(400).json({
+ 3576:         success: false,
+ 3577:         code: 'agenda_create_status_invalid',
+ 3578:         message:
+ 3579:           `status invalido para criacao. Use ${buildCreateStatusAllowedLabel()}.`,
+ 3580:       });
+ 3581:     }
+ 3582: 
+ 3583:     if (!createAllowedStatuses.includes(appointmentStatus)) {
+ 3584:       return res.status(400).json({
+ 3585:         success: false,
+ 3586:         code: 'agenda_create_status_not_allowed',
+ 3587:         message:
+ 3588:           `status nao permitido na criacao nesta fase. Use ${buildCreateStatusAllowedLabel()}.`,
+ 3589:         allowed_statuses: createAllowedStatuses,
+ 3590:       });
+ 3591:     }
+ 3592: 
+ 3593:     const professionalContext = await resolveAgendaWriteProfessionalContext({
+ 3594:       professionalId: id,
+ 3595:       client,
+ 3596:     });
+ 3597:     if (professionalContext.found === false) {
+ 3598:       return res.status(404).json({
+ 3599:         success: false,
+ 3600:         code: 'agenda_create_professional_not_found',
+ 3601:         message: 'Profissional informado nao foi encontrado.',
+ 3602:       });
+ 3603:     }
+ 3604: 
+ 3605:     const patientContext = await resolveAgendaWritePatientContext({
+ 3606:       patientId,
+ 3607:       journeyStatusInput,
+ 3608:       client,
+ 3609:     });
+ 3610:     if (patientContext.found === false) {
+ 3611:       return res.status(404).json({
+ 3612:         success: false,
+ 3613:         code: 'agenda_create_patient_not_found',
+ 3614:         message: 'Assistido informado nao foi encontrado.',
+ 3615:       });
+ 3616:     }
+ 3617: 
+ 3618:     const serviceContext = await resolveAgendaWriteServiceContext({
+ 3619:       serviceId,
+ 3620:       serviceNameInput: null,
+ 3621:       client,
+ 3622:     });
+ 3623:     if (serviceContext.found === false) {
+ 3624:       return res.status(404).json({
+ 3625:         success: false,
+ 3626:         code: 'agenda_create_service_not_found',
+ 3627:         message: 'Servico informado nao foi encontrado.',
+ 3628:       });
+ 3629:     }
+ 3630: 
+ 3631:     const guard = prepareAgendaWriteGuard({
+ 3632:       journeyStatus: patientContext.journeyStatus,
+ 3633:       serviceName: serviceContext.serviceName,
+ 3634:       explicitEventType,
+ 3635:       enforcementMode: writeEnforcement.configuredMode,
+ 3636:       context: {
+ 3637:         endpoint: 'POST /profissionais/:id/agenda',
+ 3638:         professional_id: String(id),
+ 3639:         patient_id: patientContext.patientId,
+ 3640:         service_id: serviceContext.serviceId,
+ 3641:         appointment_date: appointmentDate,
+ 3642:         appointment_time: appointmentTime,
+ 3643:       },
+ 3644:     });
+ 3645:     const validationPayload = toAgendaWriteValidationPayload(guard);
+ 3646:     const resolvedContext = {
+ 3647:       professional_id: professionalContext.professionalId || String(id),
+ 3648:       professional_name: professionalContext.professionalName,
+ 3649:       patient_id: patientContext.patientId,
+ 3650:       patient_name: patientContext.patientName,
+ 3651:       journey_status: patientContext.journeyStatus,
+ 3652:       journey_status_source: patientContext.source,
+ 3653:       journey_status_found: patientContext.found,
+ 3654:       service_id: serviceContext.serviceId,
+ 3655:       service_name: serviceContext.serviceName,
+ 3656:       service_name_source: serviceContext.source,
+ 3657:       service_found: serviceContext.found,
+ 3658:       explicit_event_type: explicitEventType,
+ 3659:     };
+ 3660:     const writeValidationSummary = summarizeWriteValidation([
+ 3661:       {
+ 3662:         write_validation_level: guard.level,
+ 3663:         write_validation_should_block: guard.shouldBlock === true,
+ 3664:       },
+ 3665:     ]);
+ 3666:     const scopePayload = buildAgendaWriteScopeWithSummary({
+ 3667:       agendaReadAccess,
+ 3668:       accessContext,
+ 3669:       writeEnforcement,
+ 3670:       validationPayload,
+ 3671:       writeValidationSummary,
+ 3672:     });
+ 3673:     const responseBase = buildAgendaWriteResponseBase({
+ 3674:       dryRun: false,
+ 3675:       persisted: false,
+ 3676:       endpoint: 'agenda_create_v1',
+ 3677:       blocked: guard.shouldBlock === true,
+ 3678:       canProceed: guard.canProceed === true,
+ 3679:       validationPayload,
+ 3680:       resolvedContext,
+ 3681:       overridePayload: buildAgendaWriteOverridePayload({
+ 3682:         requestedEnforcementMode,
+ 3683:         canOverrideEnforcementMode,
+ 3684:         writeEnforcement,
+ 3685:       }),
+ 3686:       scopePayload,
+ 3687:       extra: {
+ 3688:         create_status_policy: {
+ 3689:           default_status: 'scheduled',
+ 3690:           allow_confirmed_on_create: AGENDA_CREATE_ALLOW_CONFIRMED_STATUS === true,
+ 3691:           allowed_statuses: createAllowedStatuses,
+ 3692:         },
+ 3693:       },
+ 3694:     });
+ 3695: 
+ 3696:     if (guard.canProceed !== true) {
+ 3697:       return res.status(guard.statusCode || 409).json({
+ 3698:         success: false,
+ 3699:         code: guard.blockPayload?.code || 'agenda_write_blocked_by_journey',
+ 3700:         message:
+ 3701:           guard.blockPayload?.message ||
+ 3702:           validationPayload.message ||
+ 3703:           'Criacao bloqueada pelo guard institucional no modo atual.',
+ 3704:         ...responseBase,
+ 3705:       });
+ 3706:     }
+ 3707: 
+ 3708:     await client.query('BEGIN');
+ 3709:     transactionStarted = true;
+ 3710: 
+ 3711:     // Mitiga corrida de concorrencia no mesmo slot sem exigir mudanca estrutural de schema.
+ 3712:     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+ 3713:       `agenda_slot:${String(id)}:${appointmentDate}:${appointmentTime}`,
+ 3714:     ]);
+ 3715: 
+ 3716:     const conflictResult = await client.query(
+ 3717:       `
+ 3718:         SELECT
+ 3719:           a.id::text AS appointment_id,
+ 3720:           a.status AS appointment_status
+ 3721:         FROM public.appointments a
+ 3722:         WHERE a.professional_id::text = $1
+ 3723:           AND a.appointment_date = $2::date
+ 3724:           AND a.appointment_time = $3::time
+ 3725:           AND COALESCE(LOWER(a.status), '') NOT IN ('cancelled', 'cancelado', 'canceled')
+ 3726:         LIMIT 1
+ 3727:       `,
+ 3728:       [String(id), appointmentDate, appointmentTime]
+ 3729:     );
+ 3730: 
+ 3731:     if (conflictResult.rows.length > 0) {
+ 3732:       await client.query('ROLLBACK');
+ 3733:       transactionStarted = false;
+ 3734:       return res.status(409).json({
+ 3735:         success: false,
+ 3736:         code: 'agenda_slot_conflict',
+ 3737:         message:
+ 3738:           'Conflito de horario: ja existe agendamento ativo para este profissional na data/hora informada.',
+ 3739:         conflict: {
+ 3740:           appointment_id: conflictResult.rows[0]?.appointment_id || null,
+ 3741:           appointment_status: conflictResult.rows[0]?.appointment_status || null,
+ 3742:         },
+ 3743:         ...responseBase,
+ 3744:       });
+ 3745:     }
+ 3746: 
+ 3747:     const insertResult = await client.query(
+ 3748:       `
+ 3749:         INSERT INTO public.appointments (
+ 3750:           professional_id,
+ 3751:           patient_id,
+ 3752:           service_id,
+ 3753:           appointment_date,
+ 3754:           appointment_time,
+ 3755:           status,
+ 3756:           notes
+ 3757:         )
+ 3758:         VALUES (
+ 3759:           (SELECT p.id FROM public.professionals p WHERE p.id::text = $1 LIMIT 1),
+ 3760:           (SELECT pa.id FROM public.patients pa WHERE pa.id::text = $2 LIMIT 1),
+ 3761:           (SELECT s.id FROM public.services s WHERE s.id::text = $3 LIMIT 1),
+ 3762:           $4::date,
+ 3763:           $5::time,
+ 3764:           $6,
+ 3765:           $7
+ 3766:         )
+ 3767:         RETURNING
+ 3768:           id::text AS id,
+ 3769:           id::text AS appointment_id,
+ 3770:           professional_id::text AS professional_id,
+ 3771:           appointment_date,
+ 3772:           to_char(appointment_time, 'HH24:MI') AS appointment_time,
+ 3773:           status AS appointment_status,
+ 3774:           status,
+ 3775:           notes,
+ 3776:           patient_id::text AS patient_id,
+ 3777:           service_id::text AS service_id
+ 3778:       `,
+ 3779:       [
+ 3780:         professionalContext.professionalId || String(id),
+ 3781:         patientContext.patientId,
+ 3782:         serviceContext.serviceId,
+ 3783:         appointmentDate,
+ 3784:         appointmentTime,
+ 3785:         appointmentStatus,
+ 3786:         notes,
+ 3787:       ]
+ 3788:     );
+ 3789: 
+ 3790:     const createdRow = insertResult.rows[0];
+ 3791:     if (!createdRow) {
+ 3792:       await client.query('ROLLBACK');
+ 3793:       transactionStarted = false;
+ 3794:       return res.status(500).json({
+ 3795:         success: false,
+ 3796:         code: 'agenda_create_insert_failed',
+ 3797:         message: 'Nao foi possivel persistir o agendamento.',
+ 3798:         ...responseBase,
+ 3799:       });
+ 3800:     }
+ 3801: 
+ 3802:     await client.query('COMMIT');
+ 3803:     transactionStarted = false;
+ 3804: 
+ 3805:     const appointment = {
+ 3806:       ...createdRow,
+ 3807:       professional_name: professionalContext.professionalName || null,
+ 3808:       professional_role: professionalContext.professionalRole || null,
+ 3809:       professional_specialty: professionalContext.professionalSpecialty || null,
+ 3810:       patient_name: patientContext.patientName || null,
+ 3811:       status_jornada: patientContext.journeyStatus || null,
+ 3812:       journey_status: patientContext.journeyStatus || null,
+ 3813:       service_name: serviceContext.serviceName || null,
+ 3814:       sector_responsible:
+ 3815:         professionalContext.professionalRole || professionalContext.professionalSpecialty || null,
+ 3816:       responsible_name: professionalContext.professionalName || null,
+ 3817:       event_type_institutional: guard.event_type_institutional || null,
+ 3818:       event_type_institutional_source: guard.event_type_institutional_source || null,
+ 3819:       journey_consistency_status: guard.journey_consistency_status || null,
+ 3820:       journey_consistency_code: guard.journey_consistency_code || null,
+ 3821:       journey_consistency_message: guard.journey_consistency_message || null,
+ 3822:       journey_consistency_expected_statuses:
+ 3823:         Array.isArray(guard.journey_consistency_expected_statuses) &&
+ 3824:         guard.journey_consistency_expected_statuses.length > 0
+ 3825:           ? guard.journey_consistency_expected_statuses
+ 3826:           : null,
+ 3827:       write_validation_ready: true,
+ 3828:       write_validation_mode: validationPayload.mode || writeEnforcement.configuredMode,
+ 3829:       write_validation_effective_mode:
+ 3830:         validationPayload.effective_mode || writeEnforcement.effectiveMode,
+ 3831:       write_validation_rollout_phase:
+ 3832:         validationPayload.rollout_phase || writeEnforcement.rolloutPhase,
+ 3833:       write_validation_hard_block_enabled: validationPayload.hard_block_enabled === true,
+ 3834:       write_validation_legacy_mode_alias: validationPayload.legacy_mode_alias || null,
+ 3835:       write_validation_level: validationPayload.level || null,
+ 3836:       write_validation_action: validationPayload.action || null,
+ 3837:       write_validation_code: validationPayload.reason_code || null,
+ 3838:       write_validation_message: validationPayload.message || null,
+ 3839:       write_validation_supported_levels:
+ 3840:         Array.isArray(validationPayload.supported_levels) &&
+ 3841:         validationPayload.supported_levels.length > 0
+ 3842:           ? validationPayload.supported_levels
+ 3843:           : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+ 3844:       write_validation_would_block: validationPayload.would_block_when_enforced === true,
+ 3845:       write_validation_blocking_active: validationPayload.blocking_active === true,
+ 3846:       write_validation_enforcement_ready: validationPayload.enforcement_ready === true,
+ 3847:       write_validation_should_warn: validationPayload.should_warn === true,
+ 3848:       write_validation_should_block: validationPayload.should_block === true,
+ 3849:     };
+ 3850: 
+ 3851:     return res.status(201).json({
+ 3852:       success: true,
+ 3853:       message: validationPayload.should_warn
+ 3854:         ? 'Agendamento criado com alerta(s) de coerencia de jornada.'
+ 3855:         : 'Agendamento criado com sucesso.',
+ 3856:       ...responseBase,
+ 3857:       persisted: true,
+ 3858:       appointment,
+ 3859:     });
+ 3860:   } catch (error) {
+ 3861:     if (transactionStarted) {
+ 3862:       try {
+ 3863:         await client.query('ROLLBACK');
+ 3864:       } catch (rollbackError) {
+ 3865:         console.error('Erro ao efetuar rollback na criacao da agenda:', rollbackError);
+ 3866:       }
+ 3867:     }
+ 3868:     console.error('Erro ao criar agendamento institucional:', error);
+ 3869:     return res.status(500).json({
+ 3870:       success: false,
+ 3871:       message: 'Erro ao criar agendamento institucional',
+ 3872:     });
+ 3873:   } finally {
+ 3874:     client.release();
+ 3875:   }
+ 3876: });
+ 3877: 
+ 3878: // Atualizacao pontual de status do agendamento (confirmar/cancelar), sem CRUD amplo.
+ 3879: router.post('/:id/agenda/:appointmentId/status', authorizeAgendaRead, async (req, res) => {
+ 3880:   const { id, appointmentId } = req.params;
+ 3881:   const client = await pool.connect();
+ 3882:   let transactionStarted = false;
+ 3883: 
+ 3884:   try {
+ 3885:     if (AGENDA_STATUS_UPDATE_ENABLED !== true) {
+ 3886:       return res.status(503).json({
+ 3887:         success: false,
+ 3888:         code: 'agenda_status_update_disabled',
+ 3889:         message: 'Atualizacao de status da agenda desabilitada por rollout controlado.',
+ 3890:       });
+ 3891:     }
+ 3892: 
+ 3893:     const payload = req.body && typeof req.body === 'object' ? req.body : {};
+ 3894:     const accessContext = await resolveAgendaAccessContext(req.user, client);
+ 3895:     const agendaReadAccess = req.agendaReadAccess || resolveAgendaReadAccess(req.user);
+ 3896:     const normalizedAppointmentId = normalizeEntityId(appointmentId);
+ 3897: 
+ 3898:     // Protege contra IDOR: profissional nao pode alterar status de agenda arbitraria.
+ 3899:     if (!canAccessAgendaWriteTarget(accessContext, id)) {
+ 3900:       return res.status(403).json({
+ 3901:         success: false,
+ 3902:         message:
+ 3903:           'Acesso negado: voce nao pode alterar status de agendamento de outro profissional.',
+ 3904:       });
+ 3905:     }
+ 3906: 
+ 3907:     if (!normalizedAppointmentId) {
+ 3908:       return res.status(400).json({
+ 3909:         success: false,
+ 3910:         code: 'agenda_status_update_appointment_required',
+ 3911:         message: 'Informe appointmentId valido para atualizar status.',
+ 3912:       });
+ 3913:     }
+ 3914: 
+ 3915:     // Compatibilidade legada da escrita permanece explicita e desligavel por ambiente.
+ 3916:     if (agendaReadAccess?.compatibilityMode === true && AGENDA_STATUS_UPDATE_ALLOW_LEGACY !== true) {
+ 3917:       return res.status(403).json(
+ 3918:         buildAgendaLegacyWriteScopeError({
+ 3919:           code: 'agenda_status_update_requires_primary_scope',
+ 3920:           message:
+ 3921:             'Atualizacao de status requer escopo primario agenda:view nesta fase de rollout.',
+ 3922:           agendaReadAccess,
+ 3923:           accessContext,
+ 3924:         })
+ 3925:       );
+ 3926:     }
+ 3927: 
+ 3928:     const actionInput = normalizeOptionalText(payload?.action);
+ 3929:     const action = normalizeAppointmentStatusAction(actionInput);
+ 3930:     const statusInput = normalizeOptionalText(payload?.appointment_status || payload?.status);
+ 3931:     const normalizedStatusInput = normalizeAppointmentStatus(statusInput);
+ 3932:     const statusTargetFromAction = mapAppointmentStatusActionToTarget(action);
+ 3933:     const statusTargetFromStatus = ['confirmed', 'cancelled'].includes(normalizedStatusInput)
+ 3934:       ? normalizedStatusInput
+ 3935:       : null;
+ 3936: 
+ 3937:     if (statusInput && !normalizedStatusInput) {
+ 3938:       return res.status(400).json({
+ 3939:         success: false,
+ 3940:         code: 'agenda_status_update_status_invalid',
+ 3941:         message:
+ 3942:           'status invalido. Use confirmed/confirmado ou cancelled/cancelado para esta operacao.',
+ 3943:       });
+ 3944:     }
+ 3945: 
+ 3946:     if (statusInput && normalizedStatusInput && !statusTargetFromStatus) {
+ 3947:       return res.status(400).json({
+ 3948:         success: false,
+ 3949:         code: 'agenda_status_update_status_not_allowed',
+ 3950:         message:
+ 3951:           'status nao permitido nesta fase. Use apenas confirmed/confirmado ou cancelled/cancelado.',
+ 3952:       });
+ 3953:     }
+ 3954: 
+ 3955:     if (!action && actionInput) {
+ 3956:       return res.status(400).json({
+ 3957:         success: false,
+ 3958:         code: 'agenda_status_update_action_invalid',
+ 3959:         message: 'action invalida. Use confirm/confirmar ou cancel/cancelar.',
+ 3960:       });
+ 3961:     }
+ 3962: 
+ 3963:     const targetStatus = statusTargetFromAction || statusTargetFromStatus;
+ 3964:     if (!targetStatus) {
+ 3965:       return res.status(400).json({
+ 3966:         success: false,
+ 3967:         code: 'agenda_status_update_target_required',
+ 3968:         message:
+ 3969:           'Informe action (confirm/cancel) ou status (confirmed/cancelled) para atualizar o agendamento.',
+ 3970:       });
+ 3971:     }
+ 3972: 
+ 3973:     if (statusTargetFromAction && statusTargetFromStatus && statusTargetFromAction !== statusTargetFromStatus) {
+ 3974:       return res.status(400).json({
+ 3975:         success: false,
+ 3976:         code: 'agenda_status_update_action_status_conflict',
+ 3977:         message: 'action e status informados sao conflitantes para esta operacao.',
+ 3978:       });
+ 3979:     }
+ 3980: 
+ 3981:     const requestedEnforcementMode = normalizeOptionalText(payload?.enforcement_mode);
+ 3982:     const canOverrideEnforcementMode =
+ 3983:       isAdminUser(req.user) ||
+ 3984:       hasPermissionScope(req.user?.permissions, 'agenda:enforcement_control');
+ 3985:     const writeEnforcement = resolveAgendaWriteEnforcementMode({
+ 3986:       requestedMode: canOverrideEnforcementMode ? requestedEnforcementMode : null,
+ 3987:     });
+ 3988: 
+ 3989:     await client.query('BEGIN');
+ 3990:     transactionStarted = true;
+ 3991: 
+ 3992:     const appointmentContext = await resolveAgendaAppointmentContextById({
+ 3993:       appointmentId: normalizedAppointmentId,
+ 3994:       professionalId: id,
+ 3995:       client,
+ 3996:     });
+ 3997:     if (!appointmentContext) {
+ 3998:       await client.query('ROLLBACK');
+ 3999:       transactionStarted = false;
+ 4000:       return res.status(404).json({
+ 4001:         success: false,
+ 4002:         code: 'agenda_status_update_not_found',
+ 4003:         message: 'Agendamento informado nao foi encontrado para este profissional.',
+ 4004:       });
+ 4005:     }
+ 4006: 
+ 4007:     const currentStatus = normalizeAppointmentStatus(
+ 4008:       appointmentContext?.appointment_status || appointmentContext?.status
+ 4009:     );
+ 4010:     if (!currentStatus) {
+ 4011:       await client.query('ROLLBACK');
+ 4012:       transactionStarted = false;
+ 4013:       return res.status(409).json({
+ 4014:         success: false,
+ 4015:         code: 'agenda_status_update_current_status_invalid',
+ 4016:         message: 'Status atual do agendamento nao reconhecido para transicao segura.',
+ 4017:       });
+ 4018:     }
+ 4019: 
+ 4020:     if (currentStatus === 'completed') {
+ 4021:       await client.query('ROLLBACK');
+ 4022:       transactionStarted = false;
+ 4023:       return res.status(409).json({
+ 4024:         success: false,
+ 4025:         code: 'agenda_status_update_transition_not_allowed',
+ 4026:         message: 'Agendamento concluido nao pode ser alterado por esta operacao enxuta.',
+ 4027:       });
+ 4028:     }
+ 4029: 
+ 4030:     if (currentStatus === 'cancelled' && targetStatus !== 'cancelled') {
+ 4031:       await client.query('ROLLBACK');
+ 4032:       transactionStarted = false;
+ 4033:       return res.status(409).json({
+ 4034:         success: false,
+ 4035:         code: 'agenda_status_update_transition_not_allowed',
+ 4036:         message: 'Agendamento cancelado nao pode ser confirmado novamente nesta fase.',
+ 4037:       });
+ 4038:     }
+ 4039: 
+ 4040:     if (targetStatus === 'confirmed' && !['scheduled', 'confirmed'].includes(currentStatus)) {
+ 4041:       await client.query('ROLLBACK');
+ 4042:       transactionStarted = false;
+ 4043:       return res.status(409).json({
+ 4044:         success: false,
+ 4045:         code: 'agenda_status_update_transition_not_allowed',
+ 4046:         message: `Transicao nao permitida de "${currentStatus}" para "${targetStatus}".`,
+ 4047:       });
+ 4048:     }
+ 4049: 
+ 4050:     if (targetStatus === 'cancelled' && !['scheduled', 'confirmed', 'cancelled'].includes(currentStatus)) {
+ 4051:       await client.query('ROLLBACK');
+ 4052:       transactionStarted = false;
+ 4053:       return res.status(409).json({
+ 4054:         success: false,
+ 4055:         code: 'agenda_status_update_transition_not_allowed',
+ 4056:         message: `Transicao nao permitida de "${currentStatus}" para "${targetStatus}".`,
+ 4057:       });
+ 4058:     }
+ 4059: 
+ 4060:     const journeyStatusInput = normalizeOptionalText(payload?.journey_status);
+ 4061:     const explicitEventType = normalizeOptionalText(payload?.explicit_event_type);
+ 4062:     const journeyStatus = normalizeJourneyStatus(
+ 4063:       appointmentContext?.status_jornada || appointmentContext?.journey_status || null
+ 4064:     );
+ 4065: 
+ 4066:     if (!journeyStatus) {
+ 4067:       await client.query('ROLLBACK');
+ 4068:       transactionStarted = false;
+ 4069:       return res.status(409).json({
+ 4070:         success: false,
+ 4071:         code: 'patient_journey_status_missing',
+ 4072:         message:
+ 4073:           'Nao foi possivel atualizar o status do agendamento porque o assistido esta sem status_jornada persistido.',
+ 4074:         patient_id: appointmentContext?.patient_id || null,
+ 4075:       });
+ 4076:     }
+ 4077: 
+ 4078:     if (
+ 4079:       journeyStatusInput &&
+ 4080:       journeyStatus &&
+ 4081:       journeyStatusInput.toLowerCase() !== journeyStatus.toLowerCase()
+ 4082:     ) {
+ 4083:       await client.query('ROLLBACK');
+ 4084:       transactionStarted = false;
+ 4085:       return res.status(409).json({
+ 4086:         success: false,
+ 4087:         code: 'agenda_journey_status_mismatch',
+ 4088:         message:
+ 4089:           'journey_status informado nao confere com o status_jornada persistido do assistido.',
+ 4090:         journey_status: journeyStatus,
+ 4091:         requested_journey_status: journeyStatusInput,
+ 4092:       });
+ 4093:     }
+ 4094: 
+ 4095:     const guard = prepareAgendaWriteGuard({
+ 4096:       journeyStatus,
+ 4097:       serviceName: appointmentContext?.service_name || null,
+ 4098:       explicitEventType,
+ 4099:       enforcementMode: writeEnforcement.configuredMode,
+ 4100:       context: {
+ 4101:         endpoint: 'POST /profissionais/:id/agenda/:appointmentId/status',
+ 4102:         appointment_id: appointmentContext?.appointment_id || null,
+ 4103:         professional_id: String(id),
+ 4104:         patient_id: appointmentContext?.patient_id || null,
+ 4105:         service_id: appointmentContext?.service_id || null,
+ 4106:         current_status: currentStatus,
+ 4107:         target_status: targetStatus,
+ 4108:       },
+ 4109:     });
+ 4110:     const validationPayload = toAgendaWriteValidationPayload(guard);
+ 4111:     const guardWouldBlock = guard.canProceed !== true;
+ 4112:     // Politica operacional desta fase: cancelamento pode seguir com bypass controlado
+ 4113:     // para evitar aprisionar agenda em casos de correção operacional.
+ 4114:     const guardBlockBypassedForCancellation =
+ 4115:       targetStatus === 'cancelled' && guardWouldBlock === true;
+ 4116:     const blockedByGuard = guardWouldBlock && !guardBlockBypassedForCancellation;
+ 4117: 
+ 4118:     const resolvedContext = {
+ 4119:       professional_id: appointmentContext?.professional_id || String(id),
+ 4120:       professional_name: appointmentContext?.professional_name || null,
+ 4121:       appointment_id: appointmentContext?.appointment_id || null,
+ 4122:       patient_id: appointmentContext?.patient_id || null,
+ 4123:       patient_name: appointmentContext?.patient_name || null,
+ 4124:       journey_status: journeyStatus,
+ 4125:       journey_status_source: journeyStatusInput ? 'request_body_journey_status' : 'appointment_context',
+ 4126:       journey_status_found: journeyStatus ? true : null,
+ 4127:       service_id: appointmentContext?.service_id || null,
+ 4128:       service_name: appointmentContext?.service_name || null,
+ 4129:       service_name_source: 'appointment_context',
+ 4130:       service_found: appointmentContext?.service_id ? true : null,
+ 4131:       explicit_event_type: explicitEventType,
+ 4132:       requested_action: action || null,
+ 4133:       current_status: currentStatus,
+ 4134:       target_status: targetStatus,
+ 4135:       guard_block_bypassed_for_cancellation: guardBlockBypassedForCancellation,
+ 4136:     };
+ 4137:     const writeValidationSummary = summarizeWriteValidation([
+ 4138:       {
+ 4139:         write_validation_level: guard.level,
+ 4140:         write_validation_should_block: blockedByGuard === true,
+ 4141:       },
+ 4142:     ]);
+ 4143:     const scopePayload = buildAgendaWriteScopeWithSummary({
+ 4144:       agendaReadAccess,
+ 4145:       accessContext,
+ 4146:       writeEnforcement,
+ 4147:       validationPayload,
+ 4148:       writeValidationSummary,
+ 4149:     });
+ 4150:     const responseBase = buildAgendaWriteResponseBase({
+ 4151:       dryRun: false,
+ 4152:       persisted: false,
+ 4153:       endpoint: 'agenda_update_status_v1',
+ 4154:       blocked: blockedByGuard,
+ 4155:       canProceed: blockedByGuard !== true,
+ 4156:       validationPayload,
+ 4157:       resolvedContext,
+ 4158:       overridePayload: buildAgendaWriteOverridePayload({
+ 4159:         requestedEnforcementMode,
+ 4160:         canOverrideEnforcementMode,
+ 4161:         writeEnforcement,
+ 4162:       }),
+ 4163:       scopePayload,
+ 4164:       extra: {
+ 4165:         status_update_policy: buildStatusUpdatePolicyPayload(),
+ 4166:       },
+ 4167:     });
+ 4168: 
+ 4169:     if (blockedByGuard) {
+ 4170:       await client.query('ROLLBACK');
+ 4171:       transactionStarted = false;
+ 4172:       return res.status(guard.statusCode || 409).json({
+ 4173:         success: false,
+ 4174:         code: guard.blockPayload?.code || 'agenda_write_blocked_by_journey',
+ 4175:         message:
+ 4176:           guard.blockPayload?.message ||
+ 4177:           validationPayload.message ||
+ 4178:           'Atualizacao de status bloqueada pelo guard institucional no modo atual.',
+ 4179:         ...responseBase,
+ 4180:       });
+ 4181:     }
+ 4182: 
+ 4183:     const finalStatus = targetStatus;
+ 4184:     if (currentStatus !== targetStatus) {
+ 4185:       const statusCandidates = resolveStatusWriteCandidates(targetStatus);
+ 4186:       let updated = false;
+ 4187:       let statusWriteError = null;
+ 4188: 
+ 4189:       for (let index = 0; index < statusCandidates.length; index += 1) {
+ 4190:         const candidate = statusCandidates[index];
+ 4191:         try {
+ 4192:           const updateResult = await client.query(
+ 4193:             `
+ 4194:               UPDATE public.appointments
+ 4195:               SET status = $1
+ 4196:               WHERE id::text = $2
+ 4197:                 AND professional_id::text = $3
+ 4198:               RETURNING id::text AS appointment_id
+ 4199:             `,
+ 4200:             [candidate, appointmentContext.appointment_id, String(id)]
+ 4201:           );
+ 4202: 
+ 4203:           if (updateResult.rows.length === 0) {
+ 4204:             await client.query('ROLLBACK');
+ 4205:             transactionStarted = false;
+ 4206:             return res.status(409).json({
+ 4207:               success: false,
+ 4208:               code: 'agenda_status_update_conflict',
+ 4209:               message: 'Nao foi possivel atualizar status devido a conflito de concorrencia.',
+ 4210:               ...responseBase,
+ 4211:             });
+ 4212:           }
+ 4213: 
+ 4214:           updated = true;
+ 4215:           break;
+ 4216:         } catch (error) {
+ 4217:           statusWriteError = error;
+ 4218:           const isLastCandidate = index === statusCandidates.length - 1;
+ 4219:           if (!isStatusWriteCompatibilityError(error) || isLastCandidate) {
+ 4220:             throw error;
+ 4221:           }
+ 4222:         }
+ 4223:       }
+ 4224: 
+ 4225:       if (!updated && statusWriteError) {
+ 4226:         throw statusWriteError;
+ 4227:       }
+ 4228:     }
+ 4229: 
+ 4230:     await client.query('COMMIT');
+ 4231:     transactionStarted = false;
+ 4232: 
+ 4233:     const appointment = {
+ 4234:       ...appointmentContext,
+ 4235:       appointment_status: finalStatus,
+ 4236:       status: finalStatus,
+ 4237:       event_type_institutional: guard.event_type_institutional || null,
+ 4238:       event_type_institutional_source: guard.event_type_institutional_source || null,
+ 4239:       journey_consistency_status: guard.journey_consistency_status || null,
+ 4240:       journey_consistency_code: guard.journey_consistency_code || null,
+ 4241:       journey_consistency_message: guard.journey_consistency_message || null,
+ 4242:       journey_consistency_expected_statuses:
+ 4243:         Array.isArray(guard.journey_consistency_expected_statuses) &&
+ 4244:         guard.journey_consistency_expected_statuses.length > 0
+ 4245:           ? guard.journey_consistency_expected_statuses
+ 4246:           : null,
+ 4247:       write_validation_ready: true,
+ 4248:       write_validation_mode: validationPayload.mode || writeEnforcement.configuredMode,
+ 4249:       write_validation_effective_mode:
+ 4250:         validationPayload.effective_mode || writeEnforcement.effectiveMode,
+ 4251:       write_validation_rollout_phase:
+ 4252:         validationPayload.rollout_phase || writeEnforcement.rolloutPhase,
+ 4253:       write_validation_hard_block_enabled: validationPayload.hard_block_enabled === true,
+ 4254:       write_validation_legacy_mode_alias: validationPayload.legacy_mode_alias || null,
+ 4255:       write_validation_level: validationPayload.level || null,
+ 4256:       write_validation_action: validationPayload.action || null,
+ 4257:       write_validation_code: validationPayload.reason_code || null,
+ 4258:       write_validation_message: validationPayload.message || null,
+ 4259:       write_validation_supported_levels:
+ 4260:         Array.isArray(validationPayload.supported_levels) &&
+ 4261:         validationPayload.supported_levels.length > 0
+ 4262:           ? validationPayload.supported_levels
+ 4263:           : AGENDA_WRITE_VALIDATION_SUPPORTED_LEVELS,
+ 4264:       write_validation_would_block: validationPayload.would_block_when_enforced === true,
+ 4265:       write_validation_blocking_active: validationPayload.blocking_active === true,
+ 4266:       write_validation_enforcement_ready: validationPayload.enforcement_ready === true,
+ 4267:       write_validation_should_warn: validationPayload.should_warn === true,
+ 4268:       write_validation_should_block: validationPayload.should_block === true,
+ 4269:     };
+ 4270: 
+ 4271:     return res.json({
+ 4272:       success: true,
+ 4273:       message:
+ 4274:         currentStatus === targetStatus
+ 4275:           ? 'Status ja estava aplicado; nenhuma alteracao de persistencia foi necessaria.'
+ 4276:           : guardBlockBypassedForCancellation
+ 4277:             ? 'Status atualizado com sucesso. Bloqueio de guard foi ignorado por tratar-se de cancelamento controlado.'
+ 4278:             : validationPayload.should_warn
+ 4279:               ? 'Status atualizado com alerta(s) de coerencia de jornada.'
+ 4280:               : 'Status atualizado com sucesso.',
+ 4281:       ...responseBase,
+ 4282:       persisted: currentStatus !== targetStatus,
+ 4283:       appointment,
+ 4284:     });
+ 4285:   } catch (error) {
+ 4286:     if (transactionStarted) {
+ 4287:       try {
+ 4288:         await client.query('ROLLBACK');
+ 4289:       } catch (rollbackError) {
+ 4290:         console.error('Erro ao efetuar rollback na atualizacao de status da agenda:', rollbackError);
+ 4291:       }
+ 4292:     }
+ 4293:     console.error('Erro ao atualizar status do agendamento institucional:', error);
+ 4294:     return res.status(500).json({
+ 4295:       success: false,
+ 4296:       message: 'Erro ao atualizar status do agendamento institucional',
+ 4297:       error_code: error?.code || null,
+ 4298:     });
+ 4299:   } finally {
+ 4300:     client.release();
+ 4301:   }
+ 4302: });
+ 4303: 
+ 4304: module.exports = router;
+ 4305: 
+ 4306: 
+ 4307: 
+ 4308: 

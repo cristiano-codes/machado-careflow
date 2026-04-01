@@ -105,7 +105,7 @@ export function EnrollmentsLabPage() {
     setOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!draft.classId || !draft.studentId) {
       toast({ title: "Matricula", description: "Turma e aluno sao obrigatorios.", variant: "destructive" });
       return;
@@ -129,9 +129,17 @@ export function EnrollmentsLabPage() {
       });
       return;
     }
-    upsertEnrollment({ id: editing?.id || makeLabId("enrollment"), ...draft });
-    setOpen(false);
-    toast({ title: "Matricula", description: editing ? "Matricula atualizada." : "Matricula criada no laboratorio." });
+    try {
+      await upsertEnrollment({ id: editing?.id || makeLabId("enrollment"), ...draft });
+      setOpen(false);
+      toast({ title: "Matricula", description: editing ? "Matricula atualizada." : "Matricula criada com sucesso." });
+    } catch (error) {
+      toast({
+        title: "Matricula",
+        description: error instanceof Error ? error.message : "Nao foi possivel salvar a matricula.",
+        variant: "destructive",
+      });
+    }
   }
 
   return (

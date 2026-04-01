@@ -41,6 +41,19 @@ export function buildAgendaReadRequiredScopes(includeLegacy = AGENDA_LEGACY_COMP
     : [...AGENDA_READ_PRIMARY_SCOPES];
 }
 export const AGENDA_READ_REQUIRED_SCOPES: string[] = buildAgendaReadRequiredScopes();
+export const UNIT_OPERATIONS_PRIMARY_SCOPES: string[] = [
+  "salas:view",
+  "atividades_unidade:view",
+  "turmas:view",
+  "grade:view",
+  "matriculas:view",
+];
+// Compatibilidade de transicao: manter leitura para perfis com escopo legado da agenda
+// enquanto os perfis recebem permissoes granulares do novo dominio.
+export const UNIT_OPERATIONS_REQUIRED_SCOPES: string[] = [
+  ...UNIT_OPERATIONS_PRIMARY_SCOPES,
+  ...AGENDA_READ_REQUIRED_SCOPES,
+];
 
 export const STANDARD_PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "access"] as const;
 export const ADMIN_MACRO_PERMISSION_NAMES = new Set([
@@ -161,6 +174,13 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
     requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES,
   },
   {
+    id: "operacao_unidade",
+    title: "Operacao de Turmas",
+    url: "/operacao-unidade/turmas",
+    icon: BookOpen,
+    requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES,
+  },
+  {
     id: "entrevistas",
     title: "Entrevistas",
     url: "/entrevistas",
@@ -255,6 +275,13 @@ export const ROUTE_PERMISSION_MAP: RoutePermissionConfig[] = [
   { path: "/grade-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/alocacoes-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/matriculas-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/agenda", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/salas", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/atividades", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/turmas", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/grade", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/matriculas", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES },
+  { path: "/operacao-unidade", requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES, match: "prefix" },
   { path: "/fila-de-espera", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },
   { path: "/pre-agendamento", requiredAnyScopes: ["fila_espera:view", "pre_agendamento:view"] },
   { path: "/triagem-social", requiredAnyScopes: ["triagem_social:view"] },

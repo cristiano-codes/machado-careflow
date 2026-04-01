@@ -102,7 +102,7 @@ export function ActivitiesLabPage() {
     setOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!draft.nome.trim()) {
       toast({ title: "Atividade", description: "Nome da atividade e obrigatorio.", variant: "destructive" });
       return;
@@ -111,9 +111,17 @@ export function ActivitiesLabPage() {
       toast({ title: "Atividade", description: "Duracao padrao deve ser maior que zero.", variant: "destructive" });
       return;
     }
-    upsertActivity({ id: editing?.id || makeLabId("activity"), ...draft });
-    setOpen(false);
-    toast({ title: "Atividade", description: editing ? "Atividade atualizada." : "Atividade criada no laboratorio." });
+    try {
+      await upsertActivity({ id: editing?.id || makeLabId("activity"), ...draft });
+      setOpen(false);
+      toast({ title: "Atividade", description: editing ? "Atividade atualizada." : "Atividade criada com sucesso." });
+    } catch (error) {
+      toast({
+        title: "Atividade",
+        description: error instanceof Error ? error.message : "Nao foi possivel salvar a atividade.",
+        variant: "destructive",
+      });
+    }
   }
 
   return (
