@@ -48,12 +48,7 @@ export const UNIT_OPERATIONS_PRIMARY_SCOPES: string[] = [
   "grade:view",
   "matriculas:view",
 ];
-// Compatibilidade de transicao: manter leitura para perfis com escopo legado da agenda
-// enquanto os perfis recebem permissoes granulares do novo dominio.
-export const UNIT_OPERATIONS_REQUIRED_SCOPES: string[] = [
-  ...UNIT_OPERATIONS_PRIMARY_SCOPES,
-  ...AGENDA_READ_REQUIRED_SCOPES,
-];
+export const UNIT_OPERATIONS_REQUIRED_SCOPES: string[] = [...UNIT_OPERATIONS_PRIMARY_SCOPES];
 
 export const STANDARD_PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "access"] as const;
 export const ADMIN_MACRO_PERMISSION_NAMES = new Set([

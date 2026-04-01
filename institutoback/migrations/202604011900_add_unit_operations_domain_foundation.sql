@@ -520,7 +520,7 @@ SELECT
   u.id,
   m.id,
   p.id,
-  NULL
+  u.id
 FROM public.users u
 JOIN public.modules m
   ON LOWER(m.name) IN ('salas', 'atividades_unidade', 'turmas', 'grade', 'matriculas')

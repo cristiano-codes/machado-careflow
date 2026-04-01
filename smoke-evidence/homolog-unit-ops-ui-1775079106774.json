@@ -1,0 +1,55 @@
+{
+  "generatedAt": "2026-04-01T21:31:46.773Z",
+  "checks": [
+    {
+      "user": "admin",
+      "path": "/operacao-unidade/turmas",
+      "finalUrl": "/operacao-unidade/turmas",
+      "apiDatasetStatuses": [
+        200
+      ],
+      "hasAcessoRestrito": false,
+      "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sideb"
+    },
+    {
+      "user": "admin",
+      "path": "/agenda",
+      "finalUrl": "/agenda",
+      "apiDatasetStatuses": [],
+      "hasAcessoRestrito": false,
+      "bodySample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios Gerenciar Permissoes Profissionais Configuracoes Toggle Sideb"
+    },
+    {
+      "user": "denied",
+      "path": "/operacao-unidade/turmas",
+      "finalUrl": "/",
+      "apiDatasetStatuses": [],
+      "hasAcessoRestrito": true,
+      "bodySample": "Toggle Sidebar Instituto Lauir Machado HO Acesso Restrito Voce nao tem permissao para acessar esta funcionalidade. Entre em contato com o administrador para solicitar acesso."
+    },
+    {
+      "user": "denied",
+      "path": "/agenda",
+      "finalUrl": "/",
+      "apiDatasetStatuses": [],
+      "hasAcessoRestrito": true,
+      "bodySample": "Toggle Sidebar Instituto Lauir Machado HO Acesso Restrito Voce nao tem permissao para acessar esta funcionalidade. Entre em contato com o administrador para solicitar acesso."
+    },
+    {
+      "user": "legacy_agenda_view",
+      "path": "/operacao-unidade/turmas",
+      "finalUrl": "/",
+      "apiDatasetStatuses": [],
+      "hasAcessoRestrito": true,
+      "bodySample": "SERVICO SOCIAL Agenda Toggle Sidebar Instituto Lauir Machado HO Acesso Restrito Voce nao tem permissao para acessar esta funcionalidade. Entre em contato com o administrador para solicitar acesso."
+    },
+    {
+      "user": "legacy_agenda_view",
+      "path": "/agenda",
+      "finalUrl": "/agenda",
+      "apiDatasetStatuses": [],
+      "hasAcessoRestrito": false,
+      "bodySample": "SERVICO SOCIAL Agenda Toggle Sidebar Instituto Lauir Machado HO Agenda Agenda operacional visual integrada com Triagem Social, Entrevistas e Avaliacoes. Anterior Hoje Proximo 30/03/2026 ate 05/04/2026 Visualizacao Modo padrao semanal com"
+    }
+  ]
+}

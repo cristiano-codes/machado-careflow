@@ -26,8 +26,6 @@ const authorizeUnitOpsView = authorizeAny([
   ['turmas', 'view'],
   ['grade', 'view'],
   ['matriculas', 'view'],
-  ['agenda', 'view'],
-  ['profissionais', 'view'],
 ]);
 
 const authorizeRoomsWrite = authorizeAny([

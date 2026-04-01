@@ -1,0 +1,148 @@
+{
+  "generatedAt": "2026-04-01T21:34:05.933Z",
+  "checks": [
+    {
+      "route": "/operacao-unidade/agenda",
+      "finalUrl": "/operacao-unidade/agenda",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/operacao-unidade/salas",
+      "finalUrl": "/operacao-unidade/salas",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/operacao-unidade/atividades",
+      "finalUrl": "/operacao-unidade/atividades",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/operacao-unidade/turmas",
+      "finalUrl": "/operacao-unidade/turmas",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/operacao-unidade/grade",
+      "finalUrl": "/operacao-unidade/grade",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/operacao-unidade/matriculas",
+      "finalUrl": "/operacao-unidade/matriculas",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/agenda",
+      "finalUrl": "/agenda",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/agenda-teste",
+      "finalUrl": "/agenda-teste",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/salas-teste",
+      "finalUrl": "/salas-teste",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/atividades-teste",
+      "finalUrl": "/atividades-teste",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/turmas-teste",
+      "finalUrl": "/turmas-teste",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/grade-teste",
+      "finalUrl": "/grade-teste",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    },
+    {
+      "route": "/matriculas-teste",
+      "finalUrl": "/matriculas-teste",
+      "redirected": false,
+      "hasAcessoRestrito": false,
+      "sample": "ENTRADA E RECEPCAO Dashboard Fila de Espera SERVICO SOCIAL Triagem Social Pre-Cadastro Agenda Operacao de Turmas Entrevistas Avaliacoes Analise de Vagas GESTAO Gerenciar Usuarios G"
+    }
+  ],
+  "datasetStatuses": [
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 200
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    },
+    {
+      "url": "http://localhost:3000/api/unit-operations/dataset",
+      "status": 304
+    }
+  ],
+  "pageErrors": [],
+  "requestFailures": []
+}
