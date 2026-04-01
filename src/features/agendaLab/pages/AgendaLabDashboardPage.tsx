@@ -354,6 +354,8 @@ export function AgendaLabDashboardPage() {
         mode={calendarMode}
         onModeChange={setCalendarMode}
         periodLabel={periodLabel}
+        selectedDate={referenceDate}
+        onSelectDate={(date) => setReferenceDate(startOfDay(date))}
         onPrevious={handlePreviousPeriod}
         onToday={handleToday}
         onNext={handleNextPeriod}

@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PeriodDatePicker } from "@/features/agendaLab/components/PeriodDatePicker";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export type CalendarViewMode = "day" | "week" | "month";
@@ -8,6 +9,8 @@ type CalendarToolbarProps = {
   mode: CalendarViewMode;
   onModeChange: (mode: CalendarViewMode) => void;
   periodLabel: string;
+  selectedDate: Date;
+  onSelectDate: (date: Date) => void;
   onPrevious: () => void;
   onToday: () => void;
   onNext: () => void;
@@ -20,6 +23,8 @@ export function CalendarToolbar({
   mode,
   onModeChange,
   periodLabel,
+  selectedDate,
+  onSelectDate,
   onPrevious,
   onToday,
   onNext,
@@ -61,6 +66,7 @@ export function CalendarToolbar({
             <Button type="button" size="sm" variant="outline" onClick={onNext} aria-label="Proximo periodo">
               <ChevronRight className="h-4 w-4" />
             </Button>
+            <PeriodDatePicker mode={mode} selectedDate={selectedDate} onSelectDate={onSelectDate} />
           </div>
         </div>
 
