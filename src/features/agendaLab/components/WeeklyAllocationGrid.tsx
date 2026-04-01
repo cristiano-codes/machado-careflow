@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import type { Weekday } from "@/features/agendaLab/types";
 import { LAB_WEEKDAYS, getAllocationStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
 import { formatMinutesToTime, parseTimeToMinutes } from "@/features/agendaLab/utils/time";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,8 @@ export type WeeklyGridItem = {
 type WeeklyAllocationGridProps = {
   items: WeeklyGridItem[];
   onItemClick?: (item: WeeklyGridItem) => void;
-  weekdays?: Array<(typeof LAB_WEEKDAYS)[number]["key"]>;
+  weekdays?: Weekday[];
+  headerOverrides?: Partial<Record<Weekday, { short?: string; label?: string; subtitle?: string }>>;
 };
 
 const DAY_START_MINUTES = 7 * 60;
@@ -46,9 +48,11 @@ export function WeeklyAllocationGrid({
   items,
   onItemClick,
   weekdays = ["seg", "ter", "qua", "qui", "sex"],
+  headerOverrides,
 }: WeeklyAllocationGridProps) {
   const daySet = new Set(weekdays);
   const weekConfig = LAB_WEEKDAYS.filter((day) => daySet.has(day.key));
+  const minWidth = 88 + weekConfig.length * 190;
 
   const map = new Map<(typeof LAB_WEEKDAYS)[number]["key"], WeeklyGridItem[]>();
   for (const day of weekConfig) {
@@ -68,7 +72,10 @@ export function WeeklyAllocationGrid({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[980px] overflow-hidden rounded-xl border border-slate-300 bg-slate-100 shadow-sm">
+      <div
+        className="overflow-hidden rounded-xl border border-slate-300 bg-slate-100 shadow-sm"
+        style={{ minWidth: Math.max(minWidth, 420) }}
+      >
         <div
           className="grid border-b border-slate-300 bg-slate-200"
           style={{ gridTemplateColumns: `88px repeat(${weekConfig.length}, minmax(0, 1fr))` }}
@@ -81,8 +88,15 @@ export function WeeklyAllocationGrid({
               key={day.key}
               className="border-r border-slate-300 px-3 py-3 text-left last:border-r-0"
             >
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{day.short}</p>
-              <p className="text-sm font-semibold text-slate-800">{day.label}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {headerOverrides?.[day.key]?.short || day.short}
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                {headerOverrides?.[day.key]?.label || day.label}
+              </p>
+              {headerOverrides?.[day.key]?.subtitle ? (
+                <p className="text-[11px] text-slate-500">{headerOverrides[day.key]?.subtitle}</p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -172,4 +186,3 @@ export function WeeklyAllocationGrid({
     </div>
   );
 }
-
