@@ -219,7 +219,7 @@ export function RoomsLabPage() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Editar sala" : "Nova sala"}</DialogTitle>
-            <DialogDescription>Estrutura completa de cadastro de sala fisica para o laboratorio.</DialogDescription>
+            <DialogDescription>Estrutura completa de cadastro de sala fisica da unidade.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1"><Label>Unidade</Label><Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent></Select></div>

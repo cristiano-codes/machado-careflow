@@ -41,6 +41,7 @@ export function buildAgendaReadRequiredScopes(includeLegacy = AGENDA_LEGACY_COMP
     : [...AGENDA_READ_PRIMARY_SCOPES];
 }
 export const AGENDA_READ_REQUIRED_SCOPES: string[] = buildAgendaReadRequiredScopes();
+export const LEGACY_AGENDA_ROUTE_REQUIRED_SCOPES: string[] = [...AGENDA_READ_REQUIRED_SCOPES];
 export const UNIT_OPERATIONS_PRIMARY_SCOPES: string[] = [
   "salas:view",
   "atividades_unidade:view",
@@ -50,6 +51,9 @@ export const UNIT_OPERATIONS_PRIMARY_SCOPES: string[] = [
 ];
 export const UNIT_OPERATIONS_REQUIRED_SCOPES: string[] = [...UNIT_OPERATIONS_PRIMARY_SCOPES];
 export const UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES: string[] = ["grade:view"];
+export const OFFICIAL_AGENDA_ROUTE_REQUIRED_SCOPES: string[] = [
+  ...UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
+];
 export const UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES: string[] = ["salas:view"];
 export const UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES: string[] = ["atividades_unidade:view"];
 export const UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES: string[] = ["turmas:view"];
@@ -184,7 +188,7 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
     title: "Agenda",
     url: "/agenda",
     icon: Calendar,
-    requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES,
+    requiredAnyScopes: OFFICIAL_AGENDA_ROUTE_REQUIRED_SCOPES,
   },
   {
     id: "operacao_unidade",
@@ -280,7 +284,8 @@ export const ALLOW_MANAGEMENT_WITHOUT_MAIN_MODULE = false;
 
 export const ROUTE_PERMISSION_MAP: RoutePermissionConfig[] = [
   { path: "/dashboard", requiredAnyScopes: ["dashboard:view"] },
-  { path: "/agenda", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
+  { path: "/agenda", requiredAnyScopes: OFFICIAL_AGENDA_ROUTE_REQUIRED_SCOPES },
+  { path: "/agenda-legado", requiredAnyScopes: LEGACY_AGENDA_ROUTE_REQUIRED_SCOPES },
   { path: "/agenda-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/salas-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },
   { path: "/atividades-teste", requiredAnyScopes: AGENDA_READ_REQUIRED_SCOPES },

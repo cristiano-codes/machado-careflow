@@ -212,7 +212,7 @@ export function ActivitiesLabPage() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Editar atividade" : "Nova atividade"}</DialogTitle>
-            <DialogDescription>Formulario laboratorio para validar modelagem de servicos/atividades.</DialogDescription>
+            <DialogDescription>Formulario de cadastro para atividades e servicos da unidade.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1"><Label>Nome da atividade</Label><Input value={draft.nome} onChange={(e) => setDraft((prev) => ({ ...prev, nome: e.target.value }))} /></div>

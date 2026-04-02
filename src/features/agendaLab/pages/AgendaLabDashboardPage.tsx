@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addDays, addMonths, addWeeks, endOfMonth, format, startOfDay, startOfMonth, subDays, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Plus, Search, Users } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -93,6 +94,8 @@ function getPeriodLabel(mode: CalendarViewMode, date: Date) {
 }
 
 export function AgendaLabDashboardPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const {
     units,
@@ -120,6 +123,10 @@ export function AgendaLabDashboardPage() {
   const [statuses, setStatuses] = useState<ClassStatus[]>([]);
   const [search, setSearch] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<AgendaCalendarEvent | null>(null);
+  const isOfficialContext =
+    location.pathname === "/agenda" ||
+    location.pathname === "/agenda/" ||
+    location.pathname.startsWith("/operacao-unidade");
 
   useEffect(() => {
     if (calendarMode !== "month" && weekdayFilter !== "all") {
@@ -337,14 +344,28 @@ export function AgendaLabDashboardPage() {
   return (
     <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
-        title="Agenda Teste"
-        subtitle="Ambiente de homologacao para validar grade operacional, turmas, salas e alocacoes."
+        title={isOfficialContext ? "Agenda de Turmas" : "Agenda Teste"}
+        subtitle={
+          isOfficialContext
+            ? "Agenda oficial da operacao de turmas, salas, profissionais e alocacoes da unidade."
+            : "Ambiente de homologacao para validar grade operacional, turmas, salas e alocacoes."
+        }
         actions={
           <Button
             size="sm"
             disabled={!isWriteEnabled}
             className="h-9"
-            onClick={() => toast({ title: "Laboratorio", description: "Use Turmas Teste para cadastrar uma nova turma." })}
+            onClick={() => {
+              if (isOfficialContext) {
+                navigate("/operacao-unidade/turmas");
+                return;
+              }
+
+              toast({
+                title: "Laboratorio",
+                description: "Use Turmas Teste para cadastrar uma nova turma.",
+              });
+            }}
           >
             <Plus className="mr-2 h-4 w-4" />
             Nova turma
@@ -375,7 +396,11 @@ export function AgendaLabDashboardPage() {
       <CollapsibleFilters
         open={filtersOpen}
         filters={activeFilterLabels}
-        description="Filtros de visualizacao para leitura operacional da agenda em homologacao."
+        description={
+          isOfficialContext
+            ? "Filtros de visualizacao para leitura operacional da agenda oficial."
+            : "Filtros de visualizacao para leitura operacional da agenda em homologacao."
+        }
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1">
@@ -499,7 +524,11 @@ export function AgendaLabDashboardPage() {
             Calendario operacional com leitura por dia, semana e mes.
           </div>
           <div>{classRows.length} turmas no recorte atual com lotacao por bloco visivel na agenda.</div>
-          <div>Fluxo isolado da agenda oficial, sem impacto em producao.</div>
+          <div>
+            {isOfficialContext
+              ? "Operacao oficial com dados sincronizados pela API da unidade."
+              : "Fluxo isolado da agenda oficial, sem impacto em producao."}
+          </div>
         </CardContent>
       </Card>
 
@@ -546,7 +575,7 @@ export function AgendaLabDashboardPage() {
 
               {selectedEvent.hasRoomConflict || selectedEvent.hasProfessionalConflict ? (
                 <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                  Conflito detectado para sala e/ou profissional na Grade Teste.
+                  Conflito detectado para sala e/ou profissional na grade.
                 </p>
               ) : (
                 <p className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
@@ -554,8 +583,18 @@ export function AgendaLabDashboardPage() {
                 </p>
               )}
 
-              <Button onClick={() => toast({ title: "Laboratorio", description: "Acao simulada." })}>
-                Simular presenca
+              <Button
+                variant={isOfficialContext ? "outline" : "default"}
+                onClick={() =>
+                  toast({
+                    title: isOfficialContext ? "Presenca" : "Laboratorio",
+                    description: isOfficialContext
+                      ? "Registro de presenca sera disponibilizado em breve."
+                      : "Acao simulada.",
+                  })
+                }
+              >
+                {isOfficialContext ? "Presenca (em breve)" : "Simular presenca"}
               </Button>
             </div>
           ) : null}

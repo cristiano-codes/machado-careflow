@@ -24,7 +24,7 @@ const LAB_NAV_ITEMS = [
 ];
 const OFFICIAL_NAV_ITEMS = [
   {
-    path: "/operacao-unidade/agenda",
+    path: "/agenda",
     label: "Agenda de Turmas",
     requiredAnyScopes: UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
   },
@@ -65,20 +65,27 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
   const navigate = useNavigate();
   const location = useLocation();
   const { hasAnyScope } = usePermissions();
-  const isOfficialContext = location.pathname.startsWith("/operacao-unidade");
+  const isOfficialAgendaRoute = location.pathname === "/agenda" || location.pathname === "/agenda/";
+  const isOfficialContext = isOfficialAgendaRoute || location.pathname.startsWith("/operacao-unidade");
   const navItems = (isOfficialContext ? OFFICIAL_NAV_ITEMS : LAB_NAV_ITEMS).filter(
     (item) => item.requiredAnyScopes.length === 0 || hasAnyScope(item.requiredAnyScopes)
   );
   const titleLabel = isOfficialContext ? title.replace(/\s*Teste\b/gi, "").trim() : title;
   const subtitleLabel = isOfficialContext
     ? subtitle
-        .replace(/ambiente de homologacao/gi, "Operacao da unidade")
+        .replace(/ambiente de homologacao/gi, "Operacao oficial da unidade")
         .replace(/laboratorio/gi, "operacao")
     : subtitle;
   const badgeLabel = isOfficialContext
-    ? "Operacao de Turmas da Unidade"
+    ? "Operacao Oficial da Unidade"
     : "Laboratorio da Agenda da Unidade";
   const BackBadgeIcon = isOfficialContext ? Building2 : FlaskConical;
+  const returnActionLabel = isOfficialAgendaRoute
+    ? "Abrir Operacao da Unidade"
+    : isOfficialContext
+      ? "Abrir Agenda oficial"
+      : "Voltar para Agenda oficial";
+  const returnActionPath = isOfficialAgendaRoute ? "/operacao-unidade" : "/agenda";
 
   return (
     <Card className="border-slate-200 bg-gradient-to-r from-slate-50 to-white shadow-sm">
@@ -91,16 +98,11 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
             </p>
             <h1 className="text-xl font-bold leading-tight tracking-tight text-slate-900 md:text-2xl">{titleLabel}</h1>
             <p className="max-w-3xl text-sm leading-relaxed text-slate-600">{subtitleLabel}</p>
-            {isOfficialContext ? (
-              <p className="text-xs text-slate-500">
-                Uso supervisionado em paralelo. A agenda institucional segue em <strong>/agenda</strong>.
-              </p>
-            ) : null}
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="outline" size="sm" className="h-9" onClick={() => navigate("/agenda")}>
+            <Button variant="outline" size="sm" className="h-9" onClick={() => navigate(returnActionPath)}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              {isOfficialContext ? "Agenda institucional" : "Voltar para Agenda oficial"}
+              {returnActionLabel}
             </Button>
             {actions ? (
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end [&>button]:h-9">

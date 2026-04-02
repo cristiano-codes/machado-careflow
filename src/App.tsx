@@ -11,6 +11,8 @@ import { ProtectedRoute as PermissionProtectedRoute } from "@/components/common/
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   AGENDA_READ_REQUIRED_SCOPES,
+  LEGACY_AGENDA_ROUTE_REQUIRED_SCOPES,
+  OFFICIAL_AGENDA_ROUTE_REQUIRED_SCOPES,
   UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES,
   UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
   UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
@@ -25,7 +27,8 @@ import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import FilaDeEspera from "./pages/FilaDeEspera";
 import ConsultarSolicitacao from "./pages/ConsultarSolicitacao";
-import Agenda from "./pages/Agenda";
+import AgendaLegado from "./pages/Agenda";
+import AgendaOficial from "./pages/AgendaOficial";
 import AgendaTeste from "./pages/AgendaTeste";
 import SalasTeste from "./pages/SalasTeste";
 import AtividadesTeste from "./pages/AtividadesTeste";
@@ -91,6 +94,20 @@ const UnitOperationsLandingRoute = () => {
   return <Navigate to={nextPath} replace />;
 };
 
+const UnitOperationsAgendaAliasRoute = () => {
+  const location = useLocation();
+  return (
+    <Navigate
+      to={{
+        pathname: "/agenda",
+        search: location.search,
+        hash: location.hash,
+      }}
+      replace
+    />
+  );
+};
+
 const AppContent = () => {
   return (
     <BrowserRouter>
@@ -135,9 +152,21 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <PermissionProtectedRoute
-                requiredAnyScopes={AGENDA_READ_REQUIRED_SCOPES}
+                requiredAnyScopes={OFFICIAL_AGENDA_ROUTE_REQUIRED_SCOPES}
               >
-                <Agenda />
+                <AgendaOficial />
+              </PermissionProtectedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agenda-legado"
+          element={
+            <ProtectedRoute>
+              <PermissionProtectedRoute
+                requiredAnyScopes={LEGACY_AGENDA_ROUTE_REQUIRED_SCOPES}
+              >
+                <AgendaLegado />
               </PermissionProtectedRoute>
             </ProtectedRoute>
           }
@@ -245,7 +274,7 @@ const AppContent = () => {
               <PermissionProtectedRoute
                 requiredAnyScopes={UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES}
               >
-                <AgendaTeste />
+                <UnitOperationsAgendaAliasRoute />
               </PermissionProtectedRoute>
             </ProtectedRoute>
           }

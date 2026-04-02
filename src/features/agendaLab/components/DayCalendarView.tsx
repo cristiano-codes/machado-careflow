@@ -31,7 +31,7 @@ export function DayCalendarView({ date, events, onEventClick }: DayCalendarViewP
     return (
       <Card>
         <CardContent className="space-y-2 p-6 text-sm text-muted-foreground">
-          <p>Dia sem operacao de grade no laboratorio.</p>
+          <p>Dia sem operacao de grade cadastrada.</p>
           <p>Use Semana ou Mes para navegar para um dia util.</p>
         </CardContent>
       </Card>
