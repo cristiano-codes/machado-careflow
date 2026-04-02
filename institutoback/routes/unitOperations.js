@@ -19,6 +19,15 @@ const SLOT_RECURRENCES = new Set(['semanal', 'quinzenal', 'mensal']);
 const SLOT_STATUS = new Set(['ativa', 'planejada', 'suspensa']);
 const ENROLLMENT_STATUS = new Set(['ativo', 'aguardando_vaga', 'suspenso', 'desligado', 'concluido']);
 const ENROLLMENT_PRIORITY = new Set(['alta', 'media', 'baixa']);
+const UNIT_OPS_REQUIRED_SCHEMA_TABLES = [
+  'institution_units',
+  'unit_rooms',
+  'unit_activities',
+  'unit_classes',
+  'unit_class_schedule_slots',
+  'unit_class_enrollments',
+];
+const UNIT_OPS_SCHEMA_MISSING_MESSAGE = 'Schema de Operacao da Unidade nao aplicado no banco';
 
 const authorizeUnitOpsView = authorizeAny([
   ['salas', 'view'],
@@ -101,6 +110,14 @@ function toTimeMinutes(timeValue) {
 }
 function toError(res, statusCode, message, extra = {}) {
   return res.status(statusCode).json({ success: false, message, ...extra });
+}
+function toSchemaUnavailableError(res, missingTables = []) {
+  return res.status(503).json({
+    success: false,
+    error: UNIT_OPS_SCHEMA_MISSING_MESSAGE,
+    message: UNIT_OPS_SCHEMA_MISSING_MESSAGE,
+    missingTables,
+  });
 }
 
 function normalizeRoomType(value) {
@@ -369,6 +386,22 @@ async function fetchPatientByTextId(client, patientId) {
   return result.rows[0] || null;
 }
 
+async function resolveMissingUnitOpsSchemaTables() {
+  const result = await pool.query(
+    `
+      SELECT
+        required.table_name,
+        to_regclass(format('public.%I', required.table_name)) IS NOT NULL AS exists
+      FROM unnest($1::text[]) AS required(table_name)
+    `,
+    [UNIT_OPS_REQUIRED_SCHEMA_TABLES]
+  );
+
+  return result.rows
+    .filter((row) => row.exists !== true)
+    .map((row) => row.table_name);
+}
+
 async function readDataset() {
   const professionalsResult = await pool.query(
     `
@@ -510,9 +543,18 @@ router.get('/units', authorizeUnitOpsView, async (_req, res) => {
 
 router.get('/dataset', authorizeUnitOpsView, async (_req, res) => {
   try {
+    const missingTables = await resolveMissingUnitOpsSchemaTables();
+    if (missingTables.length > 0) {
+      return toSchemaUnavailableError(res, missingTables);
+    }
+
     const dataset = await readDataset();
     return res.json({ success: true, dataset });
   } catch (error) {
+    if (error?.code === '42P01') {
+      return toSchemaUnavailableError(res, UNIT_OPS_REQUIRED_SCHEMA_TABLES);
+    }
+
     console.error('[unit-operations][dataset][GET] erro ao montar dataset:', error);
     return toError(res, 500, 'Erro ao carregar dataset operacional de turmas');
   }

@@ -1,4 +1,4 @@
-﻿import { AUTH_UNAUTHORIZED_EVENT } from "@/services/api";
+import { API_BASE_URL, AUTH_UNAUTHORIZED_EVENT } from "@/services/api";
 import type {
   Activity,
   Allocation,
@@ -10,9 +10,6 @@ import type {
   StudentEnrollment,
   Unit,
 } from "@/features/agendaLab/types";
-
-const API_BASE_URL =
-  (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.trim() || "/api";
 
 type UnitOperationsDataset = {
   units: Unit[];
@@ -232,3 +229,4 @@ export const unitOperationsApi = {
     return payload.enrollment;
   },
 };
+

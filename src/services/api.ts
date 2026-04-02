@@ -13,12 +13,23 @@ import {
  * Descobre o melhor BASE URL para a API.
  * Preferencia:
  * 1) VITE_API_BASE_URL (ex.: "/api")
- * 2) Fallback padrao "/api"
+ * 2) Fallback por host publicado (frontend Railway separado do backend)
+ * 3) Fallback padrao "/api"
  */
 function resolveApiBase(): string {
   const envBase = import.meta.env?.VITE_API_BASE_URL as string | undefined;
   if (envBase && envBase.trim().length > 0) {
-    return envBase;
+    return envBase.trim().replace(/\/+$/, "");
+  }
+
+  // Publicacao atual usa dois servicos Railway:
+  // - Frontend: home-production-7dda.up.railway.app
+  // - Backend API: friendly-insight-production.up.railway.app
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname === "home-production-7dda.up.railway.app") {
+      return "https://friendly-insight-production.up.railway.app/api";
+    }
   }
 
   return "/api";

@@ -198,13 +198,14 @@ DATABASE_URL=postgres://usuario:senha@host:5432/banco
 Opcional:
 
 ```env
-VITE_API_BASE_URL=/api
+VITE_API_BASE_URL=https://friendly-insight-production.up.railway.app/api
 ```
 
 Observacao:
 
-- O Vite ja tem proxy `"/api" -> "http://localhost:3000"` em `vite.config.ts`.
-- Sem `VITE_API_BASE_URL`, o `apiService` usa fallback para `http://<host>:3000/api`.
+- Em desenvolvimento local, o Vite usa proxy `"/api" -> "http://localhost:3000"` em `vite.config.ts`.
+- Sem `VITE_API_BASE_URL`, o frontend usa fallback relativo `"/api"`.
+- Em deploy com frontend e backend separados no Railway, `VITE_API_BASE_URL` deve apontar para o dominio do backend.
 
 ## Scripts
 
