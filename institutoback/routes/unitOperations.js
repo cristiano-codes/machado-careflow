@@ -24,6 +24,7 @@ const UNIT_OPS_REQUIRED_SCHEMA_TABLES = [
   'unit_rooms',
   'unit_activities',
   'unit_classes',
+  'unit_class_staff',
   'unit_class_schedule_slots',
   'unit_class_enrollments',
 ];
