@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GraduationCap, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,11 @@ import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPane
 import type { ClassStatus, GroupClass } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getClassStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
+import {
+  isSingleUnitUxMode,
+  resolveDefaultUnit,
+  resolveDefaultUnitId,
+} from "@/features/agendaLab/utils/units";
 
 type ClassDraft = Omit<GroupClass, "id">;
 
@@ -58,6 +63,9 @@ function createDraft(unitId: string, activityId: string, professionalId: string)
 export function ClassesLabPage() {
   const { toast } = useToast();
   const { units, activities, professionals, classes, classOccupancy, upsertClass, isWriteEnabled } = useAgendaLab();
+  const defaultUnit = resolveDefaultUnit(units);
+  const defaultUnitId = resolveDefaultUnitId(units);
+  const singleUnitUxMode = isSingleUnitUxMode(units);
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("classes");
   const [unitFilter, setUnitFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<ClassStatus | "all">("all");
@@ -66,8 +74,13 @@ export function ClassesLabPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<GroupClass | null>(null);
   const [draft, setDraft] = useState<ClassDraft>(() =>
-    createDraft(units[0]?.id || "", activities[0]?.id || "", professionals[0]?.id || "")
+    createDraft(defaultUnitId, activities[0]?.id || "", professionals[0]?.id || "")
   );
+
+  useEffect(() => {
+    if (!open || editing || draft.unitId || !defaultUnitId) return;
+    setDraft((prev) => ({ ...prev, unitId: defaultUnitId }));
+  }, [defaultUnitId, draft.unitId, editing, open]);
 
   const filtered = useMemo(
     () =>
@@ -102,7 +115,7 @@ export function ClassesLabPage() {
 
   function openCreate() {
     setEditing(null);
-    setDraft(createDraft(units[0]?.id || "", activities[0]?.id || "", professionals[0]?.id || ""));
+    setDraft(createDraft(defaultUnitId, activities[0]?.id || "", professionals[0]?.id || ""));
     setOpen(true);
   }
 
@@ -113,7 +126,8 @@ export function ClassesLabPage() {
   }
 
   async function handleSave() {
-    if (!draft.unitId || !draft.nome.trim() || !draft.activityId || !draft.profissionalPrincipalId) {
+    const resolvedUnitId = draft.unitId || defaultUnitId;
+    if (!resolvedUnitId || !draft.nome.trim() || !draft.activityId || !draft.profissionalPrincipalId) {
       toast({ title: "Turma", description: "Unidade, nome, atividade e profissional principal sao obrigatorios.", variant: "destructive" });
       return;
     }
@@ -126,7 +140,7 @@ export function ClassesLabPage() {
       return;
     }
     try {
-      await upsertClass({ id: editing?.id || makeLabId("class"), ...draft });
+      await upsertClass({ id: editing?.id || makeLabId("class"), ...draft, unitId: resolvedUnitId });
       setOpen(false);
       toast({ title: "Turma", description: editing ? "Turma atualizada." : "Turma criada com sucesso." });
     } catch (error) {
@@ -232,7 +246,7 @@ export function ClassesLabPage() {
             <DialogDescription>Cadastro mestre de turma separado das alocacoes de grade.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1"><Label>Unidade</Label><Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Unidade</Label>{singleUnitUxMode ? <div className="flex h-10 items-center rounded-md border bg-muted px-3 text-sm">{units.find((item) => item.id === (draft.unitId || defaultUnitId))?.nome || defaultUnit?.nome || draft.unitId || "Nenhuma unidade disponivel"}</div> : <Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select>}</div>
             <div className="space-y-1"><Label>Nome da turma</Label><Input value={draft.nome} onChange={(event) => setDraft((prev) => ({ ...prev, nome: event.target.value }))} /></div>
             <div className="space-y-1"><Label>Atividade/servico</Label><Select value={draft.activityId} onValueChange={(value) => setDraft((prev) => ({ ...prev, activityId: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{activities.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><Label>Status</Label><Select value={draft.status} onValueChange={(value) => setDraft((prev) => ({ ...prev, status: value as ClassStatus }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{STATUSES.map((item) => <SelectItem key={item} value={item}>{getClassStatusLabel(item)}</SelectItem>)}</SelectContent></Select></div>

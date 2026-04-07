@@ -27,6 +27,11 @@ import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPane
 import type { Room, RoomStatus, RoomType } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getRoomStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
+import {
+  isSingleUnitUxMode,
+  resolveDefaultUnit,
+  resolveDefaultUnitId,
+} from "@/features/agendaLab/utils/units";
 
 type RoomDraft = Omit<Room, "id">;
 
@@ -57,21 +62,24 @@ function createDraft(unitId: string): RoomDraft {
 export function RoomsLabPage() {
   const { toast } = useToast();
   const { units, rooms, upsertRoom, isWriteEnabled, isLoading } = useAgendaLab();
+  const defaultUnit = resolveDefaultUnit(units);
+  const defaultUnitId = resolveDefaultUnitId(units);
+  const singleUnitUxMode = isSingleUnitUxMode(units);
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("rooms");
   const [unitFilter, setUnitFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<RoomStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Room | null>(null);
-  const [draft, setDraft] = useState<RoomDraft>(() => createDraft(units[0]?.id || ""));
+  const [draft, setDraft] = useState<RoomDraft>(() => createDraft(defaultUnitId));
   const [equipmentText, setEquipmentText] = useState("");
   const hasUnitsAvailable = units.length > 0;
   const canPersistRoom = isWriteEnabled && hasUnitsAvailable && !isLoading;
 
   useEffect(() => {
-    if (!open || editing || draft.unitId || units.length === 0) return;
-    setDraft((prev) => ({ ...prev, unitId: units[0].id }));
-  }, [draft.unitId, editing, open, units]);
+    if (!open || editing || draft.unitId || !defaultUnitId) return;
+    setDraft((prev) => ({ ...prev, unitId: defaultUnitId }));
+  }, [defaultUnitId, draft.unitId, editing, open]);
 
   const filtered = useMemo(
     () =>
@@ -101,7 +109,7 @@ export function RoomsLabPage() {
 
   function openCreate() {
     setEditing(null);
-    setDraft(createDraft(units[0]?.id || ""));
+    setDraft(createDraft(defaultUnitId));
     setEquipmentText("");
     setOpen(true);
   }
@@ -122,8 +130,9 @@ export function RoomsLabPage() {
       });
       return;
     }
-    if (!draft.unitId) {
-      toast({ title: "Sala", description: "Selecione a unidade da sala.", variant: "destructive" });
+    const resolvedUnitId = draft.unitId || defaultUnitId;
+    if (!resolvedUnitId) {
+      toast({ title: "Sala", description: "Nao foi possivel resolver a unidade padrao da sala.", variant: "destructive" });
       return;
     }
     if (!draft.codigo.trim() || !draft.nome.trim()) {
@@ -141,6 +150,7 @@ export function RoomsLabPage() {
     const payload: Room = {
       id: editing?.id || makeLabId("room"),
       ...draft,
+      unitId: resolvedUnitId,
       equipamentos: equipmentText.split(",").map((item) => item.trim()).filter(Boolean),
     };
     try {
@@ -241,7 +251,7 @@ export function RoomsLabPage() {
             <DialogDescription>Estrutura completa de cadastro de sala fisica da unidade.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1"><Label>Unidade</Label><Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.length === 0 ? <SelectItem value="__empty_units__" disabled>Nenhuma unidade disponivel</SelectItem> : units.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Unidade</Label>{singleUnitUxMode ? <div className="flex h-10 items-center rounded-md border bg-muted px-3 text-sm">{units.find((u) => u.id === (draft.unitId || defaultUnitId))?.nome || defaultUnit?.nome || draft.unitId || "Nenhuma unidade disponivel"}</div> : <Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.length === 0 ? <SelectItem value="__empty_units__" disabled>Nenhuma unidade disponivel</SelectItem> : units.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent></Select>}</div>
             <div className="space-y-1"><Label>Codigo/numero</Label><Input value={draft.codigo} onChange={(e) => setDraft((p) => ({ ...p, codigo: e.target.value }))} placeholder="Ex.: C-101" /></div>
             <div className="space-y-1"><Label>Nome da sala</Label><Input value={draft.nome} onChange={(e) => setDraft((p) => ({ ...p, nome: e.target.value }))} /></div>
             <div className="space-y-1"><Label>Nome conhecido</Label><Input value={draft.nomeConhecido} onChange={(e) => setDraft((p) => ({ ...p, nomeConhecido: e.target.value }))} /></div>
