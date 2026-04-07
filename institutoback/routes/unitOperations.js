@@ -34,6 +34,20 @@ const UNIT_OPS_REQUIRED_SCHEMA_TABLES = [
   'unit_class_enrollments',
 ];
 const UNIT_OPS_SCHEMA_MISSING_MESSAGE = 'Schema de Operacao da Unidade nao aplicado no banco';
+const DEFAULT_INSTITUTION_UNITS = [
+  {
+    id: 'u-centro',
+    codigo: 'CENTRO',
+    nome: 'Unidade Centro',
+    observacoes: 'Unidade base inicial da operacao de turmas.',
+  },
+  {
+    id: 'u-norte',
+    codigo: 'NORTE',
+    nome: 'Unidade Norte',
+    observacoes: 'Unidade secundaria para expansao operacional.',
+  },
+];
 
 const authorizeUnitOpsView = authorizeAny([
   ['salas', 'view'],
@@ -415,7 +429,26 @@ async function resolveMissingUnitOpsSchemaTables() {
     .map((row) => row.table_name);
 }
 
+async function ensureDefaultInstitutionUnits(dbClient = pool) {
+  for (const unit of DEFAULT_INSTITUTION_UNITS) {
+    await dbClient.query(
+      `
+        INSERT INTO public.institution_units (id, codigo, nome, ativo, observacoes)
+        SELECT $1, $2, $3, true, $4
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM public.institution_units
+          WHERE LOWER(nome) = LOWER($3)
+        )
+      `,
+      [unit.id, unit.codigo, unit.nome, unit.observacoes]
+    );
+  }
+}
+
 async function readDataset() {
+  await ensureDefaultInstitutionUnits();
+
   const professionalsResult = await pool.query(
     `
       SELECT
@@ -539,6 +572,8 @@ async function readDataset() {
 
 router.get('/units', authorizeUnitOpsView, async (_req, res) => {
   try {
+    await ensureDefaultInstitutionUnits();
+
     const result = await pool.query(
       `
         SELECT id, codigo, nome, ativo, observacoes
