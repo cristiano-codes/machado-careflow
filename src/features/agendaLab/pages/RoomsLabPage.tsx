@@ -24,7 +24,6 @@ import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleF
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
-import { usePermissions } from "@/hooks/usePermissions";
 import type { Room, RoomStatus, RoomType } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getRoomStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
@@ -57,7 +56,6 @@ function createDraft(unitId: string): RoomDraft {
 
 export function RoomsLabPage() {
   const { toast } = useToast();
-  const { hasAnyScope } = usePermissions();
   const { units, rooms, upsertRoom, isWriteEnabled, isLoading } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("rooms");
   const [unitFilter, setUnitFilter] = useState("all");
@@ -68,8 +66,7 @@ export function RoomsLabPage() {
   const [draft, setDraft] = useState<RoomDraft>(() => createDraft(units[0]?.id || ""));
   const [equipmentText, setEquipmentText] = useState("");
   const hasUnitsAvailable = units.length > 0;
-  const canWriteRooms = hasAnyScope(["salas:create", "salas:edit", "salas:status"]);
-  const canPersistRoom = isWriteEnabled && hasUnitsAvailable && !isLoading && canWriteRooms;
+  const canPersistRoom = isWriteEnabled && hasUnitsAvailable && !isLoading;
 
   useEffect(() => {
     if (!open || editing || draft.unitId || units.length === 0) return;
@@ -117,14 +114,6 @@ export function RoomsLabPage() {
   }
 
   async function handleSave() {
-    if (!canWriteRooms) {
-      toast({
-        title: "Sala",
-        description: "Seu perfil nao possui permissao de escrita para salas.",
-        variant: "destructive",
-      });
-      return;
-    }
     if (!hasUnitsAvailable) {
       toast({
         title: "Sala",
