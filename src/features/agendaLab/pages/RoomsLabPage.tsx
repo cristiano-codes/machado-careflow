@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleF
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Room, RoomStatus, RoomType } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getRoomStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
@@ -56,7 +57,8 @@ function createDraft(unitId: string): RoomDraft {
 
 export function RoomsLabPage() {
   const { toast } = useToast();
-  const { units, rooms, upsertRoom, isWriteEnabled } = useAgendaLab();
+  const { hasAnyScope } = usePermissions();
+  const { units, rooms, upsertRoom, isWriteEnabled, isLoading } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("rooms");
   const [unitFilter, setUnitFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<RoomStatus | "all">("all");
@@ -65,6 +67,14 @@ export function RoomsLabPage() {
   const [editing, setEditing] = useState<Room | null>(null);
   const [draft, setDraft] = useState<RoomDraft>(() => createDraft(units[0]?.id || ""));
   const [equipmentText, setEquipmentText] = useState("");
+  const hasUnitsAvailable = units.length > 0;
+  const canWriteRooms = hasAnyScope(["salas:create", "salas:edit", "salas:status"]);
+  const canPersistRoom = isWriteEnabled && hasUnitsAvailable && !isLoading && canWriteRooms;
+
+  useEffect(() => {
+    if (!open || editing || draft.unitId || units.length === 0) return;
+    setDraft((prev) => ({ ...prev, unitId: units[0].id }));
+  }, [draft.unitId, editing, open, units]);
 
   const filtered = useMemo(
     () =>
@@ -107,7 +117,27 @@ export function RoomsLabPage() {
   }
 
   async function handleSave() {
-    if (!draft.unitId || !draft.codigo.trim() || !draft.nome.trim()) {
+    if (!canWriteRooms) {
+      toast({
+        title: "Sala",
+        description: "Seu perfil nao possui permissao de escrita para salas.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!hasUnitsAvailable) {
+      toast({
+        title: "Sala",
+        description: "Nenhuma unidade operacional disponivel. Sincronize os dados antes de salvar.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!draft.unitId) {
+      toast({ title: "Sala", description: "Selecione a unidade da sala.", variant: "destructive" });
+      return;
+    }
+    if (!draft.codigo.trim() || !draft.nome.trim()) {
       toast({ title: "Sala", description: "Unidade, codigo e nome sao obrigatorios.", variant: "destructive" });
       return;
     }
@@ -143,7 +173,7 @@ export function RoomsLabPage() {
         title="Salas Teste"
         subtitle="Ambiente de homologacao para cadastro e revisao das salas fisicas da unidade."
         actions={
-          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
+          <Button size="sm" className="h-9" disabled={!canPersistRoom} onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Nova sala
           </Button>
@@ -206,7 +236,7 @@ export function RoomsLabPage() {
                     <TableCell>{room.tipo}</TableCell>
                     <TableCell>{room.capacidadeRecomendada}/{room.capacidadeTotal}</TableCell>
                     <TableCell><Badge variant={statusToBadgeVariant(room.status)}>{getRoomStatusLabel(room.status)}</Badge></TableCell>
-                    <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(room)}>Editar</Button></TableCell>
+                    <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!canPersistRoom} onClick={() => openEdit(room)}>Editar</Button></TableCell>
                   </TableRow>
                 ))
               )}
@@ -222,7 +252,7 @@ export function RoomsLabPage() {
             <DialogDescription>Estrutura completa de cadastro de sala fisica da unidade.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1"><Label>Unidade</Label><Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Unidade</Label><Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.length === 0 ? <SelectItem value="__empty_units__" disabled>Nenhuma unidade disponivel</SelectItem> : units.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><Label>Codigo/numero</Label><Input value={draft.codigo} onChange={(e) => setDraft((p) => ({ ...p, codigo: e.target.value }))} placeholder="Ex.: C-101" /></div>
             <div className="space-y-1"><Label>Nome da sala</Label><Input value={draft.nome} onChange={(e) => setDraft((p) => ({ ...p, nome: e.target.value }))} /></div>
             <div className="space-y-1"><Label>Nome conhecido</Label><Input value={draft.nomeConhecido} onChange={(e) => setDraft((p) => ({ ...p, nomeConhecido: e.target.value }))} /></div>
@@ -241,7 +271,7 @@ export function RoomsLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!canPersistRoom}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

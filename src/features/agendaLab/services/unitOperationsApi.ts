@@ -83,20 +83,39 @@ function getErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+function buildUnitOperationsUrl(path: string, bustCache = false) {
+  const baseUrl = `${API_BASE_URL}/unit-operations${path}`;
+  if (!bustCache) return baseUrl;
+
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${separator}_ts=${Date.now()}`;
+}
+
 async function requestUnitOperations<T>(
   path: string,
   init: RequestInit,
   fallbackError: string
 ): Promise<T> {
+  const method = (init.method || "GET").toUpperCase();
+  const isReadRequest = method === "GET" || method === "HEAD";
+  const requestHeaders = {
+    ...buildHeaders(init.body !== undefined),
+    ...(isReadRequest ? { "Cache-Control": "no-cache", Pragma: "no-cache" } : {}),
+    ...(init.headers || {}),
+  };
+  const requestInit: RequestInit = {
+    ...init,
+    method,
+    cache: isReadRequest ? "no-store" : init.cache,
+    headers: requestHeaders,
+  };
+
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/unit-operations${path}`, {
-      ...init,
-      headers: {
-        ...buildHeaders(init.body !== undefined),
-        ...(init.headers || {}),
-      },
-    });
+    response = await fetch(buildUnitOperationsUrl(path), requestInit);
+    if (response.status === 304 && isReadRequest) {
+      response = await fetch(buildUnitOperationsUrl(path, true), requestInit);
+    }
   } catch {
     throw new Error("API operacional indisponivel no momento. Verifique a conexao.");
   }
@@ -127,13 +146,18 @@ function sanitizeDataset(input: Partial<UnitOperationsDataset> | null | undefine
 
 export const unitOperationsApi = {
   async getDataset(): Promise<LabDataset> {
-    const payload = await requestUnitOperations<{ success?: boolean; dataset?: Partial<UnitOperationsDataset> }>(
+    const payload = await requestUnitOperations<
+      { success?: boolean; dataset?: Partial<UnitOperationsDataset> } & Partial<UnitOperationsDataset>
+    >(
       "/dataset",
       { method: "GET" },
       "Falha ao carregar dados operacionais de turmas"
     );
 
-    return sanitizeDataset(payload?.dataset);
+    const datasetCandidate =
+      payload?.dataset && typeof payload.dataset === "object" ? payload.dataset : payload;
+
+    return sanitizeDataset(datasetCandidate);
   },
 
   async upsertRoom(room: Room): Promise<Room> {

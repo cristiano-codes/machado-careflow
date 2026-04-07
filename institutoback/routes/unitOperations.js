@@ -6,6 +6,11 @@ const { authorizeAny } = require('../middleware/authorize');
 
 const router = express.Router();
 router.use(authMiddleware);
+router.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Pragma', 'no-cache');
+  next();
+});
 
 const ROOM_TYPES = new Set(['terapia', 'multifuncional', 'pedagogica', 'sensorial', 'movimento', 'apoio']);
 const ROOM_STATUS = new Set(['ativa', 'manutencao', 'inativa']);
@@ -68,6 +73,13 @@ const authorizeEnrollmentsWrite = authorizeAny([
 
 function normalizeText(value) {
   return (value || '').toString().trim();
+}
+function normalizeFirstText(...values) {
+  for (const value of values) {
+    const normalized = normalizeText(value);
+    if (normalized) return normalized;
+  }
+  return '';
 }
 function normalizeOptionalText(value) {
   const normalized = normalizeText(value);
@@ -585,9 +597,16 @@ router.get('/rooms', authorizeUnitOpsView, async (_req, res) => {
 router.post('/rooms/upsert', authorizeRoomsWrite, async (req, res) => {
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
   const id = normalizeOptionalText(payload.id) || `room-${randomUUID()}`;
-  const unitId = normalizeText(payload.unitId);
-  const codigo = normalizeText(payload.codigo);
-  const nome = normalizeText(payload.nome);
+  const unitId = normalizeFirstText(
+    payload.unitId,
+    payload.unit_id,
+    payload.institutionUnitId,
+    payload.institution_unit_id,
+    payload.unidadeId,
+    payload.unidade_id
+  );
+  const codigo = normalizeFirstText(payload.codigo, payload.code, payload.room_code);
+  const nome = normalizeFirstText(payload.nome, payload.name, payload.room_name);
   const nomeConhecido = normalizeOptionalText(payload.nomeConhecido);
   const descricao = normalizeOptionalText(payload.descricao);
   const tipo = normalizeRoomType(payload.tipo);

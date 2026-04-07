@@ -252,7 +252,22 @@ export function AgendaLabProvider({ children }: { children: ReactNode }) {
     await refreshFromServer();
   }, [refreshFromServer]);
 
-  const isWriteEnabled = dataSource === "api";
+  const hasOperationalSnapshot = useMemo(
+    () =>
+      units.length > 0 ||
+      professionals.length > 0 ||
+      students.length > 0 ||
+      rooms.length > 0 ||
+      activities.length > 0 ||
+      classes.length > 0 ||
+      allocations.length > 0 ||
+      enrollments.length > 0,
+    [units, professionals, students, rooms, activities, classes, allocations, enrollments]
+  );
+
+  const isWriteEnabled =
+    dataSource === "api" &&
+    (hasOperationalSnapshot || (!isLoading && !syncError));
 
   const value = useMemo<AgendaLabContextValue>(
     () => ({
