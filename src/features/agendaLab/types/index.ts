@@ -119,6 +119,8 @@ export type Allocation = {
   recorrencia: AllocationRecurrence;
   status: AllocationStatus;
   observacao: string;
+  vigenciaInicio?: string;
+  vigenciaFim?: string | null;
 };
 
 export type EnrollmentStatus =
@@ -152,4 +154,3 @@ export type LabDataset = {
   allocations: Allocation[];
   enrollments: StudentEnrollment[];
 };
-

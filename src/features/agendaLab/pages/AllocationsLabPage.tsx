@@ -26,7 +26,7 @@ import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { Allocation, AllocationRecurrence, AllocationStatus, Weekday } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
-import { parseTimeToMinutes } from "@/features/agendaLab/utils/time";
+import { parseTimeToMinutes, toIsoDate } from "@/features/agendaLab/utils/time";
 import {
   LAB_WEEKDAYS,
   getAllocationStatusLabel,
@@ -82,6 +82,13 @@ export function AllocationsLabPage() {
   const [draft, setDraft] = useState<AllocationDraft>(() =>
     createDraft(classes[0]?.id || "", rooms[0]?.id || "", professionals[0]?.id || "")
   );
+  const selectedClass = useMemo(
+    () => classes.find((item) => item.id === draft.classId) || null,
+    [classes, draft.classId]
+  );
+  const selectedClassStartDate = toIsoDate(selectedClass?.dataInicio);
+  const selectedClassEndDate = toIsoDate(selectedClass?.dataTermino);
+  const selectedClassMissingStartDate = Boolean(draft.classId) && !selectedClassStartDate;
 
   const enriched = useMemo(
     () =>
@@ -173,6 +180,14 @@ export function AllocationsLabPage() {
       toast({ title: "Alocacao", description: "Turma, sala e profissional sao obrigatorios.", variant: "destructive" });
       return;
     }
+    if (!selectedClassStartDate) {
+      toast({
+        title: "Alocacao",
+        description: "Turma sem data de inicio. Ajuste em /operacao-unidade/turmas.",
+        variant: "destructive",
+      });
+      return;
+    }
     const start = parseTimeToMinutes(draft.horaInicial);
     const end = parseTimeToMinutes(draft.horaFinal);
     if (start === null || end === null || end <= start) {
@@ -180,8 +195,14 @@ export function AllocationsLabPage() {
       return;
     }
     const id = editing?.id || makeLabId("allocation");
+    const payload: Allocation = {
+      id,
+      ...draft,
+      vigenciaInicio: selectedClassStartDate,
+      ...(!editing && selectedClassEndDate ? { vigenciaFim: selectedClassEndDate } : {}),
+    };
     try {
-      await upsertAllocation({ id, ...draft });
+      await upsertAllocation(payload);
       setOpen(false);
       const conflict = allocationConflicts.get(id);
       if (conflict?.hasConflict) {
@@ -289,7 +310,7 @@ export function AllocationsLabPage() {
             <DialogDescription>Sala e profissional variam por alocacao, sem vinculo fixo por turma.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1"><Label>Turma</Label><Select value={draft.classId} onValueChange={(value) => setDraft((prev) => ({ ...prev, classId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label>Turma</Label><Select value={draft.classId} onValueChange={(value) => setDraft((prev) => ({ ...prev, classId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{classes.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select>{selectedClassMissingStartDate ? <p className="text-xs text-destructive">Turma sem data de inicio. Ajuste em /operacao-unidade/turmas.</p> : null}</div>
             <div className="space-y-1"><Label>Dia da semana</Label><Select value={draft.weekday} onValueChange={(value) => setDraft((prev) => ({ ...prev, weekday: value as Weekday }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{LAB_WEEKDAYS.map((item) => <SelectItem key={item.key} value={item.key}>{item.label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><Label>Hora inicial</Label><Input type="time" value={draft.horaInicial} onChange={(event) => setDraft((prev) => ({ ...prev, horaInicial: event.target.value }))} /></div>
             <div className="space-y-1"><Label>Hora final</Label><Input type="time" value={draft.horaFinal} onChange={(event) => setDraft((prev) => ({ ...prev, horaFinal: event.target.value }))} /></div>
@@ -301,7 +322,7 @@ export function AllocationsLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!isWriteEnabled || selectedClassMissingStartDate}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

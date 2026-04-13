@@ -114,10 +114,16 @@ function normalizeInteger(value) {
   return numeric;
 }
 function normalizeDate(value) {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 10);
+  }
   const normalized = normalizeText(value);
   if (!normalized) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
-  return normalized;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+  const isoDateTimeMatch = normalized.match(/^(\d{4}-\d{2}-\d{2})T/);
+  if (isoDateTimeMatch) return isoDateTimeMatch[1];
+  return null;
 }
 function normalizeTime(value) {
   const normalized = normalizeText(value);
@@ -272,8 +278,8 @@ function mapClassRow(row) {
     capacidadeIdeal: Number(row.capacidade_ideal || 0),
     capacidadeMaxima: Number(row.capacidade_maxima || 0),
     status: row.status,
-    dataInicio: row.data_inicio,
-    dataTermino: row.data_termino || null,
+    dataInicio: normalizeDate(row.data_inicio) || '',
+    dataTermino: normalizeDate(row.data_termino),
     profissionalPrincipalId: row.professional_principal_id || '',
     profissionalApoioId: row.professional_apoio_id || null,
     exigeSalaEspecifica: row.exige_sala_especifica === true,
@@ -293,6 +299,8 @@ function mapSlotRow(row) {
     recorrencia: row.recorrencia,
     status: row.status,
     observacao: row.observacao || '',
+    vigenciaInicio: normalizeDate(row.vigencia_inicio),
+    vigenciaFim: normalizeDate(row.vigencia_fim),
   };
 }
 function mapEnrollmentRow(row) {
@@ -1217,7 +1225,12 @@ router.post('/schedule-slots/upsert', authorizeSlotsWrite, async (req, res) => {
     const vigenciaFim = normalizeDate(payload.vigenciaFim);
 
     if (!vigenciaInicio) {
-      return toError(res, 400, 'Vigencia inicial invalida para alocacao');
+      return toError(
+        res,
+        400,
+        'A turma selecionada nao possui data de inicio valida para gerar a vigencia da alocacao.',
+        { code: 'class_missing_start_date' }
+      );
     }
     if (vigenciaFim && vigenciaFim < vigenciaInicio) {
       return toError(res, 400, 'Vigencia final nao pode ser anterior a vigencia inicial');
@@ -1325,7 +1338,7 @@ router.post('/schedule-slots/upsert', authorizeSlotsWrite, async (req, res) => {
           to_char(hora_inicial, 'HH24:MI') AS hora_inicial,
           to_char(hora_final, 'HH24:MI') AS hora_final,
           room_id, professional_id::text AS professional_id,
-          recorrencia, status, observacao
+          recorrencia, status, observacao, vigencia_inicio, vigencia_fim
       `,
       [
         id,

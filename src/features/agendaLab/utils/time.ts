@@ -11,11 +11,17 @@ export function formatMinutesToTime(minutes: number) {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
-export function toIsoDate(value: string | null | undefined) {
+export function toIsoDate(value: string | Date | null | undefined) {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 10);
+  }
   const text = (value || "").toString().trim();
   if (!text) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
-  return text;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const isoDateTimeMatch = text.match(/^(\d{4}-\d{2}-\d{2})T/);
+  if (isoDateTimeMatch) return isoDateTimeMatch[1];
+  return null;
 }
 
 export function overlaps(
@@ -26,4 +32,3 @@ export function overlaps(
 ) {
   return leftStart < rightEnd && rightStart < leftEnd;
 }
-
