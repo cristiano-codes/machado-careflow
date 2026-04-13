@@ -597,7 +597,15 @@ router.get('/dataset', authorizeUnitOpsView, async (_req, res) => {
     }
 
     const dataset = await readDataset();
-    return res.json({ success: true, dataset });
+    const activitiesCount = Array.isArray(dataset?.activities) ? dataset.activities.length : 0;
+    const warnings = activitiesCount === 0 ? ['unit_activities_empty'] : [];
+
+    return res.json({
+      success: true,
+      dataset,
+      meta: { activitiesCount },
+      ...(warnings.length > 0 ? { warnings } : {}),
+    });
   } catch (error) {
     if (error?.code === '42P01') {
       return toSchemaUnavailableError(res, UNIT_OPS_REQUIRED_SCHEMA_TABLES);

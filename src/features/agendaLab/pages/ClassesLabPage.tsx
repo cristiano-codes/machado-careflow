@@ -63,6 +63,7 @@ function createDraft(unitId: string, activityId: string, professionalId: string)
 export function ClassesLabPage() {
   const { toast } = useToast();
   const { units, activities, professionals, classes, classOccupancy, upsertClass, isWriteEnabled } = useAgendaLab();
+  const hasActivities = activities.length > 0;
   const defaultUnit = resolveDefaultUnit(units);
   const defaultUnitId = resolveDefaultUnitId(units);
   const singleUnitUxMode = isSingleUnitUxMode(units);
@@ -126,6 +127,14 @@ export function ClassesLabPage() {
   }
 
   async function handleSave() {
+    if (!editing && !hasActivities) {
+      toast({
+        title: "Turma",
+        description: "Nenhuma atividade/serviço ativo cadastrado. Cadastre em /operacao-unidade/atividades.",
+        variant: "destructive",
+      });
+      return;
+    }
     const resolvedUnitId = draft.unitId || defaultUnitId;
     if (!resolvedUnitId || !draft.nome.trim() || !draft.activityId || !draft.profissionalPrincipalId) {
       toast({ title: "Turma", description: "Unidade, nome, atividade e profissional principal sao obrigatorios.", variant: "destructive" });
@@ -248,7 +257,22 @@ export function ClassesLabPage() {
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1"><Label>Unidade</Label>{singleUnitUxMode ? <div className="flex h-10 items-center rounded-md border bg-muted px-3 text-sm">{units.find((item) => item.id === (draft.unitId || defaultUnitId))?.nome || defaultUnit?.nome || draft.unitId || "Nenhuma unidade disponivel"}</div> : <Select value={draft.unitId} onValueChange={(value) => setDraft((prev) => ({ ...prev, unitId: value }))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{units.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select>}</div>
             <div className="space-y-1"><Label>Nome da turma</Label><Input value={draft.nome} onChange={(event) => setDraft((prev) => ({ ...prev, nome: event.target.value }))} /></div>
-            <div className="space-y-1"><Label>Atividade/servico</Label><Select value={draft.activityId} onValueChange={(value) => setDraft((prev) => ({ ...prev, activityId: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{activities.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1">
+              <Label>Atividade/servico</Label>
+              <Select
+                value={draft.activityId}
+                onValueChange={(value) => setDraft((prev) => ({ ...prev, activityId: value }))}
+                disabled={!editing && !hasActivities}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>{activities.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent>
+              </Select>
+              {!editing && !hasActivities ? (
+                <p className="text-xs text-destructive">
+                  Nenhuma atividade/serviço ativo cadastrado. Cadastre em /operacao-unidade/atividades.
+                </p>
+              ) : null}
+            </div>
             <div className="space-y-1"><Label>Status</Label><Select value={draft.status} onValueChange={(value) => setDraft((prev) => ({ ...prev, status: value as ClassStatus }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{STATUSES.map((item) => <SelectItem key={item} value={item}>{getClassStatusLabel(item)}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><Label>Profissional principal</Label><Select value={draft.profissionalPrincipalId} onValueChange={(value) => setDraft((prev) => ({ ...prev, profissionalPrincipalId: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{professionals.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1"><Label>Profissional de apoio</Label><Select value={draft.profissionalApoioId || "none"} onValueChange={(value) => setDraft((prev) => ({ ...prev, profissionalApoioId: value === "none" ? null : value }))}><SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger><SelectContent><SelectItem value="none">Sem apoio</SelectItem>{professionals.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
@@ -267,7 +291,7 @@ export function ClassesLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!isWriteEnabled || (!editing && !hasActivities)}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
