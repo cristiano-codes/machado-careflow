@@ -19,12 +19,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { AgendaLabHeader } from "@/features/agendaLab/components/AgendaLabHeader";
+import { MaskedDateInput } from "@/features/agendaLab/components/MaskedDateInput";
 import { AgendaLabSyncBanner } from "@/features/agendaLab/components/AgendaLabSyncBanner";
 import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleFilters";
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import type { ClassStatus, GroupClass } from "@/features/agendaLab/types";
+import {
+  formatFromApiDate,
+  formatToApiDate,
+  isValidCalendarDate,
+  parsePtBrDate,
+} from "@/features/agendaLab/utils/dateInput";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getClassStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
 import {
@@ -34,8 +41,12 @@ import {
 } from "@/features/agendaLab/utils/units";
 
 type ClassDraft = Omit<GroupClass, "id">;
+type DateFieldKey = "dataInicio" | "dataTermino";
+type DateFieldState = Record<DateFieldKey, string>;
+type DateFieldErrors = Partial<Record<DateFieldKey, string>>;
 
 const STATUSES: ClassStatus[] = ["ativa", "planejada", "pausada", "encerrada"];
+const DATE_RANGE_ERROR_MESSAGE = "Data de termino nao pode ser menor que data de inicio.";
 
 function createDraft(unitId: string, activityId: string, professionalId: string): ClassDraft {
   return {
@@ -60,6 +71,83 @@ function createDraft(unitId: string, activityId: string, professionalId: string)
   };
 }
 
+function toDateFieldState(item: Pick<ClassDraft, "dataInicio" | "dataTermino">): DateFieldState {
+  return {
+    dataInicio: formatFromApiDate(item.dataInicio),
+    dataTermino: formatFromApiDate(item.dataTermino),
+  };
+}
+
+function validateDateField(
+  value: string,
+  options: { required: boolean; fieldLabel: string }
+): string | null {
+  const text = value.trim();
+  if (!text) {
+    return options.required ? `${options.fieldLabel} e obrigatoria.` : null;
+  }
+
+  const parsed = parsePtBrDate(text);
+  if (!parsed) {
+    return `${options.fieldLabel} deve estar no formato dd/mm/aaaa.`;
+  }
+
+  if (!isValidCalendarDate(parsed)) {
+    return `${options.fieldLabel} invalida.`;
+  }
+
+  return null;
+}
+
+function validateClassDateFields(dateFields: DateFieldState): {
+  errors: DateFieldErrors;
+  dataInicioApi: string | null;
+  dataTerminoApi: string | null;
+} {
+  const errors: DateFieldErrors = {};
+
+  const dataInicioError = validateDateField(dateFields.dataInicio, {
+    required: true,
+    fieldLabel: "Data de inicio da turma",
+  });
+  if (dataInicioError) {
+    errors.dataInicio = dataInicioError;
+  }
+
+  const dataTerminoError = validateDateField(dateFields.dataTermino, {
+    required: false,
+    fieldLabel: "Data de termino da turma",
+  });
+  if (dataTerminoError) {
+    errors.dataTermino = dataTerminoError;
+  }
+
+  const dataInicioApi = errors.dataInicio ? null : formatToApiDate(dateFields.dataInicio);
+  const hasDataTermino = dateFields.dataTermino.trim().length > 0;
+  const dataTerminoApi =
+    errors.dataTermino || !hasDataTermino ? null : formatToApiDate(dateFields.dataTermino);
+
+  if (!errors.dataInicio && !dataInicioApi) {
+    errors.dataInicio = "Data de inicio da turma deve estar no formato dd/mm/aaaa.";
+  }
+
+  if (hasDataTermino && !errors.dataTermino && !dataTerminoApi) {
+    errors.dataTermino = "Data de termino da turma deve estar no formato dd/mm/aaaa.";
+  }
+
+  if (
+    !errors.dataInicio &&
+    !errors.dataTermino &&
+    dataInicioApi &&
+    dataTerminoApi &&
+    dataTerminoApi < dataInicioApi
+  ) {
+    errors.dataTermino = DATE_RANGE_ERROR_MESSAGE;
+  }
+
+  return { errors, dataInicioApi, dataTerminoApi };
+}
+
 export function ClassesLabPage() {
   const { toast } = useToast();
   const { units, activities, professionals, classes, classOccupancy, upsertClass, isWriteEnabled } = useAgendaLab();
@@ -77,6 +165,8 @@ export function ClassesLabPage() {
   const [draft, setDraft] = useState<ClassDraft>(() =>
     createDraft(defaultUnitId, activities[0]?.id || "", professionals[0]?.id || "")
   );
+  const [dateFields, setDateFields] = useState<DateFieldState>(() => ({ dataInicio: "", dataTermino: "" }));
+  const [dateErrors, setDateErrors] = useState<DateFieldErrors>({});
 
   useEffect(() => {
     if (!open || editing || draft.unitId || !defaultUnitId) return;
@@ -115,15 +205,41 @@ export function ClassesLabPage() {
   }, [activities, activityFilter, search, statusFilter, unitFilter, units]);
 
   function openCreate() {
+    const nextDraft = createDraft(defaultUnitId, activities[0]?.id || "", professionals[0]?.id || "");
     setEditing(null);
-    setDraft(createDraft(defaultUnitId, activities[0]?.id || "", professionals[0]?.id || ""));
+    setDraft(nextDraft);
+    setDateFields(toDateFieldState(nextDraft));
+    setDateErrors({});
     setOpen(true);
   }
 
   function openEdit(item: GroupClass) {
     setEditing(item);
     setDraft({ ...item });
+    setDateFields(toDateFieldState(item));
+    setDateErrors({});
     setOpen(true);
+  }
+
+  function updateDateField(field: DateFieldKey, value: string) {
+    setDateFields((prev) => ({ ...prev, [field]: value }));
+    setDateErrors((prev) => ({
+      ...prev,
+      [field]: undefined,
+      ...(prev.dataTermino === DATE_RANGE_ERROR_MESSAGE ? { dataTermino: undefined } : {}),
+    }));
+  }
+
+  function handleDateBlur() {
+    const { errors } = validateClassDateFields(dateFields);
+    setDateErrors(errors);
+  }
+
+  function handleDialogOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setDateErrors({});
+    }
   }
 
   async function handleSave() {
@@ -148,8 +264,24 @@ export function ClassesLabPage() {
       });
       return;
     }
+    const { errors, dataInicioApi, dataTerminoApi } = validateClassDateFields(dateFields);
+    if (errors.dataInicio || errors.dataTermino || !dataInicioApi) {
+      setDateErrors(errors);
+      toast({
+        title: "Turma",
+        description: errors.dataInicio || errors.dataTermino || "Datas da turma invalidas.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
-      await upsertClass({ id: editing?.id || makeLabId("class"), ...draft, unitId: resolvedUnitId });
+      await upsertClass({
+        id: editing?.id || makeLabId("class"),
+        ...draft,
+        unitId: resolvedUnitId,
+        dataInicio: dataInicioApi,
+        dataTermino: dataTerminoApi,
+      });
       setOpen(false);
       toast({ title: "Turma", description: editing ? "Turma atualizada." : "Turma criada com sucesso." });
     } catch (error) {
@@ -248,7 +380,7 @@ export function ClassesLabPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Editar turma" : "Nova turma"}</DialogTitle>
@@ -282,8 +414,30 @@ export function ClassesLabPage() {
             <div className="space-y-1"><Label>Capacidade ideal</Label><Input type="number" min={1} value={draft.capacidadeIdeal} onChange={(event) => setDraft((prev) => ({ ...prev, capacidadeIdeal: Number(event.target.value || 0) }))} /></div>
             <div className="space-y-1"><Label>Capacidade maxima</Label><Input type="number" min={1} value={draft.capacidadeMaxima} onChange={(event) => setDraft((prev) => ({ ...prev, capacidadeMaxima: Number(event.target.value || 0) }))} /></div>
             <div className="space-y-1"><Label>Projeto/convenio</Label><Input value={draft.projetoConvenio} onChange={(event) => setDraft((prev) => ({ ...prev, projetoConvenio: event.target.value }))} /></div>
-            <div className="space-y-1"><Label>Data de inicio</Label><Input type="date" value={draft.dataInicio} onChange={(event) => setDraft((prev) => ({ ...prev, dataInicio: event.target.value }))} /></div>
-            <div className="space-y-1"><Label>Data de termino</Label><Input type="date" value={draft.dataTermino || ""} onChange={(event) => setDraft((prev) => ({ ...prev, dataTermino: event.target.value || null }))} /></div>
+            <div className="space-y-1">
+              <Label>Data de inicio</Label>
+              <MaskedDateInput
+                value={dateFields.dataInicio}
+                onValueChange={(value) => updateDateField("dataInicio", value)}
+                onBlur={handleDateBlur}
+                aria-invalid={Boolean(dateErrors.dataInicio)}
+              />
+              {dateErrors.dataInicio ? (
+                <p className="text-xs text-destructive">{dateErrors.dataInicio}</p>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <Label>Data de termino</Label>
+              <MaskedDateInput
+                value={dateFields.dataTermino}
+                onValueChange={(value) => updateDateField("dataTermino", value)}
+                onBlur={handleDateBlur}
+                aria-invalid={Boolean(dateErrors.dataTermino)}
+              />
+              {dateErrors.dataTermino ? (
+                <p className="text-xs text-destructive">{dateErrors.dataTermino}</p>
+              ) : null}
+            </div>
             <div className="space-y-1 md:col-span-2"><Label>Descricao</Label><Textarea rows={2} value={draft.descricao} onChange={(event) => setDraft((prev) => ({ ...prev, descricao: event.target.value }))} /></div>
             <div className="space-y-1 md:col-span-2"><Label>Objetivo</Label><Textarea rows={2} value={draft.objetivo} onChange={(event) => setDraft((prev) => ({ ...prev, objetivo: event.target.value }))} /></div>
             <div className="space-y-1 md:col-span-2"><Label>Observacoes</Label><Textarea rows={2} value={draft.observacoes} onChange={(event) => setDraft((prev) => ({ ...prev, observacoes: event.target.value }))} /></div>
