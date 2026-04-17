@@ -7,6 +7,7 @@ export type PtBrDateParts = {
 const PT_BR_DATE_REGEX = /^(\d{2})\/(\d{2})\/(\d{4})$/;
 const API_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
 const API_DATE_TIME_REGEX = /^(\d{4})-(\d{2})-(\d{2})T/;
+const ISO_DATE_WITH_SEPARATOR_REGEX = /^(\d{4})[-/](\d{2})[-/](\d{2})$/;
 
 function parseInteger(value: string) {
   const parsed = Number(value);
@@ -23,8 +24,41 @@ export function sanitizeDateInput(value: string | null | undefined) {
   return (value || "").replace(/\D/g, "").slice(0, 8);
 }
 
+export function detectIsoDateString(value: string | null | undefined) {
+  const normalized = (value || "").trim();
+  return ISO_DATE_WITH_SEPARATOR_REGEX.test(normalized);
+}
+
+export function toPtBrFromIso(value: string | null | undefined) {
+  const normalized = (value || "").trim();
+  if (!detectIsoDateString(normalized)) return null;
+
+  const match = normalized.match(ISO_DATE_WITH_SEPARATOR_REGEX);
+  if (!match) return null;
+
+  const year = parseInteger(match[1]);
+  const month = parseInteger(match[2]);
+  const day = parseInteger(match[3]);
+  if (day === null || month === null || year === null) return null;
+
+  const parts = { day, month, year };
+  if (!isValidCalendarDate(parts)) return null;
+
+  return formatPtBrDate(parts);
+}
+
+export function normalizePastedDateValue(value: string | null | undefined) {
+  const normalized = (value || "").trim();
+  if (!normalized) return "";
+
+  const isoAsPtBr = toPtBrFromIso(normalized);
+  if (isoAsPtBr) return isoAsPtBr;
+
+  return normalized;
+}
+
 export function applyDateMask(value: string | null | undefined) {
-  const digits = sanitizeDateInput(value);
+  const digits = sanitizeDateInput(normalizePastedDateValue(value));
   if (!digits) return "";
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;

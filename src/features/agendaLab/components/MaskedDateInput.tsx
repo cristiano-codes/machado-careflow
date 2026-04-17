@@ -1,6 +1,10 @@
-import { useRef, type ChangeEvent, type ComponentProps, type FocusEvent } from "react";
+import { useRef, type ChangeEvent, type ClipboardEvent, type ComponentProps, type FocusEvent } from "react";
 import { Input } from "@/components/ui/input";
-import { applyDateMask, sanitizeDateInput } from "@/features/agendaLab/utils/dateInput";
+import {
+  applyDateMask,
+  normalizePastedDateValue,
+  sanitizeDateInput,
+} from "@/features/agendaLab/utils/dateInput";
 
 type MaskedDateInputProps = Omit<ComponentProps<"input">, "type" | "value" | "onChange"> & {
   value: string;
@@ -27,6 +31,7 @@ export function MaskedDateInput({
   value,
   onValueChange,
   onBlur,
+  onPaste,
   inputMode = "numeric",
   placeholder = "dd/mm/aaaa",
   maxLength = 10,
@@ -35,7 +40,7 @@ export function MaskedDateInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const rawValue = event.target.value || "";
+    const rawValue = normalizePastedDateValue(event.target.value || "");
     const selectionStart = event.target.selectionStart ?? rawValue.length;
     const digitsBeforeCursor = sanitizeDateInput(rawValue.slice(0, selectionStart)).length;
     const maskedValue = applyDateMask(rawValue);
@@ -48,6 +53,39 @@ export function MaskedDateInput({
       const cursorPosition = resolveCursorPosition(maskedValue, digitsBeforeCursor);
       element.setSelectionRange(cursorPosition, cursorPosition);
     });
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLInputElement>) {
+    const pastedText = event.clipboardData.getData("text");
+    const normalizedPastedText = normalizePastedDateValue(pastedText);
+    if (!normalizedPastedText || normalizedPastedText === pastedText) {
+      onPaste?.(event);
+      return;
+    }
+
+    event.preventDefault();
+
+    const element = event.currentTarget;
+    const selectionStart = element.selectionStart ?? value.length;
+    const selectionEnd = element.selectionEnd ?? value.length;
+    const nextRawValue = `${value.slice(0, selectionStart)}${normalizedPastedText}${value.slice(
+      selectionEnd
+    )}`;
+    const maskedValue = applyDateMask(nextRawValue);
+    const digitsBeforeCursor = sanitizeDateInput(
+      `${value.slice(0, selectionStart)}${normalizedPastedText}`
+    ).length;
+
+    onValueChange(maskedValue);
+
+    requestAnimationFrame(() => {
+      const currentElement = inputRef.current;
+      if (!currentElement) return;
+      const cursorPosition = resolveCursorPosition(maskedValue, digitsBeforeCursor);
+      currentElement.setSelectionRange(cursorPosition, cursorPosition);
+    });
+
+    onPaste?.(event);
   }
 
   function handleBlur(event: FocusEvent<HTMLInputElement>) {
@@ -65,6 +103,7 @@ export function MaskedDateInput({
       type="text"
       value={value}
       onChange={handleChange}
+      onPaste={handlePaste}
       onBlur={handleBlur}
       inputMode={inputMode}
       maxLength={maxLength}

@@ -237,9 +237,7 @@ export function ClassesLabPage() {
 
   function handleDialogOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
-    if (!nextOpen) {
-      setDateErrors({});
-    }
+    setDateErrors({});
   }
 
   async function handleSave() {
