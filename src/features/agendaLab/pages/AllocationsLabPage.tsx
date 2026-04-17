@@ -240,7 +240,7 @@ export function AllocationsLabPage() {
   return (
     <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
-        title="Grade Teste"
+        title="Grade Semanal Teste"
         subtitle="Ambiente de homologacao para alocacao de turmas por dia, horario, sala e profissional."
         actions={
           canWriteAllocations ? (

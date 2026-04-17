@@ -10,6 +10,7 @@ import {
   UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
   UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES,
   UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_REQUIRED_SCOPES,
   UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES,
 } from "@/permissions/permissionMap";
 import { cn } from "@/lib/utils";
@@ -19,14 +20,14 @@ const LAB_NAV_ITEMS = [
   { path: "/salas-teste", label: "Salas Teste", requiredAnyScopes: [] as string[] },
   { path: "/atividades-teste", label: "Atividades Teste", requiredAnyScopes: [] as string[] },
   { path: "/turmas-teste", label: "Turmas Teste", requiredAnyScopes: [] as string[] },
-  { path: "/grade-teste", label: "Grade Teste", requiredAnyScopes: [] as string[] },
+  { path: "/grade-teste", label: "Grade Semanal Teste", requiredAnyScopes: [] as string[] },
   { path: "/matriculas-teste", label: "Matriculas Teste", requiredAnyScopes: [] as string[] },
 ];
-const OFFICIAL_NAV_ITEMS = [
+const OFFICIAL_UNIT_NAV_ITEMS = [
   {
-    path: "/agenda",
-    label: "Agenda de Turmas",
-    requiredAnyScopes: UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
+    path: "/operacao-unidade/grade",
+    label: "Grade Semanal",
+    requiredAnyScopes: UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES,
   },
   {
     path: "/operacao-unidade/salas",
@@ -42,11 +43,6 @@ const OFFICIAL_NAV_ITEMS = [
     path: "/operacao-unidade/turmas",
     label: "Turmas",
     requiredAnyScopes: UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
-  },
-  {
-    path: "/operacao-unidade/grade",
-    label: "Grade",
-    requiredAnyScopes: UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES,
   },
   {
     path: "/operacao-unidade/matriculas",
@@ -66,24 +62,38 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
   const location = useLocation();
   const { hasAnyScope } = usePermissions();
   const isOfficialAgendaRoute = location.pathname === "/agenda" || location.pathname === "/agenda/";
-  const isOfficialContext = isOfficialAgendaRoute || location.pathname.startsWith("/operacao-unidade");
-  const navItems = (isOfficialContext ? OFFICIAL_NAV_ITEMS : LAB_NAV_ITEMS).filter(
-    (item) => item.requiredAnyScopes.length === 0 || hasAnyScope(item.requiredAnyScopes)
-  );
+  const isOfficialUnitRoute = location.pathname.startsWith("/operacao-unidade");
+  const isOfficialContext = isOfficialAgendaRoute || isOfficialUnitRoute;
+  const navItems = (
+    isOfficialUnitRoute
+      ? OFFICIAL_UNIT_NAV_ITEMS
+      : isOfficialContext
+        ? []
+        : LAB_NAV_ITEMS
+  ).filter((item) => item.requiredAnyScopes.length === 0 || hasAnyScope(item.requiredAnyScopes));
+  const canOpenOfficialAgenda = hasAnyScope(UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES);
+  const canOpenUnitManagement = hasAnyScope(UNIT_OPERATIONS_REQUIRED_SCOPES);
   const titleLabel = isOfficialContext ? title.replace(/\s*Teste\b/gi, "").trim() : title;
   const subtitleLabel = isOfficialContext
     ? subtitle
-        .replace(/ambiente de homologacao/gi, "Operacao oficial da unidade")
+        .replace(/ambiente de homologacao/gi, "Gestao da Unidade")
         .replace(/laboratorio/gi, "operacao")
     : subtitle;
-  const badgeLabel = isOfficialContext
-    ? "Operacao Oficial da Unidade"
-    : "Laboratorio da Agenda da Unidade";
+  const badgeLabel = isOfficialAgendaRoute
+    ? "Agenda Oficial"
+    : isOfficialUnitRoute
+      ? "Gestao da Unidade"
+      : "Laboratorio da Agenda da Unidade";
   const BackBadgeIcon = isOfficialContext ? Building2 : FlaskConical;
+  const showReturnAction = isOfficialAgendaRoute
+    ? canOpenUnitManagement
+    : isOfficialUnitRoute
+      ? canOpenOfficialAgenda
+      : true;
   const returnActionLabel = isOfficialAgendaRoute
-    ? "Abrir Operacao da Unidade"
-    : isOfficialContext
-      ? "Abrir Agenda oficial"
+    ? "Abrir Gestao da Unidade"
+    : isOfficialUnitRoute
+      ? "Abrir Agenda"
       : "Voltar para Agenda oficial";
   const returnActionPath = isOfficialAgendaRoute ? "/operacao-unidade" : "/agenda";
 
@@ -100,10 +110,12 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
             <p className="max-w-3xl text-sm leading-relaxed text-slate-600">{subtitleLabel}</p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="outline" size="sm" className="h-9" onClick={() => navigate(returnActionPath)}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              {returnActionLabel}
-            </Button>
+            {showReturnAction ? (
+              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate(returnActionPath)}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                {returnActionLabel}
+              </Button>
+            ) : null}
             {actions ? (
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end [&>button]:h-9">
                 {actions}
@@ -112,24 +124,26 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white/80 p-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                cn(
-                  "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition",
-                  isActive
-                    ? "border-blue-500 bg-blue-600 text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                )
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </div>
+        {navItems.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white/80 p-1">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) =>
+                  cn(
+                    "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition",
+                    isActive
+                      ? "border-blue-500 bg-blue-600 text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

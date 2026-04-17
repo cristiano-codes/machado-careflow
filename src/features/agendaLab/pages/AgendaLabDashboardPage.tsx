@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addDays, addMonths, addWeeks, endOfMonth, format, startOfDay, startOfMonth, subDays, subMonths, subWeeks } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Plus, Search, Users } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,10 +24,7 @@ import type { AgendaCalendarEvent } from "@/features/agendaLab/components/calend
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
 import { usePermissions } from "@/hooks/usePermissions";
-import {
-  UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
-  UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES,
-} from "@/permissions/permissionMap";
+import { UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import type { ClassStatus, Weekday } from "@/features/agendaLab/types";
 import {
   allocationOccursOnDate,
@@ -100,7 +97,6 @@ function getPeriodLabel(mode: CalendarViewMode, date: Date) {
 
 export function AgendaLabDashboardPage() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { toast } = useToast();
   const { hasAnyScope } = usePermissions();
   const {
@@ -133,9 +129,8 @@ export function AgendaLabDashboardPage() {
     location.pathname === "/agenda" ||
     location.pathname === "/agenda/" ||
     location.pathname.startsWith("/operacao-unidade");
-  const canViewClasses = hasAnyScope(UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES);
   const canWriteClasses = hasAnyScope(UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES);
-  const showCreateClassAction = !isOfficialContext || (canViewClasses && canWriteClasses);
+  const showCreateClassAction = !isOfficialContext && canWriteClasses;
   const canUseCreateClassAction = isWriteEnabled && showCreateClassAction;
 
   useEffect(() => {
@@ -354,10 +349,10 @@ export function AgendaLabDashboardPage() {
   return (
     <div className="space-y-3 md:space-y-4">
       <AgendaLabHeader
-        title={isOfficialContext ? "Agenda de Turmas" : "Agenda Teste"}
+        title={isOfficialContext ? "Agenda" : "Agenda Teste"}
         subtitle={
           isOfficialContext
-            ? "Agenda oficial da operacao de turmas, salas, profissionais e alocacoes da unidade."
+            ? "Visualizacao da agenda da unidade para acompanhamento de turmas, salas e profissionais."
             : "Ambiente de homologacao para validar grade operacional, turmas, salas e alocacoes."
         }
         actions={
@@ -367,11 +362,6 @@ export function AgendaLabDashboardPage() {
               disabled={!canUseCreateClassAction}
               className="h-9"
               onClick={() => {
-                if (isOfficialContext) {
-                  navigate("/operacao-unidade/turmas");
-                  return;
-                }
-
                 toast({
                   title: "Laboratorio",
                   description: "Use Turmas Teste para cadastrar uma nova turma.",
@@ -410,7 +400,7 @@ export function AgendaLabDashboardPage() {
         filters={activeFilterLabels}
         description={
           isOfficialContext
-            ? "Filtros de visualizacao para leitura operacional da agenda oficial."
+            ? "Filtros de visualizacao para acompanhamento da agenda oficial."
             : "Filtros de visualizacao para leitura operacional da agenda em homologacao."
         }
       >
@@ -538,7 +528,7 @@ export function AgendaLabDashboardPage() {
           <div>{classRows.length} turmas no recorte atual com lotacao por bloco visivel na agenda.</div>
           <div>
             {isOfficialContext
-              ? "Operacao oficial com dados sincronizados pela API da unidade."
+              ? "Consulta oficial com dados sincronizados pela API da unidade."
               : "Fluxo isolado da agenda oficial, sem impacto em producao."}
           </div>
         </CardContent>

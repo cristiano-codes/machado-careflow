@@ -91,12 +91,11 @@ export const UNIT_OPERATIONS_LANDING_PRIORITY: Array<{
   path: string;
   requiredAnyScopes: string[];
 }> = [
-  { path: "/operacao-unidade/turmas", requiredAnyScopes: UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES },
   { path: "/operacao-unidade/grade", requiredAnyScopes: UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/matriculas", requiredAnyScopes: UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES },
   { path: "/operacao-unidade/salas", requiredAnyScopes: UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES },
   { path: "/operacao-unidade/atividades", requiredAnyScopes: UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES },
-  { path: "/operacao-unidade/agenda", requiredAnyScopes: UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/turmas", requiredAnyScopes: UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES },
+  { path: "/operacao-unidade/matriculas", requiredAnyScopes: UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES },
 ];
 
 export const STANDARD_PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "access"] as const;
@@ -219,7 +218,7 @@ export const MAIN_MENU_ITEMS: SidebarItemConfig[] = [
   },
   {
     id: "operacao_unidade",
-    title: "Operacao da Unidade",
+    title: "Gestao da Unidade",
     url: "/operacao-unidade",
     icon: BookOpen,
     requiredAnyScopes: UNIT_OPERATIONS_REQUIRED_SCOPES,
