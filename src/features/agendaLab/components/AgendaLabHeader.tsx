@@ -6,11 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES,
-  UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES,
   UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
   UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES,
   UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES,
-  UNIT_OPERATIONS_REQUIRED_SCOPES,
   UNIT_OPERATIONS_ROOMS_REQUIRED_SCOPES,
 } from "@/permissions/permissionMap";
 import { cn } from "@/lib/utils";
@@ -71,8 +69,6 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
         ? []
         : LAB_NAV_ITEMS
   ).filter((item) => item.requiredAnyScopes.length === 0 || hasAnyScope(item.requiredAnyScopes));
-  const canOpenOfficialAgenda = hasAnyScope(UNIT_OPERATIONS_AGENDA_REQUIRED_SCOPES);
-  const canOpenUnitManagement = hasAnyScope(UNIT_OPERATIONS_REQUIRED_SCOPES);
   const titleLabel = isOfficialContext ? title.replace(/\s*Teste\b/gi, "").trim() : title;
   const subtitleLabel = isOfficialContext
     ? subtitle
@@ -85,17 +81,9 @@ export function AgendaLabHeader({ title, subtitle, actions }: AgendaLabHeaderPro
       ? "Gestao da Unidade"
       : "Laboratorio da Agenda da Unidade";
   const BackBadgeIcon = isOfficialContext ? Building2 : FlaskConical;
-  const showReturnAction = isOfficialAgendaRoute
-    ? canOpenUnitManagement
-    : isOfficialUnitRoute
-      ? canOpenOfficialAgenda
-      : true;
-  const returnActionLabel = isOfficialAgendaRoute
-    ? "Abrir Gestao da Unidade"
-    : isOfficialUnitRoute
-      ? "Abrir Agenda"
-      : "Voltar para Agenda oficial";
-  const returnActionPath = isOfficialAgendaRoute ? "/operacao-unidade" : "/agenda";
+  const showReturnAction = !isOfficialContext;
+  const returnActionLabel = "Voltar para Agenda oficial";
+  const returnActionPath = "/agenda";
 
   return (
     <Card className="border-slate-200 bg-gradient-to-r from-slate-50 to-white shadow-sm">
