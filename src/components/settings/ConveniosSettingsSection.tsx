@@ -85,6 +85,7 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ConvenioFormState>(EMPTY_FORM);
+  const [isFormVisible, setIsFormVisible] = useState(false);
 
   const activeCount = useMemo(
     () => convenios.filter((item) => item.status === "ativo").length,
@@ -115,6 +116,13 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
   function resetForm() {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setIsFormVisible(false);
+  }
+
+  function handleNewConvenio() {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setIsFormVisible(true);
   }
 
   function buildPayloadFromForm(): { payload?: ConvenioPayload; error?: string } {
@@ -210,6 +218,7 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
   function handleEdit(convenio: Convenio) {
     setEditingId(convenio.id);
     setForm(convenioToForm(convenio));
+    setIsFormVisible(true);
   }
 
   async function handleToggleStatus(convenio: Convenio) {
@@ -261,107 +270,114 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
               Atualizar
             </Button>
             {canEdit && (
-              <Button type="button" size="sm" onClick={resetForm} disabled={saving || Boolean(updatingId)}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleNewConvenio}
+                disabled={saving || Boolean(updatingId)}
+              >
                 Novo Convenio
               </Button>
             )}
           </div>
         </div>
 
-        <div className="rounded-md border p-3">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium">
-              {editingId ? "Editar Convenio/Projeto" : "Novo Convenio/Projeto"}
-            </h3>
-            {editingId && (
-              <Button type="button" variant="ghost" size="sm" onClick={resetForm} disabled={saving}>
-                Cancelar edicao
-              </Button>
+        {isFormVisible && (
+          <div className="rounded-md border p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-medium">
+                {editingId ? "Editar Convenio/Projeto" : "Novo Convenio/Projeto"}
+              </h3>
+              {editingId && (
+                <Button type="button" variant="ghost" size="sm" onClick={resetForm} disabled={saving}>
+                  Cancelar edicao
+                </Button>
+              )}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-1 lg:col-span-2">
+                <Label htmlFor="convenio_nome">Nome do Convenio/Projeto</Label>
+                <Input
+                  id="convenio_nome"
+                  value={form.nome}
+                  onChange={(e) => setForm((prev) => ({ ...prev, nome: e.target.value }))}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="convenio_numero">N do Projeto</Label>
+                <Input
+                  id="convenio_numero"
+                  value={form.numero_projeto}
+                  onChange={(e) => setForm((prev) => ({ ...prev, numero_projeto: e.target.value }))}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="convenio_data_inicio">Inicio do Projeto</Label>
+                <Input
+                  id="convenio_data_inicio"
+                  type="date"
+                  value={form.data_inicio}
+                  onChange={(e) => setForm((prev) => ({ ...prev, data_inicio: e.target.value }))}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="convenio_data_fim">Fim do Projeto</Label>
+                <Input
+                  id="convenio_data_fim"
+                  type="date"
+                  value={form.data_fim}
+                  onChange={(e) => setForm((prev) => ({ ...prev, data_fim: e.target.value }))}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="convenio_status">Status</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(value: ConvenioStatus) => setForm((prev) => ({ ...prev, status: value }))}
+                  disabled={!canEdit || saving}
+                >
+                  <SelectTrigger id="convenio_status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ativo">Ativo</SelectItem>
+                    <SelectItem value="inativo">Inativo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="convenio_qtd">Quantidade de atendidos</Label>
+                <Input
+                  id="convenio_qtd"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={form.quantidade_atendidos}
+                  onChange={(e) => setForm((prev) => ({ ...prev, quantidade_atendidos: e.target.value }))}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+            </div>
+
+            {canEdit && (
+              <div className="mt-3 flex justify-end">
+                <Button type="button" size="sm" onClick={() => void handleSubmit()} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? "Salvar edicao" : "Salvar convenio"}
+                </Button>
+              </div>
             )}
           </div>
-
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1 lg:col-span-2">
-              <Label htmlFor="convenio_nome">Nome do Convenio/Projeto</Label>
-              <Input
-                id="convenio_nome"
-                value={form.nome}
-                onChange={(e) => setForm((prev) => ({ ...prev, nome: e.target.value }))}
-                disabled={!canEdit || saving}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="convenio_numero">N do Projeto</Label>
-              <Input
-                id="convenio_numero"
-                value={form.numero_projeto}
-                onChange={(e) => setForm((prev) => ({ ...prev, numero_projeto: e.target.value }))}
-                disabled={!canEdit || saving}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="convenio_data_inicio">Inicio do Projeto</Label>
-              <Input
-                id="convenio_data_inicio"
-                type="date"
-                value={form.data_inicio}
-                onChange={(e) => setForm((prev) => ({ ...prev, data_inicio: e.target.value }))}
-                disabled={!canEdit || saving}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="convenio_data_fim">Fim do Projeto</Label>
-              <Input
-                id="convenio_data_fim"
-                type="date"
-                value={form.data_fim}
-                onChange={(e) => setForm((prev) => ({ ...prev, data_fim: e.target.value }))}
-                disabled={!canEdit || saving}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="convenio_status">Status</Label>
-              <Select
-                value={form.status}
-                onValueChange={(value: ConvenioStatus) => setForm((prev) => ({ ...prev, status: value }))}
-                disabled={!canEdit || saving}
-              >
-                <SelectTrigger id="convenio_status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ativo">Ativo</SelectItem>
-                  <SelectItem value="inativo">Inativo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="convenio_qtd">Quantidade de atendidos</Label>
-              <Input
-                id="convenio_qtd"
-                type="number"
-                min={0}
-                step={1}
-                value={form.quantidade_atendidos}
-                onChange={(e) => setForm((prev) => ({ ...prev, quantidade_atendidos: e.target.value }))}
-                disabled={!canEdit || saving}
-              />
-            </div>
-          </div>
-
-          {canEdit && (
-            <div className="mt-3 flex justify-end">
-              <Button type="button" size="sm" onClick={() => void handleSubmit()} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? "Salvar edicao" : "Salvar convenio"}
-              </Button>
-            </div>
-          )}
-        </div>
+        )}
 
         {loading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
