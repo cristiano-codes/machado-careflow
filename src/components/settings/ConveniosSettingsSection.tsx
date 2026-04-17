@@ -36,6 +36,8 @@ const EMPTY_FORM: ConvenioFormState = {
   status: "ativo",
   quantidade_atendidos: "0",
 };
+const MAX_CONVENIO_NOME_LENGTH = 160;
+const MAX_NUMERO_PROJETO_LENGTH = 80;
 
 function normalizeDateInput(value?: string | null): string {
   if (!value) return "";
@@ -120,6 +122,18 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
     if (!nome) {
       return { error: "Nome do convenio/projeto e obrigatorio." };
     }
+    if (nome.length > MAX_CONVENIO_NOME_LENGTH) {
+      return {
+        error: `Nome do convenio/projeto deve ter no maximo ${MAX_CONVENIO_NOME_LENGTH} caracteres.`,
+      };
+    }
+
+    const numeroProjeto = form.numero_projeto.trim();
+    if (numeroProjeto.length > MAX_NUMERO_PROJETO_LENGTH) {
+      return {
+        error: `N do projeto deve ter no maximo ${MAX_NUMERO_PROJETO_LENGTH} caracteres.`,
+      };
+    }
 
     const quantidade = Number(form.quantidade_atendidos);
     if (!Number.isInteger(quantidade) || quantidade < 0) {
@@ -135,7 +149,7 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
     return {
       payload: {
         nome,
-        numero_projeto: form.numero_projeto.trim() || null,
+        numero_projeto: numeroProjeto || null,
         data_inicio: dataInicio || null,
         data_fim: dataFim || null,
         status: form.status,
@@ -145,6 +159,7 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
   }
 
   async function handleSubmit() {
+    if (saving) return;
     const parsed = buildPayloadFromForm();
     if (!parsed.payload) {
       toast({
@@ -198,6 +213,7 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
   }
 
   async function handleToggleStatus(convenio: Convenio) {
+    if (saving || updatingId) return;
     const nextStatus: ConvenioStatus = convenio.status === "ativo" ? "inativo" : "ativo";
     try {
       setUpdatingId(convenio.id);
@@ -234,12 +250,18 @@ export default function ConveniosSettingsSection({ canEdit = true }: ConveniosSe
             {convenios.length} cadastrado(s), {activeCount} ativo(s).
           </p>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => void loadConvenios()} disabled={loading}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void loadConvenios()}
+              disabled={loading || saving || Boolean(updatingId)}
+            >
               <RefreshCcw className="mr-2 h-3.5 w-3.5" />
               Atualizar
             </Button>
             {canEdit && (
-              <Button type="button" size="sm" onClick={resetForm} disabled={saving}>
+              <Button type="button" size="sm" onClick={resetForm} disabled={saving || Boolean(updatingId)}>
                 Novo Convenio
               </Button>
             )}

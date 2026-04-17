@@ -622,6 +622,27 @@ function normalizeConvenioStatus(value, fallback = 'ativo') {
   return null;
 }
 
+function isValidIsoCalendarDate(value) {
+  const [yearRaw, monthRaw, dayRaw] = value.split('-');
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const normalized = new Date(Date.UTC(year, month - 1, day));
+  return (
+    normalized.getUTCFullYear() === year &&
+    normalized.getUTCMonth() === month - 1 &&
+    normalized.getUTCDate() === day
+  );
+}
+
 function parseConvenioDate(rawValue, fieldName) {
   if (rawValue === null || rawValue === undefined || rawValue === '') {
     return { ok: true, value: null };
@@ -632,6 +653,9 @@ function parseConvenioDate(rawValue, fieldName) {
   const value = rawValue.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return { ok: false, message: `${fieldName} deve estar no formato YYYY-MM-DD.` };
+  }
+  if (!isValidIsoCalendarDate(value)) {
+    return { ok: false, message: `${fieldName} deve ser uma data valida.` };
   }
   return { ok: true, value };
 }
@@ -675,7 +699,11 @@ function parseConvenioPayload(body, { requireName = true } = {}) {
     return { ok: false, message: 'nome deve ter no maximo 160 caracteres.' };
   }
 
-  const numeroProjeto = sanitizeConvenioOptionalText(rawBody.numero_projeto, 80);
+  const numeroProjetoText = sanitizeConvenioOptionalText(rawBody.numero_projeto, 500);
+  if (numeroProjetoText && numeroProjetoText.length > 80) {
+    return { ok: false, message: 'numero_projeto deve ter no maximo 80 caracteres.' };
+  }
+  const numeroProjeto = numeroProjetoText;
   const dataInicioValidation = parseConvenioDate(rawBody.data_inicio, 'data_inicio');
   if (!dataInicioValidation.ok) {
     return { ok: false, message: dataInicioValidation.message };
