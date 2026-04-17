@@ -24,6 +24,8 @@ import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderR
 import { WeeklyAllocationGrid } from "@/features/agendaLab/components/WeeklyAllocationGrid";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
+import { usePermissions } from "@/hooks/usePermissions";
+import { UNIT_OPERATIONS_GRADE_WRITE_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import type { Allocation, AllocationRecurrence, AllocationStatus, Weekday } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { parseTimeToMinutes, toIsoDate } from "@/features/agendaLab/utils/time";
@@ -56,6 +58,7 @@ function createDraft(classId: string, roomId: string, professionalId: string): A
 
 export function AllocationsLabPage() {
   const { toast } = useToast();
+  const { hasAnyScope } = usePermissions();
   const {
     classes,
     rooms,
@@ -70,6 +73,8 @@ export function AllocationsLabPage() {
     removeAllocation,
     isWriteEnabled,
   } = useAgendaLab();
+  const canWriteAllocations = hasAnyScope(UNIT_OPERATIONS_GRADE_WRITE_REQUIRED_SCOPES);
+  const canPersistAllocation = canWriteAllocations && isWriteEnabled;
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("allocations");
   const [roomFilter, setRoomFilter] = useState("all");
   const [professionalFilter, setProfessionalFilter] = useState("all");
@@ -238,10 +243,12 @@ export function AllocationsLabPage() {
         title="Grade Teste"
         subtitle="Ambiente de homologacao para alocacao de turmas por dia, horario, sala e profissional."
         actions={
-          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova alocacao
-          </Button>
+          canWriteAllocations ? (
+            <Button size="sm" className="h-9" disabled={!canPersistAllocation} onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nova alocacao
+            </Button>
+          ) : null
         }
       />
 
@@ -278,10 +285,27 @@ export function AllocationsLabPage() {
         <CardHeader className="pb-3"><CardTitle className="text-base">Lista de alocacoes</CardTitle><CardDescription>Conflitos de sala ou profissional ficam destacados para apoio da analise operacional.</CardDescription></CardHeader>
         <CardContent>
           <Table>
-            <TableHeader><TableRow><TableHead>Turma</TableHead><TableHead>Dia/horario</TableHead><TableHead>Sala</TableHead><TableHead>Profissional</TableHead><TableHead>Status</TableHead><TableHead>Conflito</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Turma</TableHead>
+                <TableHead>Dia/horario</TableHead>
+                <TableHead>Sala</TableHead>
+                <TableHead>Profissional</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Conflito</TableHead>
+                {canWriteAllocations ? <TableHead className="text-right">Acoes</TableHead> : null}
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Nenhuma alocacao no filtro atual.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell
+                    colSpan={canWriteAllocations ? 7 : 6}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Nenhuma alocacao no filtro atual.
+                  </TableCell>
+                </TableRow>
               ) : (
                 filtered.map((item) => {
                   const conflict = allocationConflicts.get(item.allocation.id);
@@ -293,7 +317,14 @@ export function AllocationsLabPage() {
                       <TableCell>{item.professional?.nome || "-"}</TableCell>
                       <TableCell><Badge variant={statusToBadgeVariant(item.allocation.status)}>{getAllocationStatusLabel(item.allocation.status)}</Badge></TableCell>
                       <TableCell>{conflict?.hasConflict ? <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700"><AlertTriangle className="h-3.5 w-3.5" />Conflito detectado</span> : <span className="text-xs text-muted-foreground">Sem conflito</span>}</TableCell>
-                      <TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(item.allocation)}>Editar</Button><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => void handleRemoveAllocation(item.allocation.id)}>Remover</Button></div></TableCell>
+                      {canWriteAllocations ? (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" disabled={!canPersistAllocation} onClick={() => openEdit(item.allocation)}>Editar</Button>
+                            <Button size="sm" variant="outline" disabled={!canPersistAllocation} onClick={() => void handleRemoveAllocation(item.allocation.id)}>Remover</Button>
+                          </div>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   );
                 })
@@ -322,7 +353,7 @@ export function AllocationsLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!isWriteEnabled || selectedClassMissingStartDate}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!canPersistAllocation || selectedClassMissingStartDate}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

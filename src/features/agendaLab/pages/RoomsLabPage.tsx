@@ -24,6 +24,8 @@ import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleF
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
+import { usePermissions } from "@/hooks/usePermissions";
+import { UNIT_OPERATIONS_ROOMS_WRITE_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import type { Room, RoomStatus, RoomType } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getRoomStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
@@ -61,6 +63,7 @@ function createDraft(unitId: string): RoomDraft {
 
 export function RoomsLabPage() {
   const { toast } = useToast();
+  const { hasAnyScope } = usePermissions();
   const { units, rooms, upsertRoom, isWriteEnabled, isLoading } = useAgendaLab();
   const defaultUnit = resolveDefaultUnit(units);
   const defaultUnitId = resolveDefaultUnitId(units);
@@ -74,7 +77,8 @@ export function RoomsLabPage() {
   const [draft, setDraft] = useState<RoomDraft>(() => createDraft(defaultUnitId));
   const [equipmentText, setEquipmentText] = useState("");
   const hasUnitsAvailable = units.length > 0;
-  const canPersistRoom = isWriteEnabled && hasUnitsAvailable && !isLoading;
+  const canWriteRoom = hasAnyScope(UNIT_OPERATIONS_ROOMS_WRITE_REQUIRED_SCOPES);
+  const canPersistRoom = canWriteRoom && isWriteEnabled && hasUnitsAvailable && !isLoading;
 
   useEffect(() => {
     if (!open || editing || draft.unitId || !defaultUnitId) return;
@@ -172,10 +176,12 @@ export function RoomsLabPage() {
         title="Salas Teste"
         subtitle="Ambiente de homologacao para cadastro e revisao das salas fisicas da unidade."
         actions={
-          <Button size="sm" className="h-9" disabled={!canPersistRoom} onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova sala
-          </Button>
+          canWriteRoom ? (
+            <Button size="sm" className="h-9" disabled={!canPersistRoom} onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nova sala
+            </Button>
+          ) : null
         }
       />
 
@@ -222,10 +228,27 @@ export function RoomsLabPage() {
         </CardHeader>
         <CardContent>
           <Table>
-            <TableHeader><TableRow><TableHead>Codigo</TableHead><TableHead>Sala</TableHead><TableHead>Unidade</TableHead><TableHead>Tipo</TableHead><TableHead>Capacidade</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Codigo</TableHead>
+                <TableHead>Sala</TableHead>
+                <TableHead>Unidade</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Capacidade</TableHead>
+                <TableHead>Status</TableHead>
+                {canWriteRoom ? <TableHead className="text-right">Acoes</TableHead> : null}
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Nenhuma sala encontrada.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell
+                    colSpan={canWriteRoom ? 7 : 6}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Nenhuma sala encontrada.
+                  </TableCell>
+                </TableRow>
               ) : (
                 filtered.map((room) => (
                   <TableRow key={room.id}>
@@ -235,7 +258,11 @@ export function RoomsLabPage() {
                     <TableCell>{room.tipo}</TableCell>
                     <TableCell>{room.capacidadeRecomendada}/{room.capacidadeTotal}</TableCell>
                     <TableCell><Badge variant={statusToBadgeVariant(room.status)}>{getRoomStatusLabel(room.status)}</Badge></TableCell>
-                    <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!canPersistRoom} onClick={() => openEdit(room)}>Editar</Button></TableCell>
+                    {canWriteRoom ? (
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="outline" disabled={!canPersistRoom} onClick={() => openEdit(room)}>Editar</Button>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))
               )}

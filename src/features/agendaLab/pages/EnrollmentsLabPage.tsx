@@ -24,6 +24,8 @@ import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleF
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
+import { usePermissions } from "@/hooks/usePermissions";
+import { UNIT_OPERATIONS_ENROLLMENTS_WRITE_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import type { EnrollmentPriority, EnrollmentStatus, StudentEnrollment } from "@/features/agendaLab/types";
 import { hasDuplicateActiveEnrollment } from "@/features/agendaLab/utils/conflicts";
 import { makeLabId } from "@/features/agendaLab/utils/id";
@@ -49,7 +51,10 @@ function createDraft(classId: string, studentId: string): EnrollmentDraft {
 
 export function EnrollmentsLabPage() {
   const { toast } = useToast();
+  const { hasAnyScope } = usePermissions();
   const { classes, students, enrollments, classOccupancy, enrollmentConflicts, upsertEnrollment, isWriteEnabled } = useAgendaLab();
+  const canWriteEnrollments = hasAnyScope(UNIT_OPERATIONS_ENROLLMENTS_WRITE_REQUIRED_SCOPES);
+  const canPersistEnrollment = canWriteEnrollments && isWriteEnabled;
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("enrollments");
   const [classFilter, setClassFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
@@ -149,10 +154,12 @@ export function EnrollmentsLabPage() {
         title="Matriculas Teste"
         subtitle="Ambiente de homologacao para controle do vinculo aluno-turma com prioridade e alertas."
         actions={
-          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova matricula
-          </Button>
+          canWriteEnrollments ? (
+            <Button size="sm" className="h-9" disabled={!canPersistEnrollment} onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nova matricula
+            </Button>
+          ) : null
         }
       />
 
@@ -190,10 +197,27 @@ export function EnrollmentsLabPage() {
             <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><ListChecks className="h-4 w-4" />Registros de matriculas</CardTitle><CardDescription>{filtered.length} registro(s) encontrados no filtro atual.</CardDescription></CardHeader>
             <CardContent>
               <Table>
-                <TableHeader><TableRow><TableHead>Turma</TableHead><TableHead>Aluno</TableHead><TableHead>Status</TableHead><TableHead>Entrada</TableHead><TableHead>Prioridade</TableHead><TableHead>Conflito</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Turma</TableHead>
+                    <TableHead>Aluno</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Entrada</TableHead>
+                    <TableHead>Prioridade</TableHead>
+                    <TableHead>Conflito</TableHead>
+                    {canWriteEnrollments ? <TableHead className="text-right">Acoes</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {filtered.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Nenhuma matricula encontrada.</TableCell></TableRow>
+                    <TableRow>
+                      <TableCell
+                        colSpan={canWriteEnrollments ? 7 : 6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        Nenhuma matricula encontrada.
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     filtered.map((item) => {
                       const conflict = enrollmentConflicts.get(item.id);
@@ -205,7 +229,11 @@ export function EnrollmentsLabPage() {
                           <TableCell>{item.dataEntrada || "-"}</TableCell>
                           <TableCell>{item.prioridade}</TableCell>
                           <TableCell>{conflict?.hasConflict ? <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700"><AlertTriangle className="h-3.5 w-3.5" />Conflito horario</span> : <span className="text-xs text-muted-foreground">Sem conflito</span>}</TableCell>
-                          <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(item)}>Editar</Button></TableCell>
+                          {canWriteEnrollments ? (
+                            <TableCell className="text-right">
+                              <Button size="sm" variant="outline" disabled={!canPersistEnrollment} onClick={() => openEdit(item)}>Editar</Button>
+                            </TableCell>
+                          ) : null}
                         </TableRow>
                       );
                     })
@@ -243,7 +271,7 @@ export function EnrollmentsLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!canPersistEnrollment}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

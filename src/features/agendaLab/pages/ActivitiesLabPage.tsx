@@ -24,6 +24,8 @@ import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleF
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
+import { usePermissions } from "@/hooks/usePermissions";
+import { UNIT_OPERATIONS_ACTIVITIES_WRITE_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import type { Activity, ActivityAttendanceType, ActivityCategory, ActivityMode, ActivityStatus } from "@/features/agendaLab/types";
 import { makeLabId } from "@/features/agendaLab/utils/id";
 import { getActivityStatusLabel, statusToBadgeVariant } from "@/features/agendaLab/utils/presentation";
@@ -54,6 +56,7 @@ function createDraft(): ActivityDraft {
 
 export function ActivitiesLabPage() {
   const { toast } = useToast();
+  const { hasAnyScope } = usePermissions();
   const { activities, upsertActivity, isWriteEnabled } = useAgendaLab();
   const [filtersOpen, setFiltersOpen] = useLabFiltersPanel("activities");
   const [statusFilter, setStatusFilter] = useState<ActivityStatus | "all">("all");
@@ -62,6 +65,8 @@ export function ActivitiesLabPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Activity | null>(null);
   const [draft, setDraft] = useState<ActivityDraft>(createDraft());
+  const canWriteActivity = hasAnyScope(UNIT_OPERATIONS_ACTIVITIES_WRITE_REQUIRED_SCOPES);
+  const canPersistActivity = canWriteActivity && isWriteEnabled;
 
   const filtered = useMemo(
     () =>
@@ -131,10 +136,12 @@ export function ActivitiesLabPage() {
         title="Atividades Teste"
         subtitle="Ambiente de homologacao para cadastro de atividades, oficinas e servicos."
         actions={
-          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova atividade
-          </Button>
+          canWriteActivity ? (
+            <Button size="sm" className="h-9" disabled={!canPersistActivity} onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nova atividade
+            </Button>
+          ) : null
         }
       />
 
@@ -187,10 +194,26 @@ export function ActivitiesLabPage() {
         </CardHeader>
         <CardContent>
           <Table>
-            <TableHeader><TableRow><TableHead>Atividade</TableHead><TableHead>Categoria</TableHead><TableHead>Duracao</TableHead><TableHead>Modalidade</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Atividade</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Duracao</TableHead>
+                <TableHead>Modalidade</TableHead>
+                <TableHead>Status</TableHead>
+                {canWriteActivity ? <TableHead className="text-right">Acoes</TableHead> : null}
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">Nenhuma atividade encontrada.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell
+                    colSpan={canWriteActivity ? 6 : 5}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Nenhuma atividade encontrada.
+                  </TableCell>
+                </TableRow>
               ) : (
                 filtered.map((activity) => (
                   <TableRow key={activity.id}>
@@ -199,7 +222,11 @@ export function ActivitiesLabPage() {
                     <TableCell>{activity.duracaoPadraoMinutos} min</TableCell>
                     <TableCell>{activity.modalidade}</TableCell>
                     <TableCell><Badge variant={statusToBadgeVariant(activity.status)}>{getActivityStatusLabel(activity.status)}</Badge></TableCell>
-                    <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(activity)}>Editar</Button></TableCell>
+                    {canWriteActivity ? (
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="outline" disabled={!canPersistActivity} onClick={() => openEdit(activity)}>Editar</Button>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))
               )}
@@ -230,7 +257,7 @@ export function ActivitiesLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!isWriteEnabled}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!canPersistActivity}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

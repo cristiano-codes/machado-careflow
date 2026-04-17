@@ -23,6 +23,11 @@ import { WeekCalendarView } from "@/features/agendaLab/components/WeekCalendarVi
 import type { AgendaCalendarEvent } from "@/features/agendaLab/components/calendarTypes";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
+import { usePermissions } from "@/hooks/usePermissions";
+import {
+  UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES,
+  UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES,
+} from "@/permissions/permissionMap";
 import type { ClassStatus, Weekday } from "@/features/agendaLab/types";
 import {
   allocationOccursOnDate,
@@ -97,6 +102,7 @@ export function AgendaLabDashboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { hasAnyScope } = usePermissions();
   const {
     units,
     rooms,
@@ -127,6 +133,10 @@ export function AgendaLabDashboardPage() {
     location.pathname === "/agenda" ||
     location.pathname === "/agenda/" ||
     location.pathname.startsWith("/operacao-unidade");
+  const canViewClasses = hasAnyScope(UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES);
+  const canWriteClasses = hasAnyScope(UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES);
+  const showCreateClassAction = !isOfficialContext || (canViewClasses && canWriteClasses);
+  const canUseCreateClassAction = isWriteEnabled && showCreateClassAction;
 
   useEffect(() => {
     if (calendarMode !== "month" && weekdayFilter !== "all") {
@@ -351,25 +361,27 @@ export function AgendaLabDashboardPage() {
             : "Ambiente de homologacao para validar grade operacional, turmas, salas e alocacoes."
         }
         actions={
-          <Button
-            size="sm"
-            disabled={!isWriteEnabled}
-            className="h-9"
-            onClick={() => {
-              if (isOfficialContext) {
-                navigate("/operacao-unidade/turmas");
-                return;
-              }
+          showCreateClassAction ? (
+            <Button
+              size="sm"
+              disabled={!canUseCreateClassAction}
+              className="h-9"
+              onClick={() => {
+                if (isOfficialContext) {
+                  navigate("/operacao-unidade/turmas");
+                  return;
+                }
 
-              toast({
-                title: "Laboratorio",
-                description: "Use Turmas Teste para cadastrar uma nova turma.",
-              });
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Nova turma
-          </Button>
+                toast({
+                  title: "Laboratorio",
+                  description: "Use Turmas Teste para cadastrar uma nova turma.",
+                });
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nova turma
+            </Button>
+          ) : null
         }
       />
 

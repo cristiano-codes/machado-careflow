@@ -59,6 +59,33 @@ export const UNIT_OPERATIONS_ACTIVITIES_REQUIRED_SCOPES: string[] = ["atividades
 export const UNIT_OPERATIONS_CLASSES_REQUIRED_SCOPES: string[] = ["turmas:view"];
 export const UNIT_OPERATIONS_GRADE_REQUIRED_SCOPES: string[] = ["grade:view"];
 export const UNIT_OPERATIONS_ENROLLMENTS_REQUIRED_SCOPES: string[] = ["matriculas:view"];
+export const UNIT_OPERATIONS_ROOMS_WRITE_REQUIRED_SCOPES: string[] = [
+  "salas:create",
+  "salas:edit",
+  "salas:status",
+];
+export const UNIT_OPERATIONS_ACTIVITIES_WRITE_REQUIRED_SCOPES: string[] = [
+  "atividades_unidade:create",
+  "atividades_unidade:edit",
+  "atividades_unidade:status",
+];
+export const UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES: string[] = [
+  "turmas:create",
+  "turmas:edit",
+  "turmas:status",
+];
+export const UNIT_OPERATIONS_GRADE_WRITE_REQUIRED_SCOPES: string[] = [
+  "grade:create",
+  "grade:edit",
+  "grade:allocate",
+  "grade:status",
+];
+export const UNIT_OPERATIONS_ENROLLMENTS_WRITE_REQUIRED_SCOPES: string[] = [
+  "matriculas:create",
+  "matriculas:edit",
+  "matriculas:status",
+  "matriculas:enroll",
+];
 
 export const UNIT_OPERATIONS_LANDING_PRIORITY: Array<{
   path: string;

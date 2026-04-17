@@ -25,6 +25,8 @@ import { CollapsibleFilters } from "@/features/agendaLab/components/CollapsibleF
 import { FiltersHeaderRow } from "@/features/agendaLab/components/FiltersHeaderRow";
 import { useAgendaLab } from "@/features/agendaLab/context/AgendaLabContext";
 import { useLabFiltersPanel } from "@/features/agendaLab/hooks/useLabFiltersPanel";
+import { usePermissions } from "@/hooks/usePermissions";
+import { UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES } from "@/permissions/permissionMap";
 import type { ClassStatus, GroupClass } from "@/features/agendaLab/types";
 import {
   formatFromApiDate,
@@ -150,8 +152,11 @@ function validateClassDateFields(dateFields: DateFieldState): {
 
 export function ClassesLabPage() {
   const { toast } = useToast();
+  const { hasAnyScope } = usePermissions();
   const { units, activities, professionals, classes, classOccupancy, upsertClass, isWriteEnabled } = useAgendaLab();
   const hasActivities = activities.length > 0;
+  const canWriteClasses = hasAnyScope(UNIT_OPERATIONS_CLASSES_WRITE_REQUIRED_SCOPES);
+  const canPersistClass = canWriteClasses && isWriteEnabled;
   const defaultUnit = resolveDefaultUnit(units);
   const defaultUnitId = resolveDefaultUnitId(units);
   const singleUnitUxMode = isSingleUnitUxMode(units);
@@ -297,10 +302,12 @@ export function ClassesLabPage() {
         title="Turmas Teste"
         subtitle="Ambiente de homologacao para cadastro das turmas com capacidade e equipe responsavel."
         actions={
-          <Button size="sm" className="h-9" disabled={!isWriteEnabled} onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nova turma
-          </Button>
+          canWriteClasses ? (
+            <Button size="sm" className="h-9" disabled={!canPersistClass} onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nova turma
+            </Button>
+          ) : null
         }
       />
 
@@ -354,10 +361,26 @@ export function ClassesLabPage() {
         </CardHeader>
         <CardContent>
           <Table>
-            <TableHeader><TableRow><TableHead>Turma</TableHead><TableHead>Atividade</TableHead><TableHead>Profissional principal</TableHead><TableHead>Capacidade</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Turma</TableHead>
+                <TableHead>Atividade</TableHead>
+                <TableHead>Profissional principal</TableHead>
+                <TableHead>Capacidade</TableHead>
+                <TableHead>Status</TableHead>
+                {canWriteClasses ? <TableHead className="text-right">Acoes</TableHead> : null}
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">Nenhuma turma encontrada.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell
+                    colSpan={canWriteClasses ? 6 : 5}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Nenhuma turma encontrada.
+                  </TableCell>
+                </TableRow>
               ) : (
                 filtered.map((item) => {
                   const activeCount = classOccupancy.get(item.id)?.ativos || 0;
@@ -368,7 +391,11 @@ export function ClassesLabPage() {
                       <TableCell>{professionals.find((professional) => professional.id === item.profissionalPrincipalId)?.nome || "-"}</TableCell>
                       <TableCell><p>{activeCount}/{item.capacidadeMaxima}</p><p className="text-xs text-muted-foreground">min {item.capacidadeMinima} | ideal {item.capacidadeIdeal}</p></TableCell>
                       <TableCell><Badge variant={statusToBadgeVariant(item.status)}>{getClassStatusLabel(item.status)}</Badge></TableCell>
-                      <TableCell className="text-right"><Button size="sm" variant="outline" disabled={!isWriteEnabled} onClick={() => openEdit(item)}>Editar</Button></TableCell>
+                      {canWriteClasses ? (
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="outline" disabled={!canPersistClass} onClick={() => openEdit(item)}>Editar</Button>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   );
                 })
@@ -443,7 +470,7 @@ export function ClassesLabPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!isWriteEnabled || (!editing && !hasActivities)}>Salvar</Button>
+            <Button onClick={handleSave} disabled={!canPersistClass || (!editing && !hasActivities)}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
