@@ -276,6 +276,35 @@ export type PreAppointmentTriageUpdatePayload = {
   append_note?: boolean;
 };
 
+export type ReceptionSearchScenario = "found" | "possible_duplicate" | "not_found";
+
+export type ReceptionSearchMatch = {
+  patient_id: string;
+  child_name: string;
+  responsible_name?: string | null;
+  phone?: string | null;
+  date_of_birth?: string | null;
+  status_jornada?: string | null;
+  entry_date?: string | null;
+  recent_note?: string | null;
+  match_reasons: string[];
+};
+
+export type ReceptionSearchFilters = {
+  cpf?: string | null;
+  phone?: string | null;
+  name?: string | null;
+  date_of_birth?: string | null;
+};
+
+export type ReceptionSearchResponse = {
+  scenario: ReceptionSearchScenario;
+  found: boolean;
+  exact_matches: ReceptionSearchMatch[];
+  similar_matches: ReceptionSearchMatch[];
+  message?: string;
+};
+
 export type SocialTriageStatus =
   | "novo"
   | "sem_contato"
@@ -514,6 +543,21 @@ type PreAppointmentQueueRecordLike = PreAppointmentRecordLike & {
   converted_by?: string | number | null;
 };
 
+type ReceptionSearchMatchLike = {
+  patient_id?: string | number | null;
+  child_name?: string | null;
+  responsible_name?: string | null;
+  phone?: string | null;
+  date_of_birth?: string | null;
+  status_jornada?: string | null;
+  statusJornada?: string | null;
+  journey_status?: string | null;
+  journeyStatus?: string | null;
+  entry_date?: string | null;
+  recent_note?: string | null;
+  match_reasons?: unknown;
+};
+
 type SocialTriageQueueItemLike = {
   patient_id?: string | number | null;
   child_name?: string | null;
@@ -708,6 +752,33 @@ function normalizePreAppointmentQueueRecord(raw: unknown): PreAppointmentQueueRe
       payload.converted_by === null || payload.converted_by === undefined
         ? null
         : String(payload.converted_by),
+  };
+}
+
+function normalizeReceptionSearchMatch(raw: unknown): ReceptionSearchMatch | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const payload = raw as ReceptionSearchMatchLike;
+  if (payload.patient_id === undefined || payload.patient_id === null) {
+    return null;
+  }
+
+  const reasons = Array.isArray(payload.match_reasons)
+    ? payload.match_reasons
+        .map((value) => coerceStatusText(value))
+        .filter((value): value is string => Boolean(value))
+    : [];
+
+  return {
+    patient_id: String(payload.patient_id),
+    child_name: coerceStatusText(payload.child_name) ?? "",
+    responsible_name: coerceStatusText(payload.responsible_name),
+    phone: coerceStatusText(payload.phone),
+    date_of_birth: coerceStatusText(payload.date_of_birth),
+    status_jornada: resolveOfficialJourneyStatus(payload),
+    entry_date: coerceStatusText(payload.entry_date),
+    recent_note: coerceStatusText(payload.recent_note),
+    match_reasons: reasons,
   };
 }
 
@@ -2966,6 +3037,61 @@ class ApiService {
   }
 
   // ---------- PRE-AGENDAMENTOS ----------
+  async searchReceptionCases(
+    filters?: ReceptionSearchFilters
+  ): Promise<ReceptionSearchResponse> {
+    const params = new URLSearchParams();
+
+    if (this.toNonEmptyString(filters?.cpf)) {
+      params.set("cpf", String(filters?.cpf).trim());
+    }
+    if (this.toNonEmptyString(filters?.phone)) {
+      params.set("phone", String(filters?.phone).trim());
+    }
+    if (this.toNonEmptyString(filters?.name)) {
+      params.set("name", String(filters?.name).trim());
+    }
+    if (this.toNonEmptyString(filters?.date_of_birth)) {
+      params.set("date_of_birth", String(filters?.date_of_birth).trim());
+    }
+
+    const query = params.toString().length > 0 ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_BASE_URL}/fila-espera/reception-search${query}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao consultar cadastro existente na recepcao"
+    );
+
+    const exactMatchesRaw = Array.isArray(raw.exact_matches) ? raw.exact_matches : [];
+    const similarMatchesRaw = Array.isArray(raw.similar_matches) ? raw.similar_matches : [];
+    const exactMatches = exactMatchesRaw
+      .map((item) => normalizeReceptionSearchMatch(item))
+      .filter((item): item is ReceptionSearchMatch => item !== null);
+    const similarMatches = similarMatchesRaw
+      .map((item) => normalizeReceptionSearchMatch(item))
+      .filter((item): item is ReceptionSearchMatch => item !== null);
+
+    const scenarioRaw =
+      typeof raw.scenario === "string" ? raw.scenario.trim().toLowerCase() : "not_found";
+    const scenario: ReceptionSearchScenario =
+      scenarioRaw === "found" ||
+      scenarioRaw === "possible_duplicate" ||
+      scenarioRaw === "not_found"
+        ? scenarioRaw
+        : "not_found";
+
+    return {
+      scenario,
+      found: raw.found === true || exactMatches.length > 0,
+      exact_matches: exactMatches,
+      similar_matches: similarMatches,
+      message: typeof raw.message === "string" ? raw.message : undefined,
+    };
+  }
+
   async getEligiblePreAppointments(
     filters?: PreAppointmentSearchFilters
   ): Promise<PreAppointmentImportRecord[]> {

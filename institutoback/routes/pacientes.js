@@ -245,9 +245,12 @@ async function findDuplicatePatient({
   client,
   cpf,
   name,
+  phone,
   dateOfBirth,
   excludePatientId = null,
 }) {
+  const phoneDigits = normalizeDigits(phone);
+
   if (cpf) {
     const duplicateByCpf = await client.query(
       `
@@ -268,6 +271,25 @@ async function findDuplicatePatient({
   }
 
   if (name && dateOfBirth) {
+    if (phoneDigits) {
+      const duplicateByNameDobPhone = await client.query(
+        `
+          SELECT id::text AS id
+          FROM public.patients
+          WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+            AND date_of_birth = $2
+            AND regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $3
+            AND ($4::text IS NULL OR id::text <> $4::text)
+          LIMIT 1
+        `,
+        [name, dateOfBirth, phoneDigits, excludePatientId]
+      );
+
+      if (duplicateByNameDobPhone.rows.length > 0) {
+        return duplicateByNameDobPhone.rows[0].id;
+      }
+    }
+
     const duplicateByNameAndDob = await client.query(
       `
         SELECT id::text AS id
@@ -849,6 +871,7 @@ router.post('/', async (req, res) => {
       client,
       cpf: payload.cpf,
       name: payload.name,
+      phone: payload.phone,
       dateOfBirth: payload.date_of_birth,
     });
 
@@ -1121,6 +1144,7 @@ router.put('/:id', async (req, res) => {
       client,
       cpf: payload.cpf,
       name: payload.name,
+      phone: payload.phone,
       dateOfBirth: payload.date_of_birth,
       excludePatientId: patientId,
     });

@@ -122,6 +122,379 @@ function normalizePhoneDigits(value) {
   return normalizeText(value).replace(/\D/g, '');
 }
 
+function normalizeNameForMatching(value) {
+  const text = normalizeText(value);
+  if (!text) return '';
+
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenizeName(value) {
+  const normalized = normalizeNameForMatching(value);
+  if (!normalized) return [];
+  return normalized.split(' ').filter((token) => token.length > 1);
+}
+
+function hasStrongPhoneSimilarity(queryPhoneDigits, candidatePhoneDigits) {
+  if (!queryPhoneDigits || !candidatePhoneDigits) return false;
+  if (queryPhoneDigits === candidatePhoneDigits) return true;
+
+  const queryTail =
+    queryPhoneDigits.length > 8 ? queryPhoneDigits.slice(-8) : queryPhoneDigits;
+  const candidateTail =
+    candidatePhoneDigits.length > 8 ? candidatePhoneDigits.slice(-8) : candidatePhoneDigits;
+
+  return queryTail.length >= 8 && candidateTail.length >= 8 && queryTail === candidateTail;
+}
+
+function hasStrongNameSimilarity(queryName, candidateName) {
+  if (!queryName || !candidateName) return false;
+  if (queryName === candidateName) return true;
+
+  if (
+    (queryName.includes(candidateName) || candidateName.includes(queryName)) &&
+    Math.min(queryName.length, candidateName.length) >= 4
+  ) {
+    return true;
+  }
+
+  const queryTokens = tokenizeName(queryName);
+  const candidateTokens = tokenizeName(candidateName);
+  if (queryTokens.length < 2 || candidateTokens.length < 2) {
+    return false;
+  }
+
+  const candidateTokenSet = new Set(candidateTokens);
+  const overlapCount = queryTokens.filter((token) => candidateTokenSet.has(token)).length;
+  const minTokenCount = Math.min(queryTokens.length, candidateTokens.length);
+
+  return overlapCount >= 2 && overlapCount / minTokenCount >= 0.6;
+}
+
+function sanitizeRecentNote(...values) {
+  for (const value of values) {
+    const normalized = normalizeOptionalText(value);
+    if (!normalized) continue;
+    const oneLine = normalized.replace(/\s+/g, ' ').trim();
+    if (!oneLine) continue;
+    return oneLine.length > 260 ? `${oneLine.slice(0, 257)}...` : oneLine;
+  }
+  return null;
+}
+
+function mapReceptionCandidate(row) {
+  const patientId = normalizeOptionalText(row?.patient_id);
+  if (!patientId) return null;
+
+  const childName = normalizeOptionalText(row?.child_name) || '-';
+  const dateOfBirth = normalizeDate(row?.date_of_birth);
+  const patientPhone = normalizeOptionalText(row?.patient_phone);
+  const originPhone = normalizeOptionalText(row?.origin_phone);
+  const resolvedPhone = patientPhone || originPhone || null;
+
+  return {
+    patient_id: patientId,
+    child_name: childName,
+    responsible_name: normalizeOptionalText(row?.responsible_name),
+    phone: resolvedPhone,
+    date_of_birth: dateOfBirth,
+    status_jornada: normalizeOptionalText(row?.status_jornada) || 'em_fila_espera',
+    entry_date: row?.entry_date || row?.patient_created_at || null,
+    recent_note: sanitizeRecentNote(row?.patient_notes, row?.origin_notes),
+    patient_phone_digits: normalizePhoneDigits(resolvedPhone),
+    patient_name_normalized: normalizeNameForMatching(childName),
+    patient_cpf_digits: normalizeCpf(row?.patient_cpf),
+  };
+}
+
+function removeInternalReceptionFields(candidate) {
+  if (!candidate) return null;
+  const {
+    patient_phone_digits,
+    patient_name_normalized,
+    patient_cpf_digits,
+    ...publicFields
+  } = candidate;
+  return publicFields;
+}
+
+function dedupeReceptionCandidates(candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+
+  const byPatientId = new Map();
+  for (const candidate of candidates) {
+    const patientId = normalizeOptionalText(candidate?.patient_id);
+    if (!patientId || byPatientId.has(patientId)) continue;
+    byPatientId.set(patientId, candidate);
+  }
+
+  return Array.from(byPatientId.values());
+}
+
+async function queryReceptionCandidatesByCpf(client, cpfDigits) {
+  if (!cpfDigits) return [];
+
+  const result = await client.query(
+    `
+      SELECT
+        p.id::text AS patient_id,
+        p.name AS child_name,
+        p.cpf AS patient_cpf,
+        p.phone AS patient_phone,
+        p.date_of_birth,
+        p.status_jornada,
+        p.notes AS patient_notes,
+        p.created_at AS patient_created_at,
+        origin.responsible_name,
+        origin.phone AS origin_phone,
+        origin.notes AS origin_notes,
+        origin.created_at AS origin_created_at,
+        COALESCE(origin.created_at, p.created_at) AS entry_date
+      FROM public.patients p
+      LEFT JOIN LATERAL (
+        SELECT
+          pa.responsible_name,
+          pa.phone,
+          pa.notes,
+          pa.created_at
+        FROM public.fila_de_espera pa
+        WHERE pa.converted_to_patient_id::text = p.id::text
+        ORDER BY pa.created_at DESC NULLS LAST
+        LIMIT 1
+      ) origin ON TRUE
+      WHERE regexp_replace(COALESCE(p.cpf, ''), '\\D', '', 'g') = $1
+      ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
+      LIMIT 10
+    `,
+    [cpfDigits]
+  );
+
+  return result.rows
+    .map(mapReceptionCandidate)
+    .filter((candidate) => candidate !== null);
+}
+
+async function queryReceptionCandidatesByDateOfBirth(client, dateOfBirth, limit = 60) {
+  if (!dateOfBirth) return [];
+
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 120)) : 60;
+  const result = await client.query(
+    `
+      SELECT
+        p.id::text AS patient_id,
+        p.name AS child_name,
+        p.cpf AS patient_cpf,
+        p.phone AS patient_phone,
+        p.date_of_birth,
+        p.status_jornada,
+        p.notes AS patient_notes,
+        p.created_at AS patient_created_at,
+        origin.responsible_name,
+        origin.phone AS origin_phone,
+        origin.notes AS origin_notes,
+        origin.created_at AS origin_created_at,
+        COALESCE(origin.created_at, p.created_at) AS entry_date
+      FROM public.patients p
+      LEFT JOIN LATERAL (
+        SELECT
+          pa.responsible_name,
+          pa.phone,
+          pa.notes,
+          pa.created_at
+        FROM public.fila_de_espera pa
+        WHERE pa.converted_to_patient_id::text = p.id::text
+        ORDER BY pa.created_at DESC NULLS LAST
+        LIMIT 1
+      ) origin ON TRUE
+      WHERE p.date_of_birth = $1
+      ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
+      LIMIT $2
+    `,
+    [dateOfBirth, safeLimit]
+  );
+
+  return result.rows
+    .map(mapReceptionCandidate)
+    .filter((candidate) => candidate !== null);
+}
+
+function classifyReceptionCandidate({
+  candidate,
+  cpfDigits,
+  queryNameNormalized,
+  phoneDigits,
+  dateOfBirth,
+}) {
+  const matchReasons = [];
+  let exact = false;
+
+  if (cpfDigits && candidate.patient_cpf_digits && cpfDigits === candidate.patient_cpf_digits) {
+    matchReasons.push('cpf');
+    exact = true;
+  }
+
+  const candidateDob = normalizeDate(candidate.date_of_birth);
+  const sameDob = Boolean(dateOfBirth && candidateDob && dateOfBirth === candidateDob);
+
+  if (sameDob && queryNameNormalized && candidate.patient_name_normalized) {
+    if (queryNameNormalized === candidate.patient_name_normalized) {
+      matchReasons.push('nome_data_nascimento');
+      exact = true;
+    }
+  }
+
+  if (sameDob && phoneDigits && candidate.patient_phone_digits) {
+    if (phoneDigits === candidate.patient_phone_digits) {
+      matchReasons.push('telefone_data_nascimento');
+      exact = true;
+    }
+  }
+
+  let similar = false;
+  if (!exact && sameDob) {
+    const phoneSimilar = hasStrongPhoneSimilarity(phoneDigits, candidate.patient_phone_digits);
+    const nameSimilar = hasStrongNameSimilarity(
+      queryNameNormalized,
+      candidate.patient_name_normalized
+    );
+
+    if (phoneSimilar) {
+      matchReasons.push('telefone_semelhante_data_nascimento');
+      similar = true;
+    }
+
+    if (nameSimilar) {
+      matchReasons.push('nome_semelhante_data_nascimento');
+      similar = true;
+    }
+  }
+
+  return {
+    exact,
+    similar,
+    match_reasons: matchReasons,
+  };
+}
+
+function resolveReceptionScenario({ exactMatches, similarMatches }) {
+  const exactCount = Array.isArray(exactMatches) ? exactMatches.length : 0;
+  const similarCount = Array.isArray(similarMatches) ? similarMatches.length : 0;
+
+  if (exactCount === 1 && similarCount === 0) {
+    return 'found';
+  }
+
+  if (exactCount > 1 || similarCount > 0) {
+    return 'possible_duplicate';
+  }
+
+  return 'not_found';
+}
+
+function appendTraceNotes(baseNote, lines) {
+  const normalizedBase = normalizeOptionalText(baseNote);
+  const normalizedLines = Array.isArray(lines)
+    ? lines.map((line) => normalizeOptionalText(line)).filter((line) => Boolean(line))
+    : [];
+
+  if (normalizedLines.length === 0) {
+    return normalizedBase;
+  }
+
+  if (!normalizedBase) {
+    return normalizedLines.join('\n');
+  }
+
+  return `${normalizedBase}\n${normalizedLines.join('\n')}`;
+}
+
+function normalizeStringArray(values) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+  const normalized = [];
+
+  for (const raw of values) {
+    const value = normalizeOptionalText(raw);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    normalized.push(value);
+  }
+
+  return normalized;
+}
+
+async function detectReceptionDuplicateRisk({
+  client,
+  cpf,
+  name,
+  phone,
+  dateOfBirth,
+  candidateLimit = 60,
+}) {
+  const cpfDigits = normalizeCpf(cpf);
+  const queryNameNormalized = normalizeNameForMatching(name);
+  const phoneDigits = normalizePhoneDigits(phone);
+  const normalizedDateOfBirth = normalizeDate(dateOfBirth);
+
+  const exactMatches = [];
+  const similarMatches = [];
+  const orderedCandidates = [];
+
+  const cpfCandidates = await queryReceptionCandidatesByCpf(client, cpfDigits);
+  const dobCandidates = await queryReceptionCandidatesByDateOfBirth(
+    client,
+    normalizedDateOfBirth,
+    candidateLimit
+  );
+
+  const allCandidates = dedupeReceptionCandidates([...cpfCandidates, ...dobCandidates]);
+  for (const candidate of allCandidates) {
+    const match = classifyReceptionCandidate({
+      candidate,
+      cpfDigits,
+      queryNameNormalized,
+      phoneDigits,
+      dateOfBirth: normalizedDateOfBirth,
+    });
+
+    if (!match.exact && !match.similar) {
+      continue;
+    }
+
+    const payload = {
+      ...removeInternalReceptionFields(candidate),
+      match_reasons: match.match_reasons,
+    };
+    orderedCandidates.push(payload);
+
+    if (match.exact) {
+      exactMatches.push(payload);
+      continue;
+    }
+
+    similarMatches.push(payload);
+  }
+
+  return {
+    scenario: resolveReceptionScenario({ exactMatches, similarMatches }),
+    exact_matches: exactMatches,
+    similar_matches: similarMatches,
+    candidates: orderedCandidates,
+    query: {
+      cpf: cpfDigits || null,
+      name: queryNameNormalized || null,
+      phone: phoneDigits || null,
+      date_of_birth: normalizedDateOfBirth,
+    },
+  };
+}
+
 function normalizeQueueSort(value) {
   const normalized = normalizeOptionalText(value);
   if (!normalized) return 'oldest';
@@ -226,6 +599,8 @@ router.post('/', async (req, res) => {
   const dateOfBirth = normalizeDate(req.body?.date_of_birth);
   const services = normalizeServices(req.body?.services);
   const consentLgpd = normalizeBoolean(req.body?.consent_lgpd, false);
+  const duplicateJustification = normalizeOptionalText(req.body?.duplicate_justification);
+  const duplicateCandidateIds = normalizeStringArray(req.body?.duplicate_candidate_ids);
 
   if (!name || !phone || !email) {
     return res.status(400).json({
@@ -252,6 +627,43 @@ router.post('/', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    const duplicateRisk = await detectReceptionDuplicateRisk({
+      client,
+      cpf,
+      name,
+      phone,
+      dateOfBirth,
+      candidateLimit: 80,
+    });
+
+    if (duplicateRisk.exact_matches.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        code: 'duplicate_patient_detected',
+        existing_patient_id: duplicateRisk.exact_matches[0]?.patient_id || null,
+        scenario: duplicateRisk.scenario,
+        exact_matches: duplicateRisk.exact_matches,
+        similar_matches: duplicateRisk.similar_matches,
+        message:
+          'Cadastro principal ja existente para os dados informados. Abra o cadastro existente em vez de criar um novo.',
+      });
+    }
+
+    if (duplicateRisk.similar_matches.length > 0 && !duplicateJustification) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        code: 'possible_duplicate_detected',
+        requires_justification: true,
+        scenario: duplicateRisk.scenario,
+        exact_matches: duplicateRisk.exact_matches,
+        similar_matches: duplicateRisk.similar_matches,
+        message:
+          'Possivel duplicidade detectada. Informe uma justificativa explicita para criar novo cadastro.',
+      });
+    }
+
     const activeServicesResult = await client.query(
       `
         SELECT id::text AS id, name
@@ -275,6 +687,23 @@ router.post('/', async (req, res) => {
     }
 
     const legacyServiceType = activeServicesResult.rows[0]?.name || 'servico_institucional';
+    const traceLines = [];
+
+    if (duplicateRisk.similar_matches.length > 0 && duplicateJustification) {
+      traceLines.push(
+        `[Rastreabilidade recepcao] Justificativa para novo cadastro com similares: ${duplicateJustification}`
+      );
+    }
+
+    if (duplicateCandidateIds.length > 0) {
+      traceLines.push(
+        `[Rastreabilidade recepcao] Candidatos avaliados na consulta: ${duplicateCandidateIds
+          .slice(0, 20)
+          .join(', ')}`
+      );
+    }
+
+    const notesForInsert = appendTraceNotes(normalizeOptionalText(req.body?.notes), traceLines);
 
     const insertResult = await client.query(
       `
@@ -330,7 +759,7 @@ router.post('/', async (req, res) => {
         consentLgpd,
         'pre_agendamento_online',
         PRE_APPOINTMENT_OPERATIONAL_STATUS,
-        normalizeOptionalText(req.body?.notes),
+        notesForInsert,
         legacyServiceType,
       ]
     );
@@ -344,6 +773,12 @@ router.post('/', async (req, res) => {
       pre_appointment_id: filaEsperaId,
       status_operacional: PRE_APPOINTMENT_OPERATIONAL_STATUS,
       status_contexto: PRE_APPOINTMENT_STATUS_NOTE,
+      duplicate_review: {
+        scenario: duplicateRisk.scenario,
+        exact_matches: duplicateRisk.exact_matches,
+        similar_matches: duplicateRisk.similar_matches,
+        justification_recorded: Boolean(duplicateJustification),
+      },
       message: 'Solicitacao enviada com sucesso.',
     });
   } catch (error) {
@@ -881,6 +1316,66 @@ router.patch('/:id/triage', authMiddleware, authorizeWaitingListLookup, async (r
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao atualizar triagem da fila de espera:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// GET - Consulta interna da recepcao com classificacao anti-duplicidade
+router.get('/reception-search', authMiddleware, authorizeWaitingListLookup, async (req, res) => {
+  const phone = normalizeText(req.query?.phone);
+  const name = normalizeText(req.query?.name);
+  const cpf = normalizeCpf(req.query?.cpf);
+  const dateOfBirth = normalizeDate(req.query?.date_of_birth);
+
+  const hasPhoneFlow = Boolean(normalizePhoneDigits(phone) && dateOfBirth);
+  const hasNameFlow = Boolean(normalizeNameForMatching(name) && dateOfBirth);
+  const hasCpfFlow = Boolean(cpf);
+
+  if (!hasCpfFlow && !hasPhoneFlow && !hasNameFlow) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'Informe CPF ou telefone + data de nascimento ou nome + data de nascimento para consultar.',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    const duplicateRisk = await detectReceptionDuplicateRisk({
+      client,
+      cpf,
+      name,
+      phone,
+      dateOfBirth,
+      candidateLimit: 80,
+    });
+
+    return res.json({
+      success: true,
+      scenario: duplicateRisk.scenario,
+      exact_matches: duplicateRisk.exact_matches,
+      similar_matches: duplicateRisk.similar_matches,
+      found: duplicateRisk.exact_matches.length > 0,
+      query: {
+        cpf: duplicateRisk.query.cpf,
+        phone: duplicateRisk.query.phone,
+        name: duplicateRisk.query.name,
+        date_of_birth: duplicateRisk.query.date_of_birth,
+      },
+      message:
+        duplicateRisk.scenario === 'found'
+          ? 'Cadastro localizado com correspondencia exata.'
+          : duplicateRisk.scenario === 'possible_duplicate'
+            ? 'Possivel duplicidade detectada. Revise antes de criar novo cadastro.'
+            : 'Nenhum cadastro correspondente encontrado.',
+    });
+  } catch (error) {
+    console.error('Erro ao consultar cadastro na recepcao:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
