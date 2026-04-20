@@ -1,0 +1,340 @@
+{
+  "runId": "20260420235716",
+  "startedAt": "2026-04-20T23:57:16.239Z",
+  "apiBaseUrl": "http://localhost:3000/api",
+  "scenarios": [
+    {
+      "key": "S1",
+      "description": "consulta da recepcao encontra cadastro existente",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "scenario": "found",
+        "exact_match_count": 1
+      }
+    },
+    {
+      "key": "S2",
+      "description": "perfil sem acesso nao pode consultar a recepcao",
+      "passed": true,
+      "details": {
+        "status": 403,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "key": "S3",
+      "description": "cenario similar exige justificativa",
+      "passed": true,
+      "details": {
+        "status": 409,
+        "code": "possible_duplicate_detected",
+        "requires_justification": true,
+        "similar_match_count": 3
+      }
+    },
+    {
+      "key": "S4",
+      "description": "perfil sem override recebe 403 duplicate_override_forbidden",
+      "passed": true,
+      "details": {
+        "status": 403,
+        "code": "duplicate_override_forbidden",
+        "requires_override_permission": true
+      }
+    },
+    {
+      "key": "S5",
+      "description": "override autorizado grava duplicate_override_authorized",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "override_authorized": true,
+        "fila_espera_id": "51244511-3397-4162-85b4-c4cfc05b2856"
+      }
+    },
+    {
+      "key": "S6",
+      "description": "duplicidade exata retorna 409",
+      "passed": true,
+      "details": {
+        "status": 409,
+        "code": "duplicate_patient_detected"
+      }
+    },
+    {
+      "key": "S7",
+      "description": "novo cadastro sem duplicidade segue normal",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "scenario": "not_found",
+        "fila_espera_id": "9b03df21-d532-433f-bd11-20cd87fa93f7"
+      }
+    },
+    {
+      "key": "S8",
+      "description": "edicao basica simples continua funcionando",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "changed_simple_fields": [
+          "phone"
+        ]
+      }
+    },
+    {
+      "key": "S9",
+      "description": "campo sensivel bloqueado sem permissao forte",
+      "passed": true,
+      "details": {
+        "status": 403,
+        "code": "sensitive_field_edit_forbidden",
+        "message": "Seu perfil pode editar apenas campos operacionais simples. Campos sensiveis exigem permissao de edicao da recepcao."
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "key": "backend_health",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "payload": {
+          "message": "API Instituto Lauir funcionando!",
+          "timestamp": "2026-04-20T23:57:16.252Z",
+          "environment": "development",
+          "frontendBuildAvailable": true
+        }
+      }
+    },
+    {
+      "key": "admin_login",
+      "passed": true,
+      "details": {
+        "username": "admin",
+        "userId": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409"
+      }
+    },
+    {
+      "key": "logins_perfis_reais",
+      "passed": true,
+      "details": {
+        "recepcao_view_user_id": "dff7201a-c985-423c-a88e-8d2b927c9fcb",
+        "recepcao_strong_user_id": "c639c001-2591-4401-8b7d-1a2d0eb66635",
+        "sem_acesso_user_id": "51f9c8ee-6d45-4a33-a347-c3357f99f7d3"
+      }
+    },
+    {
+      "key": "status_jornada_pos_edicao_simples",
+      "passed": true,
+      "details": {
+        "before": "em_fila_espera",
+        "after": "em_fila_espera"
+      }
+    },
+    {
+      "key": "status_jornada_pos_edicao_sensivel_bloqueada",
+      "passed": true,
+      "details": {
+        "before": "em_fila_espera",
+        "after": "em_fila_espera"
+      }
+    },
+    {
+      "key": "auditoria_create_waiting_list",
+      "passed": true,
+      "details": [
+        "create_waiting_list"
+      ]
+    },
+    {
+      "key": "auditoria_edit_basic_patient_data",
+      "passed": true,
+      "details": [
+        "edit_basic_patient_data"
+      ]
+    },
+    {
+      "key": "auditoria_duplicate_override_authorized",
+      "passed": true,
+      "details": [
+        "duplicate_override_authorized"
+      ]
+    }
+  ],
+  "http": [
+    {
+      "method": "GET",
+      "route": "/health",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/services?active=true&pre_appointment=true&context=fila-espera",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/reception-search?phone=11920235716&date_of_birth=2018-09-15",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/reception-search?phone=11920235716&date_of_birth=2018-09-15",
+      "status": 403,
+      "ok": false
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 409,
+      "ok": false
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 403,
+      "ok": false
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 409,
+      "ok": false
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/5d77aab6-8b4b-49f8-ba26-4baea1487bb5",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/fila-espera/reception/patient/5d77aab6-8b4b-49f8-ba26-4baea1487bb5/basic",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/5d77aab6-8b4b-49f8-ba26-4baea1487bb5",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "PATCH",
+      "route": "/fila-espera/reception/patient/5d77aab6-8b4b-49f8-ba26-4baea1487bb5/basic",
+      "status": 403,
+      "ok": false
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/5d77aab6-8b4b-49f8-ba26-4baea1487bb5",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/51244511-3397-4162-85b4-c4cfc05b2856",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/9b03df21-d532-433f-bd11-20cd87fa93f7",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/5d77aab6-8b4b-49f8-ba26-4baea1487bb5",
+      "status": 200,
+      "ok": true
+    }
+  ],
+  "generatedData": {
+    "users": {
+      "recepcao_view": {
+        "id": "dff7201a-c985-423c-a88e-8d2b927c9fcb",
+        "username": "hml_recepcao_view_final_20260420235716",
+        "name": "Homolog Recepcao View 20260420235716",
+        "email": "hml.recepcao.view.final.20260420235716@example.com",
+        "password": "Homolog@123",
+        "grant": [
+          "view",
+          "create"
+        ]
+      },
+      "recepcao_strong": {
+        "id": "c639c001-2591-4401-8b7d-1a2d0eb66635",
+        "username": "hml_recepcao_strong_final_20260420235716",
+        "name": "Homolog Recepcao Strong 20260420235716",
+        "email": "hml.recepcao.strong.final.20260420235716@example.com",
+        "password": "Homolog@123",
+        "grant": [
+          "view",
+          "create",
+          "edit"
+        ]
+      },
+      "sem_acesso": {
+        "id": "51f9c8ee-6d45-4a33-a347-c3357f99f7d3",
+        "username": "hml_sem_acesso_final_20260420235716",
+        "name": "Homolog Sem Acesso 20260420235716",
+        "email": "hml.sem.acesso.final.20260420235716@example.com",
+        "password": "Homolog@123",
+        "grant": []
+      }
+    },
+    "patientSeed": {
+      "basePatientId": "5d77aab6-8b4b-49f8-ba26-4baea1487bb5",
+      "similarPatientId": "d1d7812a-7ef4-4e14-a1e7-b33e27f98833",
+      "baseDob": "2018-09-15",
+      "similarDob": "2017-08-10",
+      "baseCpf": "70420235716",
+      "similarCpf": "80420235716",
+      "basePhone": "11920235716",
+      "similarPhone": "11820235716"
+    }
+  },
+  "auditEvidence": {
+    "patient_id_for_basic_edit": "5d77aab6-8b4b-49f8-ba26-4baea1487bb5",
+    "fila_id_for_create_no_duplicate": "9b03df21-d532-433f-bd11-20cd87fa93f7",
+    "fila_id_for_override": "51244511-3397-4162-85b4-c4cfc05b2856",
+    "events": {
+      "create_waiting_list": [
+        "create_waiting_list"
+      ],
+      "edit_basic_patient_data": [
+        "edit_basic_patient_data"
+      ],
+      "duplicate_override_authorized": [
+        "duplicate_override_authorized"
+      ]
+    }
+  },
+  "status": "passed",
+  "error": null,
+  "summary": {
+    "scenarios_total": 9,
+    "scenarios_failed": 0,
+    "diagnostics_total": 8,
+    "diagnostics_failed": 0
+  },
+  "finishedAt": "2026-04-20T23:57:16.759Z"
+}
