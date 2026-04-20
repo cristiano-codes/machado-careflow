@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-04-20T23:32:28.714Z",
+  "relations": [
+    {
+      "name": "fila_de_espera",
+      "kind": "v"
+    },
+    {
+      "name": "pre_appointments",
+      "kind": "r"
+    }
+  ],
+  "sample_date_of_birth": {
+    "value": "2018-09-15T03:00:00.000Z",
+    "js_type": "object",
+    "is_date_object": true
+  }
+}

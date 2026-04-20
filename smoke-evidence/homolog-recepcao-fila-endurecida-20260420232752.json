@@ -1,0 +1,484 @@
+{
+  "runId": "20260420232752",
+  "startedAt": "2026-04-20T23:27:52.483Z",
+  "apiBaseUrl": "http://localhost:3000/api",
+  "scenarios": [
+    {
+      "key": "S1",
+      "description": "recepcao pode consultar",
+      "passed": false,
+      "details": {
+        "status": 200,
+        "scenario": "not_found",
+        "exact_match_count": 0,
+        "message": "Nenhum cadastro correspondente encontrado."
+      }
+    },
+    {
+      "key": "S2",
+      "description": "perfil sem acesso nao pode consultar",
+      "passed": true,
+      "details": {
+        "status": 403,
+        "code": null,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    {
+      "key": "S3",
+      "description": "recepcao pode editar campo simples",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "changed_simple_fields": [
+          "phone"
+        ],
+        "changed_sensitive_fields": [],
+        "message": null
+      }
+    },
+    {
+      "key": "S4",
+      "description": "campo sensivel bloqueado sem permissao forte",
+      "passed": true,
+      "details": {
+        "status": 403,
+        "code": "sensitive_field_edit_forbidden",
+        "message": "Seu perfil pode editar apenas campos operacionais simples. Campos sensiveis exigem permissao de edicao da recepcao."
+      }
+    },
+    {
+      "key": "S5",
+      "description": "campo sensivel permitido com permissao forte",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "changed_simple_fields": [],
+        "changed_sensitive_fields": [
+          "name"
+        ],
+        "returned_name": "Homolog Crianca Base 202604202327528186 Forte"
+      }
+    },
+    {
+      "key": "S6",
+      "description": "duplicidade similar exige justificativa",
+      "passed": false,
+      "details": {
+        "status": 200,
+        "code": null,
+        "requires_justification": false,
+        "similar_match_count": 0,
+        "message": "Solicitacao enviada com sucesso."
+      }
+    },
+    {
+      "key": "S7",
+      "description": "perfil sem permissao de override recebe 403 duplicate_override_forbidden",
+      "passed": false,
+      "details": {
+        "status": 200,
+        "code": null,
+        "requires_override_permission": false,
+        "message": "Solicitacao enviada com sucesso."
+      }
+    },
+    {
+      "key": "S8",
+      "description": "cadastro novo sem duplicidade entra em em_fila_espera",
+      "passed": true,
+      "details": {
+        "fila_espera_status": 200,
+        "fila_espera_id": "070b172b-a488-4ac3-b58f-725f81f594c3",
+        "paciente_status": 201,
+        "paciente_id": "a1dd6d76-f27b-43fa-8760-df87dde3dd70",
+        "status_jornada": "em_fila_espera"
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "key": "backend_health",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "payload": {
+          "message": "API Instituto Lauir funcionando!",
+          "timestamp": "2026-04-20T23:27:52.497Z",
+          "environment": "development",
+          "frontendBuildAvailable": true
+        }
+      }
+    },
+    {
+      "key": "admin_login",
+      "passed": true,
+      "details": {
+        "username": "admin",
+        "userId": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409"
+      }
+    },
+    {
+      "key": "catalogo_modulo_recepcao",
+      "passed": true,
+      "details": {
+        "selected_module": "pre_agendamento",
+        "has_fila_espera": false,
+        "has_pre_agendamento": true
+      }
+    },
+    {
+      "key": "logins_perfis_teste",
+      "passed": true,
+      "details": {
+        "recepcao_view_user_id": "24021791-deb3-4ca4-86dd-41a2dcabfc58",
+        "recepcao_strong_user_id": "c459af4d-f1ed-4df3-966e-0beffc040bb5",
+        "sem_acesso_user_id": "2800ae2e-d582-4d4f-8393-786e95411232"
+      }
+    },
+    {
+      "key": "status_jornada_pos_edicao_simples",
+      "passed": true,
+      "details": {
+        "before": "em_fila_espera",
+        "after": "em_fila_espera"
+      }
+    },
+    {
+      "key": "status_jornada_pos_edicao_sensivel",
+      "passed": true,
+      "details": {
+        "before": "em_fila_espera",
+        "after": "em_fila_espera"
+      }
+    },
+    {
+      "key": "override_autorizado_perfil_forte",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "fila_espera_id": "2a8dd240-bad6-4da1-b361-cf880b52c5eb",
+        "message": "Solicitacao enviada com sucesso."
+      }
+    },
+    {
+      "key": "override_autorizado_tem_id",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "fila_espera_id": "2a8dd240-bad6-4da1-b361-cf880b52c5eb",
+        "payload_message": "Solicitacao enviada com sucesso."
+      }
+    },
+    {
+      "key": "payload_minimo_consulta_cpf",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "exact_match_count": 1,
+        "message": "Cadastro localizado com correspondencia exata."
+      }
+    },
+    {
+      "key": "payload_invalido_consulta_sem_data_nascimento",
+      "passed": true,
+      "details": {
+        "status": 400,
+        "message": "Informe CPF ou telefone + data de nascimento ou nome + data de nascimento para consultar."
+      }
+    },
+    {
+      "key": "auditoria_recepcao_consistente",
+      "passed": true,
+      "details": {
+        "total_audit_entries": 4,
+        "consistent_entries": 4
+      }
+    }
+  ],
+  "auditEvidence": {
+    "patient_id_for_basic_edit": "75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+    "fila_id_for_create_no_duplicate": "070b172b-a488-4ac3-b58f-725f81f594c3",
+    "fila_id_for_override": "2a8dd240-bad6-4da1-b361-cf880b52c5eb",
+    "examples": {
+      "edit_basic_patient_data": [
+        {
+          "line": "[AUDIT_RECEPCAO] {\"ns\":\"recepcao.fila_espera\",\"event\":\"edit_basic_patient_data\",\"at\":\"2026-04-20T23:27:52.704Z\",\"actor\":{\"actor_id\":\"24021791-deb3-4ca4-86dd-41a2dcabfc58\",\"actor_name\":\"hml_recepcao_view_202604202327528186\",\"actor_role\":\"Usuario\"},\"details\":{\"patient_id\":\"75e44780-d5fa-4038-bc4f-0d73b8f6e2b4\",\"changed_simple_fields\":[\"phone\"],\"changed_sensitive_fields\":[]}}",
+          "parsed": {
+            "ns": "recepcao.fila_espera",
+            "event": "edit_basic_patient_data",
+            "at": "2026-04-20T23:27:52.704Z",
+            "actor": {
+              "actor_id": "24021791-deb3-4ca4-86dd-41a2dcabfc58",
+              "actor_name": "hml_recepcao_view_202604202327528186",
+              "actor_role": "Usuario"
+            },
+            "details": {
+              "patient_id": "75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+              "changed_simple_fields": [
+                "phone"
+              ],
+              "changed_sensitive_fields": []
+            }
+          }
+        },
+        {
+          "line": "[AUDIT_RECEPCAO] {\"ns\":\"recepcao.fila_espera\",\"event\":\"edit_basic_patient_data\",\"at\":\"2026-04-20T23:27:52.722Z\",\"actor\":{\"actor_id\":\"c459af4d-f1ed-4df3-966e-0beffc040bb5\",\"actor_name\":\"hml_recepcao_strong_202604202327528186\",\"actor_role\":\"Usuario\"},\"details\":{\"patient_id\":\"75e44780-d5fa-4038-bc4f-0d73b8f6e2b4\",\"changed_simple_fields\":[],\"changed_sensitive_fields\":[\"name\"]}}",
+          "parsed": {
+            "ns": "recepcao.fila_espera",
+            "event": "edit_basic_patient_data",
+            "at": "2026-04-20T23:27:52.722Z",
+            "actor": {
+              "actor_id": "c459af4d-f1ed-4df3-966e-0beffc040bb5",
+              "actor_name": "hml_recepcao_strong_202604202327528186",
+              "actor_role": "Usuario"
+            },
+            "details": {
+              "patient_id": "75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+              "changed_simple_fields": [],
+              "changed_sensitive_fields": [
+                "name"
+              ]
+            }
+          }
+        }
+      ],
+      "create_waiting_list": [
+        {
+          "line": "[AUDIT_RECEPCAO] {\"ns\":\"recepcao.fila_espera\",\"event\":\"create_waiting_list\",\"at\":\"2026-04-20T23:27:52.751Z\",\"actor\":{\"actor_id\":\"24021791-deb3-4ca4-86dd-41a2dcabfc58\",\"actor_name\":\"hml_recepcao_view_202604202327528186\",\"actor_role\":\"Usuario\"},\"details\":{\"child_name\":\"Homolog Crianca Nova 202604202327528186\",\"date_of_birth\":\"2019-11-19\",\"service_count\":1}}",
+          "parsed": {
+            "ns": "recepcao.fila_espera",
+            "event": "create_waiting_list",
+            "at": "2026-04-20T23:27:52.751Z",
+            "actor": {
+              "actor_id": "24021791-deb3-4ca4-86dd-41a2dcabfc58",
+              "actor_name": "hml_recepcao_view_202604202327528186",
+              "actor_role": "Usuario"
+            },
+            "details": {
+              "child_name": "Homolog Crianca Nova 202604202327528186",
+              "date_of_birth": "2019-11-19",
+              "service_count": 1
+            }
+          }
+        }
+      ],
+      "duplicate_override_authorized": [
+        {
+          "line": "[AUDIT_RECEPCAO] {\"ns\":\"recepcao.fila_espera\",\"event\":\"create_waiting_list\",\"at\":\"2026-04-20T23:27:52.744Z\",\"actor\":{\"actor_id\":\"c459af4d-f1ed-4df3-966e-0beffc040bb5\",\"actor_name\":\"hml_recepcao_strong_202604202327528186\",\"actor_role\":\"Usuario\"},\"details\":{\"child_name\":\"Homolog Crianca Similar 202604202327528186\",\"date_of_birth\":\"2018-09-15\",\"service_count\":1}}",
+          "parsed": {
+            "ns": "recepcao.fila_espera",
+            "event": "create_waiting_list",
+            "at": "2026-04-20T23:27:52.744Z",
+            "actor": {
+              "actor_id": "c459af4d-f1ed-4df3-966e-0beffc040bb5",
+              "actor_name": "hml_recepcao_strong_202604202327528186",
+              "actor_role": "Usuario"
+            },
+            "details": {
+              "child_name": "Homolog Crianca Similar 202604202327528186",
+              "date_of_birth": "2018-09-15",
+              "service_count": 1
+            }
+          }
+        }
+      ]
+    }
+  },
+  "http": [
+    {
+      "method": "GET",
+      "route": "/health",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 22
+    },
+    {
+      "method": "POST",
+      "route": "/auth/login",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 51
+    },
+    {
+      "method": "POST",
+      "route": "/auth/login",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 7
+    },
+    {
+      "method": "POST",
+      "route": "/auth/login",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 6
+    },
+    {
+      "method": "POST",
+      "route": "/auth/login",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 6
+    },
+    {
+      "method": "GET",
+      "route": "/services?active=true&pre_appointment=true&context=fila-espera",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 23
+    },
+    {
+      "method": "POST",
+      "route": "/pacientes",
+      "status": 201,
+      "ok": true,
+      "elapsedMs": 27
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/reception-search?phone=11925958186&date_of_birth=2018-09-15",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 7
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/reception-search?phone=11925958186&date_of_birth=2018-09-15",
+      "status": 403,
+      "ok": false,
+      "elapsedMs": 3
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 3
+    },
+    {
+      "method": "PATCH",
+      "route": "/fila-espera/reception/patient/75e44780-d5fa-4038-bc4f-0d73b8f6e2b4/basic",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 8
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 3
+    },
+    {
+      "method": "PATCH",
+      "route": "/fila-espera/reception/patient/75e44780-d5fa-4038-bc4f-0d73b8f6e2b4/basic",
+      "status": 403,
+      "ok": false,
+      "elapsedMs": 4
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 3
+    },
+    {
+      "method": "PATCH",
+      "route": "/fila-espera/reception/patient/75e44780-d5fa-4038-bc4f-0d73b8f6e2b4/basic",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 6
+    },
+    {
+      "method": "GET",
+      "route": "/pacientes/75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 3
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 6
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 7
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 6
+    },
+    {
+      "method": "POST",
+      "route": "/fila-espera",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 5
+    },
+    {
+      "method": "POST",
+      "route": "/pacientes",
+      "status": 201,
+      "ok": true,
+      "elapsedMs": 9
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/reception-search?cpf=76725958186",
+      "status": 200,
+      "ok": true,
+      "elapsedMs": 4
+    },
+    {
+      "method": "GET",
+      "route": "/fila-espera/reception-search?phone=11925958186",
+      "status": 400,
+      "ok": false,
+      "elapsedMs": 3
+    }
+  ],
+  "generatedData": {
+    "users": {
+      "recepcao_view": {
+        "id": "24021791-deb3-4ca4-86dd-41a2dcabfc58",
+        "username": "hml_recepcao_view_202604202327528186"
+      },
+      "recepcao_strong": {
+        "id": "c459af4d-f1ed-4df3-966e-0beffc040bb5",
+        "username": "hml_recepcao_strong_202604202327528186"
+      },
+      "sem_acesso": {
+        "id": "2800ae2e-d582-4d4f-8393-786e95411232",
+        "username": "hml_sem_acesso_202604202327528186"
+      }
+    },
+    "patientSeed": {
+      "baseDob": "2018-09-15",
+      "baseCpf": "76725958186",
+      "basePhone": "11925958186",
+      "similarPhone": "5511925958186",
+      "cleanPhone": "11805958186"
+    },
+    "basePatientId": "75e44780-d5fa-4038-bc4f-0d73b8f6e2b4"
+  },
+  "status": "failed",
+  "error": null,
+  "finishedAt": "2026-04-20T23:27:52.801Z",
+  "summary": {
+    "scenarios_total": 8,
+    "scenarios_failed": 3,
+    "diagnostics_total": 11,
+    "diagnostics_failed": 0
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-04-20T23:31:33.905Z",
+  "request": {
+    "route": "/fila-espera",
+    "body": {
+      "cpf": "76725958186",
+      "date_of_birth": "2018-09-15"
+    }
+  },
+  "response": {
+    "status": 409,
+    "code": "duplicate_patient_detected",
+    "message": "Cadastro principal ja existente para os dados informados. Abra o cadastro existente em vez de criar um novo.",
+    "existing_patient_id": "75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+    "scenario": "found"
+  }
+}
