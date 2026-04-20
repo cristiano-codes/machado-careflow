@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/pg');
 const authMiddleware = require('../middleware/auth');
-const { authorizeAny } = require('../middleware/authorize');
+const { authorizeAny, normalizeRole, normalizePermissionEntries } = require('../middleware/authorize');
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -13,6 +13,18 @@ const authorizeWaitingListLookup = authorizeAny([
   ['pre_cadastro', 'view'],
   ['fila_espera', 'view'],
   ['pre_agendamento', 'view'],
+]);
+const authorizeReceptionLookup = authorizeAny([
+  ['fila_espera', 'view'],
+  ['pre_agendamento', 'view'],
+]);
+const authorizeReceptionOperate = authorizeAny([
+  ['fila_espera', 'view'],
+  ['fila_espera', 'create'],
+  ['fila_espera', 'edit'],
+  ['pre_agendamento', 'view'],
+  ['pre_agendamento', 'create'],
+  ['pre_agendamento', 'edit'],
 ]);
 const PRE_APPOINTMENT_STATUS_NORMALIZATION_SQL = `
   CASE
@@ -429,6 +441,75 @@ function normalizeStringArray(values) {
   return normalized;
 }
 
+function resolveActorContext(req) {
+  const user = req?.user || {};
+  return {
+    actor_id: normalizeOptionalText(user?.id),
+    actor_name:
+      normalizeOptionalText(user?.name) ||
+      normalizeOptionalText(user?.username) ||
+      normalizeOptionalText(user?.email),
+    actor_role: normalizeOptionalText(user?.role),
+  };
+}
+
+function hasAnyReceptionScope(req, targets) {
+  const normalizedRole = normalizeRole(req?.user?.role);
+  if (normalizedRole === 'ADM') {
+    return true;
+  }
+
+  const scopes = normalizePermissionEntries(req?.user?.permissions);
+  if (!Array.isArray(scopes) || scopes.length === 0) {
+    return false;
+  }
+
+  for (const target of targets || []) {
+    const moduleNames = Array.isArray(target?.modules) ? target.modules : [];
+    const actions = Array.isArray(target?.actions) ? target.actions : [];
+
+    if (moduleNames.length === 0 || actions.length === 0) {
+      continue;
+    }
+
+    const allowed = scopes.some((scope) => {
+      const matchesModule = moduleNames.includes(scope.module) || scope.module === '*';
+      const matchesAction = actions.includes(scope.action) || scope.action === '*';
+      return matchesModule && matchesAction;
+    });
+
+    if (allowed) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function canAuthorizeDuplicateOverride(req) {
+  return hasAnyReceptionScope(req, [
+    { modules: ['fila_espera', 'pre_agendamento'], actions: ['edit', 'delete', 'access'] },
+  ]);
+}
+
+function canEditSensitiveReceptionData(req) {
+  return hasAnyReceptionScope(req, [
+    { modules: ['fila_espera', 'pre_agendamento'], actions: ['edit', 'delete', 'access'] },
+  ]);
+}
+
+function buildReceptionAuditEntry({ req, event, details = {} }) {
+  const actor = resolveActorContext(req);
+  const envelope = {
+    ns: 'recepcao.fila_espera',
+    event: normalizeOptionalText(event) || 'evento_nao_informado',
+    at: new Date().toISOString(),
+    actor,
+    details: details && typeof details === 'object' ? details : {},
+  };
+  return `[AUDIT_RECEPCAO] ${JSON.stringify(envelope)}`;
+}
+
 async function detectReceptionDuplicateRisk({
   client,
   cpf,
@@ -591,7 +672,7 @@ function mapPreAppointmentRow(row) {
 }
 
 // POST - Criar registro na fila de espera institucional
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, authorizeReceptionOperate, async (req, res) => {
   const name = normalizeText(req.body?.name);
   const phone = normalizeText(req.body?.phone);
   const email = normalizeText(req.body?.email);
@@ -664,6 +745,22 @@ router.post('/', async (req, res) => {
       });
     }
 
+    if (duplicateRisk.similar_matches.length > 0 && duplicateJustification) {
+      if (!canAuthorizeDuplicateOverride(req)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          success: false,
+          code: 'duplicate_override_forbidden',
+          scenario: duplicateRisk.scenario,
+          exact_matches: duplicateRisk.exact_matches,
+          similar_matches: duplicateRisk.similar_matches,
+          requires_override_permission: true,
+          message:
+            'Seu perfil nao possui permissao para autorizar excecao de duplicidade. Solicite um usuario autorizado.',
+        });
+      }
+    }
+
     const activeServicesResult = await client.query(
       `
         SELECT id::text AS id, name
@@ -688,18 +785,40 @@ router.post('/', async (req, res) => {
 
     const legacyServiceType = activeServicesResult.rows[0]?.name || 'servico_institucional';
     const traceLines = [];
+    const createAuditLine = buildReceptionAuditEntry({
+      req,
+      event: 'create_waiting_list',
+      details: {
+        child_name: name,
+        date_of_birth: dateOfBirth,
+        service_count: services.length,
+      },
+    });
+    traceLines.push(createAuditLine);
 
     if (duplicateRisk.similar_matches.length > 0 && duplicateJustification) {
       traceLines.push(
-        `[Rastreabilidade recepcao] Justificativa para novo cadastro com similares: ${duplicateJustification}`
+        buildReceptionAuditEntry({
+          req,
+          event: 'duplicate_override_authorized',
+          details: {
+            justification: duplicateJustification,
+            candidate_ids: duplicateCandidateIds.slice(0, 20),
+            similar_match_count: duplicateRisk.similar_matches.length,
+          },
+        })
       );
     }
 
     if (duplicateCandidateIds.length > 0) {
       traceLines.push(
-        `[Rastreabilidade recepcao] Candidatos avaliados na consulta: ${duplicateCandidateIds
-          .slice(0, 20)
-          .join(', ')}`
+        buildReceptionAuditEntry({
+          req,
+          event: 'duplicate_candidates_reviewed',
+          details: {
+            candidate_ids: duplicateCandidateIds.slice(0, 20),
+          },
+        })
       );
     }
 
@@ -778,6 +897,10 @@ router.post('/', async (req, res) => {
         exact_matches: duplicateRisk.exact_matches,
         similar_matches: duplicateRisk.similar_matches,
         justification_recorded: Boolean(duplicateJustification),
+        override_authorized: Boolean(
+          duplicateRisk.similar_matches.length > 0 && duplicateJustification
+        ),
+        actor: resolveActorContext(req),
       },
       message: 'Solicitacao enviada com sucesso.',
     });
@@ -1326,7 +1449,7 @@ router.patch('/:id/triage', authMiddleware, authorizeWaitingListLookup, async (r
 });
 
 // GET - Consulta interna da recepcao com classificacao anti-duplicidade
-router.get('/reception-search', authMiddleware, authorizeWaitingListLookup, async (req, res) => {
+router.get('/reception-search', authMiddleware, authorizeReceptionLookup, async (req, res) => {
   const phone = normalizeText(req.query?.phone);
   const name = normalizeText(req.query?.name);
   const cpf = normalizeCpf(req.query?.cpf);
@@ -1361,12 +1484,6 @@ router.get('/reception-search', authMiddleware, authorizeWaitingListLookup, asyn
       exact_matches: duplicateRisk.exact_matches,
       similar_matches: duplicateRisk.similar_matches,
       found: duplicateRisk.exact_matches.length > 0,
-      query: {
-        cpf: duplicateRisk.query.cpf,
-        phone: duplicateRisk.query.phone,
-        name: duplicateRisk.query.name,
-        date_of_birth: duplicateRisk.query.date_of_birth,
-      },
       message:
         duplicateRisk.scenario === 'found'
           ? 'Cadastro localizado com correspondencia exata.'
@@ -1384,6 +1501,294 @@ router.get('/reception-search', authMiddleware, authorizeWaitingListLookup, asyn
     client.release();
   }
 });
+
+// PATCH - Edicao de dados basicos do cadastro principal no fluxo da recepcao
+router.patch(
+  '/reception/patient/:patientId/basic',
+  authMiddleware,
+  authorizeReceptionOperate,
+  async (req, res) => {
+    const patientId = normalizeText(req.params?.patientId);
+    if (!UUID_REGEX.test(patientId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do cadastro principal invalido.',
+      });
+    }
+
+    const body = req.body || {};
+    const hasOwn = (key) => Object.prototype.hasOwnProperty.call(body, key);
+
+    const nameProvided = hasOwn('name');
+    const cpfProvided = hasOwn('cpf');
+    const dateProvided = hasOwn('date_of_birth');
+    const phoneProvided = hasOwn('phone');
+    const emailProvided = hasOwn('email');
+    const notesProvided = hasOwn('notes');
+    const responsibleProvided = hasOwn('responsible_name');
+    const initialNoteProvided = hasOwn('initial_note');
+
+    if (
+      !nameProvided &&
+      !cpfProvided &&
+      !dateProvided &&
+      !phoneProvided &&
+      !emailProvided &&
+      !notesProvided &&
+      !responsibleProvided &&
+      !initialNoteProvided
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Informe ao menos um campo para atualizar.',
+      });
+    }
+
+    const nextName = nameProvided ? normalizeText(body.name) : null;
+    if (nameProvided && !nextName) {
+      return res.status(400).json({
+        success: false,
+        message: 'name e obrigatorio quando informado.',
+      });
+    }
+
+    const nextCpfDigits = cpfProvided ? normalizeCpf(body.cpf) : null;
+    const nextDateOfBirth = dateProvided ? normalizeDate(body.date_of_birth) : null;
+    if (dateProvided && !nextDateOfBirth) {
+      return res.status(400).json({
+        success: false,
+        message: 'date_of_birth invalida. Use YYYY-MM-DD.',
+      });
+    }
+
+    const nextPhone = phoneProvided ? normalizeOptionalText(body.phone) : null;
+    const nextEmail = emailProvided ? normalizeOptionalText(body.email) : null;
+    const nextNotesInput = notesProvided ? normalizeOptionalText(body.notes) : null;
+    const nextResponsibleName = responsibleProvided
+      ? normalizeOptionalText(body.responsible_name)
+      : null;
+    const nextInitialNote = initialNoteProvided ? normalizeOptionalText(body.initial_note) : null;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const patientResult = await client.query(
+        `
+          SELECT
+            p.id::text AS id,
+            p.name,
+            p.cpf,
+            p.date_of_birth,
+            p.phone,
+            p.email,
+            p.notes,
+            p.status,
+            p.status_jornada
+          FROM public.patients p
+          WHERE p.id::text = $1
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [patientId]
+      );
+
+      if (patientResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          message: 'Cadastro principal nao encontrado.',
+        });
+      }
+
+      const currentPatient = patientResult.rows[0];
+      const changedSimpleFields = [];
+      const changedSensitiveFields = [];
+
+      const currentCpfDigits = normalizeCpf(currentPatient.cpf);
+      const currentDateOfBirth = normalizeDate(currentPatient.date_of_birth);
+      const currentPhone = normalizeOptionalText(currentPatient.phone);
+      const currentEmail = normalizeOptionalText(currentPatient.email);
+
+      if (nameProvided && nextName !== normalizeText(currentPatient.name)) {
+        changedSensitiveFields.push('name');
+      }
+      if (cpfProvided && nextCpfDigits !== currentCpfDigits) {
+        changedSensitiveFields.push('cpf');
+      }
+      if (dateProvided && nextDateOfBirth !== currentDateOfBirth) {
+        changedSensitiveFields.push('date_of_birth');
+      }
+      if (phoneProvided && nextPhone !== currentPhone) {
+        changedSimpleFields.push('phone');
+      }
+      if (emailProvided && nextEmail !== currentEmail) {
+        changedSimpleFields.push('email');
+      }
+      if (notesProvided) {
+        changedSimpleFields.push('notes');
+      }
+      if (responsibleProvided) {
+        changedSimpleFields.push('responsible_name');
+      }
+      if (initialNoteProvided) {
+        changedSimpleFields.push('initial_note');
+      }
+
+      if (changedSimpleFields.length === 0 && changedSensitiveFields.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: 'Nenhuma alteracao detectada para salvar.',
+        });
+      }
+
+      if (changedSensitiveFields.length > 0 && !canEditSensitiveReceptionData(req)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          success: false,
+          code: 'sensitive_field_edit_forbidden',
+          message:
+            'Seu perfil pode editar apenas campos operacionais simples. Campos sensiveis exigem permissao de edicao da recepcao.',
+        });
+      }
+
+      const auditLine = buildReceptionAuditEntry({
+        req,
+        event: 'edit_basic_patient_data',
+        details: {
+          patient_id: patientId,
+          changed_simple_fields: changedSimpleFields,
+          changed_sensitive_fields: changedSensitiveFields,
+        },
+      });
+
+      const nextPatientNotesBase = notesProvided
+        ? nextNotesInput
+        : normalizeOptionalText(currentPatient.notes);
+      const nextPatientNotes = appendTraceNotes(nextPatientNotesBase, [auditLine]);
+
+      await client.query(
+        `
+          UPDATE public.patients
+          SET
+            name = $1,
+            cpf = $2,
+            date_of_birth = $3,
+            phone = $4,
+            email = $5,
+            notes = $6,
+            updated_at = NOW()
+          WHERE id::text = $7
+        `,
+        [
+          nameProvided ? nextName : currentPatient.name,
+          cpfProvided ? nextCpfDigits : currentPatient.cpf,
+          dateProvided ? nextDateOfBirth : currentPatient.date_of_birth,
+          phoneProvided ? nextPhone : currentPatient.phone,
+          emailProvided ? nextEmail : currentPatient.email,
+          nextPatientNotes,
+          patientId,
+        ]
+      );
+
+      if (responsibleProvided || initialNoteProvided) {
+        const linkedPreAppointmentResult = await client.query(
+          `
+            SELECT
+              pa.id::text AS id,
+              pa.responsible_name,
+              pa.notes
+            FROM public.fila_de_espera pa
+            WHERE pa.converted_to_patient_id::text = $1
+            ORDER BY pa.created_at DESC NULLS LAST
+            LIMIT 1
+            FOR UPDATE
+          `,
+          [patientId]
+        );
+
+        if (linkedPreAppointmentResult.rows.length > 0) {
+          const currentPreAppointment = linkedPreAppointmentResult.rows[0];
+          const nextPreAppointmentNotesBase = initialNoteProvided
+            ? nextInitialNote
+            : normalizeOptionalText(currentPreAppointment.notes);
+          const preAppointmentAuditLine = buildReceptionAuditEntry({
+            req,
+            event: 'edit_basic_pre_appointment_data',
+            details: {
+              patient_id: patientId,
+              pre_appointment_id: currentPreAppointment.id,
+              changed_fields: [
+                ...(responsibleProvided ? ['responsible_name'] : []),
+                ...(initialNoteProvided ? ['initial_note'] : []),
+              ],
+            },
+          });
+          const nextPreAppointmentNotes = appendTraceNotes(nextPreAppointmentNotesBase, [
+            preAppointmentAuditLine,
+          ]);
+
+          await client.query(
+            `
+              UPDATE public.fila_de_espera
+              SET
+                responsible_name = $1,
+                notes = $2,
+                updated_at = NOW()
+              WHERE id::text = $3
+            `,
+            [
+              responsibleProvided ? nextResponsibleName : currentPreAppointment.responsible_name,
+              nextPreAppointmentNotes,
+              currentPreAppointment.id,
+            ]
+          );
+        }
+      }
+
+      const updatedPatientResult = await client.query(
+        `
+          SELECT
+            p.id::text AS id,
+            p.name AS nome,
+            p.cpf,
+            p.phone AS telefone,
+            p.email,
+            p.date_of_birth AS "dataNascimento",
+            p.status,
+            p.status_jornada,
+            p.notes
+          FROM public.patients p
+          WHERE p.id::text = $1
+          LIMIT 1
+        `,
+        [patientId]
+      );
+
+      await client.query('COMMIT');
+
+      return res.json({
+        success: true,
+        paciente: updatedPatientResult.rows[0],
+        audit: {
+          actor: resolveActorContext(req),
+          changed_simple_fields: changedSimpleFields,
+          changed_sensitive_fields: changedSensitiveFields,
+        },
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Erro ao editar dados basicos na recepcao:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor',
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
 
 // GET - Consulta publica da solicitacao
 router.get('/public-search', async (req, res) => {

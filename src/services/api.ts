@@ -305,6 +305,55 @@ export type ReceptionSearchResponse = {
   message?: string;
 };
 
+export type WaitingListCreatePayload = {
+  name: string;
+  date_of_birth?: string | null;
+  cpf?: string | null;
+  sex?: string | null;
+  has_report?: boolean;
+  cid?: string | null;
+  services: string[];
+  urgency?: "normal" | "prioritario";
+  responsible_name?: string | null;
+  phone: string;
+  whatsapp?: boolean;
+  email: string;
+  how_heard?: string | null;
+  how_heard_other?: string | null;
+  referred_by?: string | null;
+  referred_by_other?: string | null;
+  consent_whatsapp?: boolean;
+  consent_lgpd: boolean;
+  notes?: string | null;
+  duplicate_justification?: string | null;
+  duplicate_candidate_ids?: string[];
+};
+
+export type WaitingListCreateResponse = {
+  success: boolean;
+  message?: string;
+  code?: string;
+  pre_appointment_id?: string | null;
+  fila_espera_id?: string | null;
+  existing_patient_id?: string | null;
+  exact_matches?: ReceptionSearchMatch[];
+  similar_matches?: ReceptionSearchMatch[];
+  requires_justification?: boolean;
+  requires_override_permission?: boolean;
+  duplicate_review?: Record<string, unknown> | null;
+};
+
+export type ReceptionBasicEditPayload = {
+  name?: string | null;
+  cpf?: string | null;
+  date_of_birth?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  notes?: string | null;
+  responsible_name?: string | null;
+  initial_note?: string | null;
+};
+
 export type SocialTriageStatus =
   | "novo"
   | "sem_contato"
@@ -1084,8 +1133,11 @@ export type DashboardStatsResponse = {
 
 export type ApiRequestError = Error & {
   status?: number;
+  code?: string | null;
   existing_patient_id?: string | null;
   requires_link_confirmation?: boolean;
+  requires_justification?: boolean;
+  requires_override_permission?: boolean;
   source_pre_appointment_id?: string | null;
   payload?: Record<string, unknown>;
 };
@@ -3090,6 +3142,98 @@ class ApiService {
       similar_matches: similarMatches,
       message: typeof raw.message === "string" ? raw.message : undefined,
     };
+  }
+
+  async createWaitingListEntry(
+    payload: WaitingListCreatePayload
+  ): Promise<WaitingListCreateResponse> {
+    const response = await fetch(`${API_BASE_URL}/fila-espera`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+
+    const rawPayload = await this.parseJsonSafe(response);
+    const data =
+      rawPayload && typeof rawPayload === "object"
+        ? (rawPayload as Record<string, unknown>)
+        : {};
+
+    const exactMatchesRaw = Array.isArray(data.exact_matches) ? data.exact_matches : [];
+    const similarMatchesRaw = Array.isArray(data.similar_matches) ? data.similar_matches : [];
+    const exactMatches = exactMatchesRaw
+      .map((item) => normalizeReceptionSearchMatch(item))
+      .filter((item): item is ReceptionSearchMatch => item !== null);
+    const similarMatches = similarMatchesRaw
+      .map((item) => normalizeReceptionSearchMatch(item))
+      .filter((item): item is ReceptionSearchMatch => item !== null);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.notifyUnauthorized();
+      }
+
+      const error = new Error(
+        this.resolveHttpErrorMessage(response, data, "Falha ao criar registro na fila de espera")
+      ) as ApiRequestError;
+      error.status = response.status;
+      error.code = typeof data.code === "string" ? data.code : null;
+      error.existing_patient_id =
+        typeof data.existing_patient_id === "string" ? data.existing_patient_id : null;
+      error.requires_justification = data.requires_justification === true;
+      error.requires_override_permission = data.requires_override_permission === true;
+      error.payload = {
+        ...data,
+        exact_matches: exactMatches,
+        similar_matches: similarMatches,
+      };
+      throw error;
+    }
+
+    return {
+      success: data.success === true,
+      message: typeof data.message === "string" ? data.message : undefined,
+      code: typeof data.code === "string" ? data.code : undefined,
+      pre_appointment_id:
+        typeof data.pre_appointment_id === "string" ? data.pre_appointment_id : null,
+      fila_espera_id: typeof data.fila_espera_id === "string" ? data.fila_espera_id : null,
+      existing_patient_id:
+        typeof data.existing_patient_id === "string" ? data.existing_patient_id : null,
+      requires_justification: data.requires_justification === true,
+      requires_override_permission: data.requires_override_permission === true,
+      exact_matches: exactMatches,
+      similar_matches: similarMatches,
+      duplicate_review:
+        data.duplicate_review && typeof data.duplicate_review === "object"
+          ? (data.duplicate_review as Record<string, unknown>)
+          : null,
+    };
+  }
+
+  async updateReceptionPatientBasic(
+    patientId: string,
+    payload: ReceptionBasicEditPayload
+  ): Promise<PatientDetailDTO | null> {
+    const normalizedPatientId = this.toNonEmptyString(patientId);
+    if (!normalizedPatientId) return null;
+
+    const response = await fetch(
+      `${API_BASE_URL}/fila-espera/reception/patient/${encodeURIComponent(
+        normalizedPatientId
+      )}/basic`,
+      {
+        method: "PATCH",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao atualizar dados basicos pela recepcao"
+    );
+
+    return normalizePatientDetailRecord(raw.paciente ?? null);
   }
 
   async getEligiblePreAppointments(

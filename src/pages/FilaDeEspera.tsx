@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { JourneyStatusBadge } from "@/components/status";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   API_BASE_URL,
   apiService,
@@ -22,16 +23,6 @@ import { getServiceLabel } from "@/utils/serviceLabels";
 
 type ServiceOption = { id: string; name: string };
 type ServicesResponse = { success?: boolean; services?: ServiceOption[] };
-type WaitingListResponse = {
-  success?: boolean;
-  message?: string;
-  code?: string;
-  pre_appointment_id?: string | null;
-  fila_espera_id?: string | null;
-  existing_patient_id?: string | null;
-  exact_matches?: ReceptionSearchMatch[];
-  similar_matches?: ReceptionSearchMatch[];
-};
 
 type SearchState = {
   phone: string;
@@ -185,16 +176,6 @@ function resolveStageRoute(status: string | null | undefined, patientId: string)
   return "/triagem-social";
 }
 
-function appendTraceNote(baseNote: string | null, line: string) {
-  const normalizedLine = (line || "").trim();
-  if (!normalizedLine) {
-    return toOptional(baseNote || "");
-  }
-  const normalizedBase = toOptional(baseNote || "");
-  if (!normalizedBase) return normalizedLine;
-  return `${normalizedBase}\n${normalizedLine}`;
-}
-
 function buildPatientNotes(
   form: FormState,
   preAppointmentId: string | null,
@@ -215,6 +196,7 @@ function buildPatientNotes(
 export default function FilaDeEspera() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { hasAnyScope } = usePermissions();
 
   const [search, setSearch] = useState<SearchState>(INITIAL_SEARCH);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -235,6 +217,11 @@ export default function FilaDeEspera() {
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditBasicFormState>(INITIAL_EDIT_FORM);
   const [editBaseline, setEditBaseline] = useState<EditBasicFormState | null>(null);
+
+  const canAuthorizeDuplicateOverride = hasAnyScope([
+    "fila_espera:edit",
+    "pre_agendamento:edit",
+  ]);
 
   useEffect(() => {
     const loadServices = async () => {
@@ -453,24 +440,20 @@ export default function FilaDeEspera() {
       return;
     }
 
-    const timestamp = new Date().toISOString();
-    const traceLine = `[Rastreabilidade recepcao ${timestamp}] Edicao de dados basicos: ${changedFields.join(", ")}`;
-    const mergedNotes = appendTraceNote(toOptional(editForm.notes), traceLine);
-
     try {
       setEditSaving(true);
-      await apiService.updatePatient(editingPatientId, {
+      await apiService.updateReceptionPatientBasic(editingPatientId, {
         name: trimmedName,
         cpf: toOptional(editForm.cpf),
         date_of_birth: toOptional(editForm.date_of_birth),
         phone: toOptional(editForm.phone),
         email: toOptional(editForm.email),
-        notes: mergedNotes,
+        notes: toOptional(editForm.notes),
       });
 
       toast({
         title: "Dados atualizados",
-        description: "Cadastro principal atualizado com rastreabilidade.",
+        description: "Cadastro atualizado com rastreabilidade de recepcao.",
       });
 
       setEditDialogOpen(false);
@@ -542,10 +525,7 @@ export default function FilaDeEspera() {
       ]).map((candidate) => candidate.patient_id);
       const allCandidateIds = Array.from(new Set([...duplicateCandidateIds, ...candidateIdsFromCheck]));
 
-      const waitingListResponse = await fetch(`${API_BASE_URL}/fila-espera`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const waitingListPayload = await apiService.createWaitingListEntry({
           name: form.name.trim(),
           date_of_birth: form.date_of_birth || null,
           cpf: toOptional(form.cpf),
@@ -567,33 +547,12 @@ export default function FilaDeEspera() {
           notes: toOptional(form.notes),
           duplicate_justification: toOptional(duplicateJustification),
           duplicate_candidate_ids: allCandidateIds,
-        }),
       });
 
-      const waitingListPayload = (await waitingListResponse.json().catch(() => ({}))) as WaitingListResponse;
-      if (!waitingListResponse.ok || waitingListPayload.success !== true) {
-        if (
-          waitingListResponse.status === 409 &&
-          Array.isArray(waitingListPayload.exact_matches) &&
-          Array.isArray(waitingListPayload.similar_matches)
-        ) {
-          const blockedResponse: ReceptionSearchResponse = {
-            scenario:
-              waitingListPayload.code === "duplicate_patient_detected"
-                ? "found"
-                : "possible_duplicate",
-            found: waitingListPayload.code === "duplicate_patient_detected",
-            exact_matches: waitingListPayload.exact_matches,
-            similar_matches: waitingListPayload.similar_matches,
-            message: waitingListPayload.message,
-          };
-          setSearchResponse(blockedResponse);
-          setSearchAttempted(true);
-          setShowCreateForm(false);
-          setDuplicateCandidates(blockedResponse.similar_matches);
-        }
-
-        throw new Error(waitingListPayload.message || "Nao foi possivel registrar entrada na fila de espera.");
+      if (waitingListPayload.success !== true) {
+        throw new Error(
+          waitingListPayload.message || "Nao foi possivel registrar entrada na fila de espera."
+        );
       }
 
       const preAppointmentId = toOptional(
@@ -681,12 +640,48 @@ export default function FilaDeEspera() {
         setSearchLoading(false);
       }
     } catch (error) {
-      toast({
-        title: "Erro ao salvar",
-        description:
-          error instanceof Error ? error.message : "Nao foi possivel registrar a entrada inicial.",
-        variant: "destructive",
-      });
+      const typedError = error as ApiRequestError;
+      const payload =
+        typedError?.payload && typeof typedError.payload === "object"
+          ? typedError.payload
+          : null;
+
+      if (
+        (typedError?.status === 409 || typedError?.status === 403) &&
+        payload &&
+        Array.isArray(payload.exact_matches) &&
+        Array.isArray(payload.similar_matches)
+      ) {
+        const blockedResponse: ReceptionSearchResponse = {
+          scenario:
+            typedError?.code === "duplicate_patient_detected" ? "found" : "possible_duplicate",
+          found: typedError?.code === "duplicate_patient_detected",
+          exact_matches: payload.exact_matches as ReceptionSearchMatch[],
+          similar_matches: payload.similar_matches as ReceptionSearchMatch[],
+          message: typeof payload.message === "string" ? payload.message : undefined,
+        };
+        setSearchResponse(blockedResponse);
+        setSearchAttempted(true);
+        setShowCreateForm(false);
+        setDuplicateCandidates(blockedResponse.similar_matches);
+      }
+
+      if (typedError?.status === 403 && typedError?.code === "duplicate_override_forbidden") {
+        toast({
+          title: "Permissao insuficiente",
+          description:
+            typedError.message ||
+            "Seu perfil nao pode autorizar excecao de duplicidade para criar novo cadastro.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erro ao salvar",
+          description:
+            error instanceof Error ? error.message : "Nao foi possivel registrar a entrada inicial.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -878,11 +873,18 @@ export default function FilaDeEspera() {
                 placeholder="Explique por que o novo cadastro e necessario mesmo com similaridade."
                 className="min-h-[90px]"
               />
+              {!canAuthorizeDuplicateOverride ? (
+                <p className="text-xs text-amber-700">
+                  Seu perfil nao possui permissao para autorizar excecao de duplicidade.
+                </p>
+              ) : null}
               <div className="flex justify-end">
                 <Button
                   type="button"
                   onClick={() => startCreateFlowFromSearch(true)}
-                  disabled={duplicateJustification.trim().length === 0}
+                  disabled={
+                    duplicateJustification.trim().length === 0 || !canAuthorizeDuplicateOverride
+                  }
                 >
                   Criar nova solicitacao com estes dados
                 </Button>
