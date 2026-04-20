@@ -95,9 +95,88 @@ function normalizeDate(value) {
   return text;
 }
 
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function formatDateToYmd(date) {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+}
+
+function isValidYmd(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+  const day = Number.parseInt(dayText, 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return false;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function normalizeDateOfBirth(value) {
+  if (value === null || value === undefined) return null;
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return formatDateToYmd(value);
+  }
+
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  if (isValidYmd(text)) {
+    return text;
+  }
+
+  const isIsoDateTime =
+    /^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?([Zz]|[+-]\d{2}:\d{2})?$/.test(text) ||
+    /^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}([Zz]|[+-]\d{2}:\d{2})$/.test(text);
+  if (!isIsoDateTime) {
+    return null;
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return formatDateToYmd(parsed);
+}
+
 function normalizeCpf(value) {
   const digits = normalizeText(value).replace(/\D/g, '');
   return digits.length > 0 ? digits : null;
+}
+
+const PRE_APPOINTMENT_SOURCE_FILA = 'public.fila_de_espera';
+const PRE_APPOINTMENT_SOURCE_TABLE = 'public.pre_appointments';
+let cachedReceptionPreAppointmentSource = null;
+
+function normalizePreAppointmentSourceName(value) {
+  const normalized = normalizeOptionalText(value)?.toLowerCase();
+  if (normalized === PRE_APPOINTMENT_SOURCE_FILA) return PRE_APPOINTMENT_SOURCE_FILA;
+  if (normalized === PRE_APPOINTMENT_SOURCE_TABLE) return PRE_APPOINTMENT_SOURCE_TABLE;
+  return null;
+}
+
+async function resolveReceptionPreAppointmentSource(client) {
+  if (cachedReceptionPreAppointmentSource) {
+    return cachedReceptionPreAppointmentSource;
+  }
+
+  const sourceResult = await client.query(
+    `
+      SELECT COALESCE(to_regclass($1)::text, to_regclass($2)::text) AS source
+    `,
+    [PRE_APPOINTMENT_SOURCE_FILA, PRE_APPOINTMENT_SOURCE_TABLE]
+  );
+
+  const resolvedSource = normalizePreAppointmentSourceName(sourceResult.rows[0]?.source);
+  cachedReceptionPreAppointmentSource = resolvedSource || PRE_APPOINTMENT_SOURCE_FILA;
+  return cachedReceptionPreAppointmentSource;
 }
 
 function normalizeLimit(value, fallback = 20) {
@@ -205,7 +284,7 @@ function mapReceptionCandidate(row) {
   if (!patientId) return null;
 
   const childName = normalizeOptionalText(row?.child_name) || '-';
-  const dateOfBirth = normalizeDate(row?.date_of_birth);
+  const dateOfBirth = normalizeDateOfBirth(row?.date_of_birth);
   const patientPhone = normalizeOptionalText(row?.patient_phone);
   const originPhone = normalizeOptionalText(row?.origin_phone);
   const resolvedPhone = patientPhone || originPhone || null;
@@ -249,7 +328,7 @@ function dedupeReceptionCandidates(candidates) {
   return Array.from(byPatientId.values());
 }
 
-async function queryReceptionCandidatesByCpf(client, cpfDigits) {
+async function queryReceptionCandidatesByCpf(client, cpfDigits, preAppointmentSource) {
   if (!cpfDigits) return [];
 
   const result = await client.query(
@@ -275,7 +354,7 @@ async function queryReceptionCandidatesByCpf(client, cpfDigits) {
           pa.phone,
           pa.notes,
           pa.created_at
-        FROM public.fila_de_espera pa
+        FROM ${preAppointmentSource} pa
         WHERE pa.converted_to_patient_id::text = p.id::text
         ORDER BY pa.created_at DESC NULLS LAST
         LIMIT 1
@@ -292,7 +371,12 @@ async function queryReceptionCandidatesByCpf(client, cpfDigits) {
     .filter((candidate) => candidate !== null);
 }
 
-async function queryReceptionCandidatesByDateOfBirth(client, dateOfBirth, limit = 60) {
+async function queryReceptionCandidatesByDateOfBirth(
+  client,
+  dateOfBirth,
+  limit = 60,
+  preAppointmentSource
+) {
   if (!dateOfBirth) return [];
 
   const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 120)) : 60;
@@ -319,7 +403,7 @@ async function queryReceptionCandidatesByDateOfBirth(client, dateOfBirth, limit 
           pa.phone,
           pa.notes,
           pa.created_at
-        FROM public.fila_de_espera pa
+        FROM ${preAppointmentSource} pa
         WHERE pa.converted_to_patient_id::text = p.id::text
         ORDER BY pa.created_at DESC NULLS LAST
         LIMIT 1
@@ -351,7 +435,7 @@ function classifyReceptionCandidate({
     exact = true;
   }
 
-  const candidateDob = normalizeDate(candidate.date_of_birth);
+  const candidateDob = normalizeDateOfBirth(candidate.date_of_birth);
   const sameDob = Boolean(dateOfBirth && candidateDob && dateOfBirth === candidateDob);
 
   if (sameDob && queryNameNormalized && candidate.patient_name_normalized) {
@@ -521,17 +605,19 @@ async function detectReceptionDuplicateRisk({
   const cpfDigits = normalizeCpf(cpf);
   const queryNameNormalized = normalizeNameForMatching(name);
   const phoneDigits = normalizePhoneDigits(phone);
-  const normalizedDateOfBirth = normalizeDate(dateOfBirth);
+  const normalizedDateOfBirth = normalizeDateOfBirth(dateOfBirth);
+  const preAppointmentSource = await resolveReceptionPreAppointmentSource(client);
 
   const exactMatches = [];
   const similarMatches = [];
   const orderedCandidates = [];
 
-  const cpfCandidates = await queryReceptionCandidatesByCpf(client, cpfDigits);
+  const cpfCandidates = await queryReceptionCandidatesByCpf(client, cpfDigits, preAppointmentSource);
   const dobCandidates = await queryReceptionCandidatesByDateOfBirth(
     client,
     normalizedDateOfBirth,
-    candidateLimit
+    candidateLimit,
+    preAppointmentSource
   );
 
   const allCandidates = dedupeReceptionCandidates([...cpfCandidates, ...dobCandidates]);
@@ -572,6 +658,7 @@ async function detectReceptionDuplicateRisk({
       name: queryNameNormalized || null,
       phone: phoneDigits || null,
       date_of_birth: normalizedDateOfBirth,
+      pre_appointment_source: preAppointmentSource,
     },
   };
 }
@@ -677,7 +764,7 @@ router.post('/', authMiddleware, authorizeReceptionOperate, async (req, res) => 
   const phone = normalizeText(req.body?.phone);
   const email = normalizeText(req.body?.email);
   const cpf = normalizeCpf(req.body?.cpf);
-  const dateOfBirth = normalizeDate(req.body?.date_of_birth);
+  const dateOfBirth = normalizeDateOfBirth(req.body?.date_of_birth);
   const services = normalizeServices(req.body?.services);
   const consentLgpd = normalizeBoolean(req.body?.consent_lgpd, false);
   const duplicateJustification = normalizeOptionalText(req.body?.duplicate_justification);
@@ -1453,7 +1540,7 @@ router.get('/reception-search', authMiddleware, authorizeReceptionLookup, async 
   const phone = normalizeText(req.query?.phone);
   const name = normalizeText(req.query?.name);
   const cpf = normalizeCpf(req.query?.cpf);
-  const dateOfBirth = normalizeDate(req.query?.date_of_birth);
+  const dateOfBirth = normalizeDateOfBirth(req.query?.date_of_birth);
 
   const hasPhoneFlow = Boolean(normalizePhoneDigits(phone) && dateOfBirth);
   const hasNameFlow = Boolean(normalizeNameForMatching(name) && dateOfBirth);
@@ -1553,7 +1640,7 @@ router.patch(
     }
 
     const nextCpfDigits = cpfProvided ? normalizeCpf(body.cpf) : null;
-    const nextDateOfBirth = dateProvided ? normalizeDate(body.date_of_birth) : null;
+    const nextDateOfBirth = dateProvided ? normalizeDateOfBirth(body.date_of_birth) : null;
     if (dateProvided && !nextDateOfBirth) {
       return res.status(400).json({
         success: false,
@@ -1606,7 +1693,7 @@ router.patch(
       const changedSensitiveFields = [];
 
       const currentCpfDigits = normalizeCpf(currentPatient.cpf);
-      const currentDateOfBirth = normalizeDate(currentPatient.date_of_birth);
+      const currentDateOfBirth = normalizeDateOfBirth(currentPatient.date_of_birth);
       const currentPhone = normalizeOptionalText(currentPatient.phone);
       const currentEmail = normalizeOptionalText(currentPatient.email);
 
@@ -1794,7 +1881,7 @@ router.patch(
 router.get('/public-search', async (req, res) => {
   const phone = normalizeText(req.query?.phone);
   const name = normalizeText(req.query?.name);
-  const dateOfBirth = normalizeDate(req.query?.date_of_birth);
+  const dateOfBirth = normalizeDateOfBirth(req.query?.date_of_birth);
 
   const hasPhoneFlow = Boolean(phone && dateOfBirth);
   const hasNameFlow = Boolean(name && dateOfBirth);

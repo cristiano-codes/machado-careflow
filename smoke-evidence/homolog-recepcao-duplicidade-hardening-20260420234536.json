@@ -1,0 +1,97 @@
+{
+  "runId": "20260420234536",
+  "generatedAt": "2026-04-20T23:45:36.873Z",
+  "status": "passed",
+  "scenarios": [
+    {
+      "key": "S1",
+      "name": "paciente existente encontrado na consulta",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "scenario": "found",
+        "exact_match_count": 1
+      }
+    },
+    {
+      "key": "S2",
+      "name": "duplicidade similar exige justificativa",
+      "passed": true,
+      "details": {
+        "status": 409,
+        "code": "possible_duplicate_detected",
+        "requires_justification": true,
+        "similar_match_count": 1
+      }
+    },
+    {
+      "key": "S3",
+      "name": "perfil sem override recebe 403 duplicate_override_forbidden",
+      "passed": true,
+      "details": {
+        "status": 403,
+        "code": "duplicate_override_forbidden",
+        "requires_override_permission": true
+      }
+    },
+    {
+      "key": "S4",
+      "name": "override autorizado cria e grava duplicate_override_authorized",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "duplicate_review_override_authorized": true,
+        "audit_events": [
+          "create_waiting_list",
+          "duplicate_override_authorized",
+          "duplicate_candidates_reviewed"
+        ]
+      }
+    },
+    {
+      "key": "S5",
+      "name": "duplicidade exata continua retornando 409",
+      "passed": true,
+      "details": {
+        "status": 409,
+        "code": "duplicate_patient_detected",
+        "exact_match_count": 1
+      }
+    },
+    {
+      "key": "S6",
+      "name": "novo cadastro sem duplicidade continua entrando no fluxo de fila",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "duplicate_scenario": "not_found",
+        "fila_espera_id": "000000000002-0000-0000-0000-000000000000"
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "key": "schema_source_check",
+      "passed": true,
+      "details": {
+        "expected_source": "public.pre_appointments",
+        "source_used_in_duplicate_queries": true
+      }
+    },
+    {
+      "key": "date_normalization_check",
+      "passed": true,
+      "details": {
+        "from_date_object": "2018-09-15",
+        "from_iso_datetime": "2017-08-10"
+      }
+    }
+  ],
+  "summary": {
+    "scenarios_total": 6,
+    "scenarios_failed": 0,
+    "diagnostics_total": 2,
+    "diagnostics_failed": 0,
+    "inserted_rows": 2
+  }
+}
