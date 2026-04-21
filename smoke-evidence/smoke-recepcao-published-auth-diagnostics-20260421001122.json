@@ -1,0 +1,104 @@
+{
+  "runId": "20260421001122",
+  "startedAt": "2026-04-21T00:11:22.633Z",
+  "base": "https://friendly-insight-production.up.railway.app/api",
+  "checks": {
+    "health": {
+      "status": 200,
+      "payload": {
+        "message": "API Instituto Lauir funcionando!",
+        "timestamp": "2026-04-21T00:11:23.237Z",
+        "environment": "production",
+        "frontendBuildAvailable": false
+      }
+    },
+    "firstAccess": {
+      "status": 200,
+      "payload": {
+        "firstAccess": false,
+        "username": "admin"
+      }
+    },
+    "checkUserAdmin": {
+      "status": 200,
+      "payload": {
+        "exists": true,
+        "user": {
+          "id": 1,
+          "username": "admin",
+          "email": "admin@institutolauir.com.br",
+          "status": "ativo",
+          "firstAccess": false
+        }
+      }
+    }
+  },
+  "attempts": [
+    {
+      "username": "admin",
+      "password": "admin",
+      "status": 401,
+      "payload": {
+        "message": "Credenciais inválidas"
+      }
+    },
+    {
+      "username": "admin",
+      "password": "admin123",
+      "status": 401,
+      "payload": {
+        "message": "Credenciais inválidas"
+      }
+    },
+    {
+      "username": "admin",
+      "password": "Homolog@123",
+      "status": 401,
+      "payload": {
+        "message": "Credenciais inválidas"
+      }
+    },
+    {
+      "username": "admin@institutolauir.com.br",
+      "password": "admin",
+      "status": 401,
+      "payload": {
+        "message": "Credenciais inválidas"
+      }
+    },
+    {
+      "username": "homol_ops_admin",
+      "password": "Homolog@123",
+      "status": 401,
+      "payload": {
+        "message": "Credenciais inválidas"
+      }
+    },
+    {
+      "username": "homol_ops_denied",
+      "password": "Homolog@123",
+      "status": 401,
+      "payload": {
+        "message": "Credenciais inválidas"
+      }
+    },
+    {
+      "username": "homol_ops_legacy",
+      "password": "Homolog@123",
+      "status": 401,
+      "payload": {
+        "message": "Credenciais inválidas"
+      }
+    },
+    {
+      "username": "demo",
+      "password": "demo123",
+      "status": 403,
+      "payload": {
+        "message": "Credenciais inválidas."
+      }
+    }
+  ],
+  "status": "completed",
+  "finishedAt": "2026-04-21T00:11:27.286Z"
+}
