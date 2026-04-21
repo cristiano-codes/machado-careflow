@@ -1,0 +1,34 @@
+{
+  "runId": "20260421000057",
+  "startedAt": "2026-04-21T00:00:57.966Z",
+  "apiBaseUrl": "https://friendly-insight-production.up.railway.app/api",
+  "scenarios": [],
+  "diagnostics": [
+    {
+      "key": "backend_health",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "payload": {
+          "message": "API Instituto Lauir funcionando!",
+          "timestamp": "2026-04-21T00:00:58.694Z",
+          "environment": "production",
+          "frontendBuildAvailable": false
+        }
+      }
+    }
+  ],
+  "http": [
+    {
+      "method": "GET",
+      "route": "/health",
+      "status": 200,
+      "ok": true
+    }
+  ],
+  "generatedData": {},
+  "auditEvidence": {},
+  "status": "failed",
+  "error": "Falha no login admin: status=401 message=Credenciais inválidas",
+  "finishedAt": "2026-04-21T00:00:58.937Z"
+}

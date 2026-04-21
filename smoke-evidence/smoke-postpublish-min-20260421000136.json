@@ -1,0 +1,37 @@
+{
+  "runId": "20260421000136",
+  "checkedAt": "2026-04-21T00:01:36.531Z",
+  "checks": [
+    {
+      "name": "published_backend_health",
+      "ok": true,
+      "status": 200,
+      "payload": {
+        "message": "API Instituto Lauir funcionando!",
+        "timestamp": "2026-04-21T00:01:37.119Z",
+        "environment": "production",
+        "frontendBuildAvailable": false
+      }
+    },
+    {
+      "name": "published_frontend_root",
+      "ok": true,
+      "status": 200,
+      "hasHtml": true
+    },
+    {
+      "name": "published_public_register",
+      "ok": true,
+      "status": 201,
+      "payload": {
+        "success": true,
+        "status": "pendente",
+        "message": "Usuario cadastrado com sucesso! Aguarde a aprovacao do administrador para acessar o sistema."
+      }
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "failed": 0
+  }
+}
