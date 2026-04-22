@@ -20,6 +20,14 @@ const authorizeVagaEligibilityLookup = authorizeAny([
   ['avaliacoes', 'view'],
 ]);
 
+const authorizePatientsList = authorizeAny([
+  ['pre_cadastro', 'view'],
+  ['entrevistas', 'view'],
+  ['avaliacoes', 'view'],
+  ['analise_vagas', 'view'],
+  ['vagas', 'view'],
+]);
+
 router.use(authMiddleware);
 
 function normalizeCpf(value) {
@@ -28,10 +36,15 @@ function normalizeCpf(value) {
 }
 
 function normalizeDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
   const text = (value || '').toString().trim();
   if (!text) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
-  return text;
+  const dateOnly = text.includes('T') ? text.slice(0, 10) : text;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) return null;
+  return dateOnly;
 }
 
 function normalizeDigits(value) {
@@ -332,7 +345,7 @@ async function getPatientById(client, patientId) {
   return result.rows[0] || null;
 }
 
-router.get('/', async (req, res) => {
+router.get('/', authorizePatientsList, async (req, res) => {
   try {
     const result = await pool.query(
       `

@@ -19,6 +19,11 @@ if (isProd && !process.env.JWT_SECRET) {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const ALLOW_DEMO_LOGIN = String(process.env.ALLOW_DEMO_LOGIN || '').toLowerCase() === 'true';
+const LOCAL_ADMIN_USERNAME = String(process.env.LOCAL_ADMIN_USERNAME || 'admin').trim().toLowerCase();
+const LOCAL_ADMIN_PASSWORD = String(process.env.LOCAL_ADMIN_PASSWORD || '');
+const USE_LOCAL_ADMIN_CREDENTIALS =
+  !isProd && LOCAL_ADMIN_USERNAME === 'admin' && LOCAL_ADMIN_PASSWORD.length > 0;
+const ADMIN_SEED_PASSWORD = USE_LOCAL_ADMIN_CREDENTIALS ? LOCAL_ADMIN_PASSWORD : 'admin';
 
 // Mapeamento simples para remover acentuação de nomes de usuário
 const ACCENT_FROM = [
@@ -39,6 +44,18 @@ const removeDiacritics = (value = '') =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+
+async function passwordMatchesStored(plainPassword, storedPassword) {
+  if (!plainPassword || typeof storedPassword !== 'string' || !storedPassword) {
+    return false;
+  }
+
+  if (storedPassword.startsWith('$2')) {
+    return bcrypt.compare(plainPassword, storedPassword);
+  }
+
+  return plainPassword === storedPassword;
+}
 
 // Função para criar tabelas se não existirem (mantido do seu código)
 async function initDatabase() {
@@ -76,14 +93,27 @@ async function initDatabase() {
       ['admin']
     );
     if (adminCheck.rows.length === 0) {
-      const hashedPassword = await bcrypt.hash('admin', 10);
+      const hashedPassword = await bcrypt.hash(ADMIN_SEED_PASSWORD, 10);
       await pool.query(`
         INSERT INTO users (username, email, name, role, status, first_access, password)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, ['admin', 'admin@institutolauir.com.br', 'Administrador', 'Coordenador Geral', 'ativo', false, hashedPassword]);
     } else {
       const admin = adminCheck.rows[0];
-      if (!admin.password) {
+      if (USE_LOCAL_ADMIN_CREDENTIALS) {
+        const hasExpectedPassword = await passwordMatchesStored(LOCAL_ADMIN_PASSWORD, admin.password);
+        const isActive = String(admin.status || '').trim().toLowerCase() === 'ativo';
+        const isAdminRole = ['coordenador geral', 'administrador', 'admin', 'gestao', 'gest\u00E3o', 'gestor']
+          .includes(String(admin.role || '').trim().toLowerCase());
+
+        if (!hasExpectedPassword || admin.first_access === true || !isActive || !isAdminRole) {
+          const hashedPassword = await bcrypt.hash(LOCAL_ADMIN_PASSWORD, 10);
+          await pool.query(
+            'UPDATE users SET password = $1, first_access = false, status = $2, role = $3 WHERE id = $4',
+            [hashedPassword, 'ativo', 'Coordenador Geral', admin.id]
+          );
+        }
+      } else if (!admin.password) {
         await pool.query(
           'UPDATE users SET first_access = true, status = $1, role = $2 WHERE id = $3',
           ['ativo', 'Coordenador Geral', admin.id]

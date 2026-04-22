@@ -1,0 +1,2460 @@
+{
+  "runId": "20260421202846",
+  "startedAt": "2026-04-21T20:28:46.314Z",
+  "apiBase": "http://localhost:3000/api",
+  "steps": [
+    {
+      "timestamp": "2026-04-21T20:28:46.890Z",
+      "scenario": "fluxo_principal",
+      "stage": "1_entrada_recepcao",
+      "expected": "Criar registro operacional na fila de espera sem alterar status_jornada do cadastro principal",
+      "actual_status": 200,
+      "pass": true,
+      "request": {
+        "name": "Lucas Henrique Barros da Silva",
+        "date_of_birth": "2017-08-14",
+        "cpf": "12345678910",
+        "sex": "Masculino",
+        "has_report": true,
+        "cid": "F84.0",
+        "urgency": "normal",
+        "services": [
+          "f6480df3-d458-48fb-b3b7-5b32f1417ac4"
+        ],
+        "responsible_name": "Mariana Barros da Silva",
+        "phone": "21998765432",
+        "whatsapp": true,
+        "email": "mariana.barros.teste@email.com",
+        "how_heard": "escola",
+        "referred_by": "Escola + pediatra",
+        "cadunico": true,
+        "consent_whatsapp": true,
+        "consent_lgpd": true,
+        "notes": "Investigacao: avaliacao complementar de linguagem e integracao sensorial. Bolsa Familia: 600. NIS: 123.45678.90-1"
+      },
+      "response": {
+        "success": true,
+        "fila_espera_id": "6a8be101-6913-4527-b579-aa6bbcade5bd",
+        "pre_appointment_id": "6a8be101-6913-4527-b579-aa6bbcade5bd",
+        "status_operacional": "pending",
+        "status_contexto": "Status da fila de espera e operacional; nao altera status_jornada do cadastro principal.",
+        "duplicate_review": {
+          "scenario": "not_found",
+          "exact_matches": [],
+          "similar_matches": [],
+          "justification_recorded": false,
+          "override_authorized": false,
+          "actor": {
+            "actor_id": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+            "actor_name": "admin",
+            "actor_role": "admin"
+          }
+        },
+        "message": "Solicitacao enviada com sucesso."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:46.917Z",
+      "scenario": "fluxo_principal",
+      "stage": "2_fila_espera_e_cadastro_principal",
+      "expected": "Criar cadastro principal unico em em_fila_espera e converter pre-appointment",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "name": "Lucas Henrique Barros da Silva",
+        "cpf": "12345678910",
+        "rg": "45.678.901-2",
+        "date_of_birth": "2017-08-14",
+        "email": "mariana.barros.teste@email.com",
+        "phone": "21998765432",
+        "mobile": "21964321187",
+        "address": "Rua das Acacias",
+        "number": "152",
+        "complement": "Casa 2",
+        "neighborhood": "Engenho de Dentro",
+        "city": "Rio de Janeiro",
+        "state": "RJ",
+        "zip_code": "20770-210",
+        "profession": "Estudante",
+        "marital_status": null,
+        "education": "3 ano fundamental",
+        "insurance_plan": null,
+        "insurance_number": null,
+        "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes.",
+        "status_jornada": "em_fila_espera",
+        "source_pre_appointment_id": "6a8be101-6913-4527-b579-aa6bbcade5bd"
+      },
+      "response": {
+        "success": true,
+        "paciente": {
+          "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "nome": "Lucas Henrique Barros da Silva",
+          "cpf": "12345678910",
+          "telefone": "21998765432",
+          "email": "mariana.barros.teste@email.com",
+          "dataNascimento": "2017-08-14T03:00:00.000Z",
+          "status": "pre_cadastro",
+          "status_jornada": "em_fila_espera"
+        },
+        "source_pre_appointment_id": "6a8be101-6913-4527-b579-aa6bbcade5bd",
+        "pre_appointment_conversion": {
+          "pre_appointment_id": "6a8be101-6913-4527-b579-aa6bbcade5bd",
+          "converted_to_patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "linked_existing_patient": false
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:46.922Z",
+      "scenario": "fluxo_principal",
+      "stage": "2b_antiduplicidade",
+      "expected": "Bloquear segundo cadastro da mesma crianca (409)",
+      "actual_status": 409,
+      "pass": true,
+      "response": {
+        "success": false,
+        "existing_patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "message": "Assistido ja cadastrado (CPF ou nome + data de nascimento)."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:46.925Z",
+      "scenario": "fluxo_principal",
+      "stage": "3_triagem_social_inicial",
+      "expected": "Paciente permanece em em_fila_espera durante triagem/pre-cadastro operacional",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "patient": {
+          "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "name": "Lucas Henrique Barros da Silva",
+          "cpf": "12345678910",
+          "date_of_birth": "2017-08-14T03:00:00.000Z",
+          "status": "pre_cadastro",
+          "status_jornada": "em_fila_espera",
+          "created_at": "2026-04-21T20:28:46.893Z",
+          "updated_at": "2026-04-21T20:28:46.893Z",
+          "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+        },
+        "history": [
+          {
+            "id": "36d525b7-b4f1-41b9-a16a-068d762437a7",
+            "status_anterior": null,
+            "status_novo": "em_fila_espera",
+            "motivo": "Cadastro criado",
+            "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+            "changed_at": "2026-04-21T20:28:46.893Z"
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:46.966Z",
+      "scenario": "fluxo_principal",
+      "stage": "3b_pre_cadastro_operacional",
+      "expected": "Atualizar apenas triagem operacional",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "triage_case": {
+          "id": "f89504ab-8492-4bf2-8904-28bb8ac8dca7",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "triagem_status": "pre_cadastro_em_andamento",
+          "triagem_prioridade": "normal",
+          "triagem_responsavel_id": null,
+          "triagem_responsavel_nome": null,
+          "triagem_last_contact_at": null,
+          "triagem_next_action_at": null,
+          "triagem_notes_summary": null,
+          "entrevista_agendada_flag": false,
+          "linked_appointment_id": null,
+          "linked_appointment_at": null,
+          "created_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "updated_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "created_at": "2026-04-21T20:28:46.928Z",
+          "updated_at": "2026-04-21T20:28:46.928Z"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:46.973Z",
+      "scenario": "fluxo_principal",
+      "stage": "4_agendamento_entrevista_social",
+      "expected": "Iniciar agendamento sem transicionar status_jornada",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "triage_case": {
+          "id": "f89504ab-8492-4bf2-8904-28bb8ac8dca7",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "triagem_status": "pre_cadastro_em_andamento",
+          "triagem_prioridade": "normal",
+          "triagem_responsavel_id": null,
+          "triagem_responsavel_nome": null,
+          "triagem_last_contact_at": null,
+          "triagem_next_action_at": null,
+          "triagem_notes_summary": null,
+          "entrevista_agendada_flag": false,
+          "linked_appointment_id": null,
+          "linked_appointment_at": null,
+          "created_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "updated_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "created_at": "2026-04-21T20:28:46.928Z",
+          "updated_at": "2026-04-21T20:28:46.928Z"
+        },
+        "agenda_route_hint": "/agenda?patient_id=fa8f6c4b-ccc1-4ac0-867a-cdb94e830820&entry=triagem_social"
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.084Z",
+      "scenario": "fluxo_principal",
+      "stage": "4b_agenda_registro",
+      "expected": "Registrar agendamento na agenda institucional",
+      "actual_status": 201,
+      "pass": false,
+      "response": {
+        "success": true,
+        "message": "Agendamento criado com sucesso.",
+        "dry_run": false,
+        "persisted": true,
+        "endpoint": "agenda_create_v1",
+        "blocked": false,
+        "can_proceed": true,
+        "validation": {
+          "mode": "pre_enforcement",
+          "effective_mode": "observe_only",
+          "rollout_phase": "phase5_controlled_rollout",
+          "hard_block_enabled": false,
+          "legacy_mode_alias": "pre_enforcement",
+          "level": "info",
+          "action": "observe_only",
+          "reason_code": "journey_consistent",
+          "message": "Coerencia da jornada validada para o contexto atual.",
+          "supported_levels": [
+            "info",
+            "warning",
+            "block_ready"
+          ],
+          "should_warn": false,
+          "should_block": false,
+          "would_block_when_enforced": false,
+          "blocking_active": false,
+          "enforcement_ready": true,
+          "taxonomy_version": "2026.03.phase5",
+          "coherence_matrix_version": "2026.03.phase5"
+        },
+        "resolved_context": {
+          "professional_id": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+          "professional_name": "homol_ops_prof1@test.local",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "patient_name": "Lucas Henrique Barros da Silva",
+          "journey_status": "em_fila_espera",
+          "journey_status_source": "patients.status_jornada",
+          "journey_status_found": true,
+          "service_id": "f6480df3-d458-48fb-b3b7-5b32f1417ac4",
+          "service_name": "Assistente Social",
+          "service_name_source": "services.catalog",
+          "service_found": true,
+          "explicit_event_type": null
+        },
+        "override": {
+          "requested_enforcement_mode": null,
+          "override_allowed": true,
+          "override_ignored": false,
+          "configured_mode": "pre_enforcement",
+          "effective_mode": "observe_only"
+        },
+        "scope": {
+          "access_mode": "agenda_scope",
+          "compatibility_mode": false,
+          "compatibility_notice": null,
+          "primary_scope_required": "agenda:view",
+          "legacy_scope_required": "profissionais:view",
+          "legacy_scope_fallback_enabled": true,
+          "legacy_scope_active": false,
+          "legacy_scope_reason": null,
+          "legacy_scope_deprecation_phase": "phase5_controlled_removal",
+          "legacy_scope_requires_migration": false,
+          "legacy_scope_removal_ready": true,
+          "institutional_taxonomy_version": "2026.03.phase5",
+          "coherence_matrix_version": "2026.03.phase5",
+          "write_validation_ready": true,
+          "write_validation_mode": "pre_enforcement",
+          "write_validation_effective_mode": "observe_only",
+          "write_validation_rollout_phase": "phase5_controlled_rollout",
+          "write_validation_hard_block_enabled": false,
+          "write_validation_legacy_mode_alias": "pre_enforcement",
+          "write_validation_supported_levels": [
+            "info",
+            "warning",
+            "block_ready"
+          ],
+          "write_validation_blocking_active": false,
+          "write_validation_enforcement_ready": true,
+          "professional_id": null,
+          "can_view_all_professionals": false,
+          "allow_professional_view_others": false,
+          "write_validation_summary": {
+            "mode": "pre_enforcement",
+            "effective_mode": "observe_only",
+            "rollout_phase": "phase5_controlled_rollout",
+            "hard_block_enabled": false,
+            "legacy_mode_alias": "pre_enforcement",
+            "total": 1,
+            "info_count": 1,
+            "warning_count": 0,
+            "block_ready_count": 0,
+            "would_block_count": 0,
+            "blocking_count": 0,
+            "blocking_active": false,
+            "enforcement_ready": true
+          }
+        },
+        "create_status_policy": {
+          "default_status": "scheduled",
+          "allow_confirmed_on_create": false,
+          "allowed_statuses": [
+            "scheduled"
+          ]
+        },
+        "appointment": {
+          "id": "04041b23-e668-4d2a-abff-49e85a6b77a7",
+          "appointment_id": "04041b23-e668-4d2a-abff-49e85a6b77a7",
+          "professional_id": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+          "appointment_date": "2026-04-30T03:00:00.000Z",
+          "appointment_time": "10:00",
+          "appointment_status": "scheduled",
+          "status": "scheduled",
+          "notes": "Agendamento de entrevista social (Assistente Social)",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "service_id": "f6480df3-d458-48fb-b3b7-5b32f1417ac4",
+          "professional_name": "homol_ops_prof1@test.local",
+          "professional_role": "Psicologa",
+          "professional_specialty": "Psicologia",
+          "patient_name": "Lucas Henrique Barros da Silva",
+          "status_jornada": "em_fila_espera",
+          "journey_status": "em_fila_espera",
+          "service_name": "Assistente Social",
+          "sector_responsible": "Psicologa",
+          "responsible_name": "homol_ops_prof1@test.local",
+          "event_type_institutional": "entrevista_social",
+          "event_type_institutional_source": "journey_status_rule",
+          "journey_consistency_status": "ok",
+          "journey_consistency_code": null,
+          "journey_consistency_message": null,
+          "journey_consistency_expected_statuses": [
+            "em_fila_espera",
+            "entrevista_realizada"
+          ],
+          "write_validation_ready": true,
+          "write_validation_mode": "pre_enforcement",
+          "write_validation_effective_mode": "observe_only",
+          "write_validation_rollout_phase": "phase5_controlled_rollout",
+          "write_validation_hard_block_enabled": false,
+          "write_validation_legacy_mode_alias": "pre_enforcement",
+          "write_validation_level": "info",
+          "write_validation_action": "observe_only",
+          "write_validation_code": "journey_consistent",
+          "write_validation_message": "Coerencia da jornada validada para o contexto atual.",
+          "write_validation_supported_levels": [
+            "info",
+            "warning",
+            "block_ready"
+          ],
+          "write_validation_would_block": false,
+          "write_validation_blocking_active": false,
+          "write_validation_enforcement_ready": true,
+          "write_validation_should_warn": false,
+          "write_validation_should_block": false
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.091Z",
+      "scenario": "fluxo_principal",
+      "stage": "4c_validacao_sem_transicao_prematura",
+      "expected": "Agendamento nao muda status_jornada",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "statusBeforeAgenda": "em_fila_espera",
+        "statusAfterAgenda": "em_fila_espera"
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.106Z",
+      "scenario": "fluxo_principal",
+      "stage": "5_entrevista_social_formal",
+      "expected": "Concluir entrevista e mover para entrevista_realizada",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "interview_date": "2026-04-21",
+        "assistente_social": "Mariana Souza (Servi?o Social)",
+        "parecer_social": "Entrevista concluida. Perfil compativel para continuidade no fluxo institucional.",
+        "resultado_terapeutas": "Necessita avaliacao multiprofissional completa.",
+        "data_resultado_terapeutas": "2026-04-21",
+        "payload": {
+          "atendido_nome": "Lucas Henrique Barros da Silva",
+          "data_nascimento": "2017-08-14",
+          "sexo": "Masculino",
+          "cor_raca": "Pardo",
+          "mae": "Mariana Barros da Silva",
+          "pai": "Carlos Eduardo da Silva",
+          "responsavel": "Mariana Barros da Silva",
+          "cpf_responsavel": "98765432100",
+          "endereco": "Rua das Acacias, 152, Casa 2",
+          "bairro": "Engenho de Dentro",
+          "cep": "20770-210",
+          "referencia": "Proximo a praca principal e Clinica da Familia",
+          "possui_laudo": true,
+          "cids": [
+            "F84.0"
+          ],
+          "escola_atual": "Escola Municipal Professora Nadir Fernandes",
+          "serie": "3 ano",
+          "turno": "Manha",
+          "horario": "07:30 as 12:00",
+          "dificuldades": "Concentracao, interacao social e linguagem pragmatica",
+          "encaminhada_por": "Escola + pediatra",
+          "motivo_encaminhamento": "Dificuldade de interacao social, atraso em linguagem funcional e necessidade de avaliacao multidisciplinar",
+          "cras_referencia": "CRAS Engenho de Dentro",
+          "bolsa_familia": true,
+          "valor_bolsa_familia": 600,
+          "observacoes_gerais": "Em investigacao: avaliacao complementar de linguagem e integracao sensorial.",
+          "is_draft": false,
+          "status_entrevista": "concluida"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Entrevista social concluida com sucesso.",
+        "interview": {
+          "id": "9a2fd77c-02b6-435a-8301-98a7a5848c76",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "assistente_social": null,
+          "assistente_social_id": null,
+          "interview_date": null,
+          "interview_time": null,
+          "parecer_social": "Entrevista concluida. Perfil compativel para continuidade no fluxo institucional.",
+          "resultado_terapeutas": null,
+          "data_resultado_terapeutas": null,
+          "is_draft": false,
+          "payload": {
+            "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+            "interview_date": null,
+            "assistente_social": null,
+            "parecer_social": "Entrevista concluida. Perfil compativel para continuidade no fluxo institucional.",
+            "resultado_terapeutas": null,
+            "data_resultado_terapeutas": null,
+            "is_draft": false,
+            "status_entrevista": "concluida"
+          },
+          "created_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "created_at": "2026-04-21T20:28:47.094Z",
+          "updated_at": "2026-04-21T20:28:47.094Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": true,
+          "previous_status": "em_fila_espera",
+          "new_status": "entrevista_realizada",
+          "regression_prevented": false
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.107Z",
+      "scenario": "fluxo_principal",
+      "stage": "5b_validacao_status_entrevista_realizada",
+      "expected": "status_jornada = entrevista_realizada",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "name": "Lucas Henrique Barros da Silva",
+        "cpf": "12345678910",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "entrevista_realizada",
+        "created_at": "2026-04-21T20:28:46.893Z",
+        "updated_at": "2026-04-21T20:28:47.094Z",
+        "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.124Z",
+      "scenario": "fluxo_principal",
+      "stage": "6_avaliacao_multidisciplinar_individual",
+      "expected": "Registrar avaliacao individual e mover para em_avaliacao",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "professional_id": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+        "type": "Avaliacao Psicologica",
+        "start_date": "2026-04-22",
+        "end_date": "2026-04-22",
+        "status": "concluida",
+        "result": "Indicativos compativeis com necessidade de apoio multiprofissional.",
+        "report": "Relatorio tecnico individual concluido.",
+        "notes": "Avaliacao individual concluida.",
+        "is_stage_consolidation": false,
+        "checklist_ready_for_vaga": false
+      },
+      "response": {
+        "success": true,
+        "message": "Avaliacao tecnica registrada com sucesso.",
+        "evaluation": {
+          "id": "3d0ef9f0-7722-4647-be31-8194208b5cdc",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "patient_name": "Lucas Henrique Barros da Silva",
+          "status_jornada": "em_avaliacao",
+          "professional_id": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+          "professional_name": "Psicologa",
+          "type": "Avaliacao Psicologica",
+          "start_date": "2026-04-22",
+          "end_date": "2026-04-22",
+          "status": "concluida",
+          "status_db": "completed",
+          "result": "Indicativos compativeis com necessidade de apoio multiprofissional.",
+          "report": "Relatorio tecnico individual concluido.",
+          "notes": "Avaliacao individual concluida.",
+          "is_stage_consolidation": false,
+          "checklist_ready_for_vaga": false,
+          "sent_to_vaga_at": null,
+          "devolutiva_date": null,
+          "created_at": "2026-04-21T20:28:47.109Z",
+          "updated_at": "2026-04-21T20:28:47.109Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": true,
+          "previous_status": "entrevista_realizada",
+          "new_status": "em_avaliacao",
+          "regression_prevented": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.125Z",
+      "scenario": "fluxo_principal",
+      "stage": "6b_validacao_status_em_avaliacao",
+      "expected": "status_jornada = em_avaliacao",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "name": "Lucas Henrique Barros da Silva",
+        "cpf": "12345678910",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "em_avaliacao",
+        "created_at": "2026-04-21T20:28:46.893Z",
+        "updated_at": "2026-04-21T20:28:47.109Z",
+        "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.131Z",
+      "scenario": "fluxo_principal",
+      "stage": "6c_consolidacao_multidisciplinar",
+      "expected": "Registrar consolidacao pronta para vaga",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "professional_id": null,
+        "type": "Consolidacao multiprofissional",
+        "start_date": "2026-04-23",
+        "end_date": "2026-04-23",
+        "status": "concluida",
+        "result": "Consolidacao aprovada para analise de vaga.",
+        "report": "Checklist completo.",
+        "notes": "Consolidacao final.",
+        "is_stage_consolidation": true,
+        "checklist_ready_for_vaga": true,
+        "devolutiva_date": "2026-04-24"
+      },
+      "response": {
+        "success": true,
+        "message": "Consolidacao multiprofissional registrada com sucesso.",
+        "evaluation": {
+          "id": "dd89f667-38dd-4edf-9fd2-2a8b84059c95",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "patient_name": "Lucas Henrique Barros da Silva",
+          "status_jornada": "em_avaliacao",
+          "professional_id": null,
+          "professional_name": null,
+          "type": "Consolidacao multiprofissional",
+          "start_date": "2026-04-23",
+          "end_date": "2026-04-23",
+          "status": "concluida",
+          "status_db": "completed",
+          "result": "Consolidacao aprovada para analise de vaga.",
+          "report": "Checklist completo.",
+          "notes": "Consolidacao final.",
+          "is_stage_consolidation": true,
+          "checklist_ready_for_vaga": true,
+          "sent_to_vaga_at": null,
+          "devolutiva_date": "2026-04-24",
+          "created_at": "2026-04-21T20:28:47.128Z",
+          "updated_at": "2026-04-21T20:28:47.128Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": false,
+          "previous_status": "em_avaliacao",
+          "new_status": "em_avaliacao",
+          "regression_prevented": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.252Z",
+      "scenario": "fluxo_principal",
+      "stage": "7_analise_de_vaga",
+      "expected": "Enviar para analise de vaga e mover para em_analise_vaga",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "message": "Assistido enviado para analise de vaga com sucesso.",
+        "evaluation": {
+          "id": "dd89f667-38dd-4edf-9fd2-2a8b84059c95",
+          "patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "patient_name": "Lucas Henrique Barros da Silva",
+          "status_jornada": "em_analise_vaga",
+          "professional_id": null,
+          "professional_name": null,
+          "type": "Consolidacao multiprofissional",
+          "start_date": "2026-04-23",
+          "end_date": "2026-04-23",
+          "status": "concluida",
+          "status_db": "completed",
+          "result": "Consolidacao aprovada para analise de vaga.",
+          "report": "Checklist completo.",
+          "notes": "Consolidacao final.",
+          "is_stage_consolidation": true,
+          "checklist_ready_for_vaga": true,
+          "sent_to_vaga_at": "2026-04-21T20:28:47.133Z",
+          "devolutiva_date": "2026-04-24",
+          "created_at": "2026-04-21T20:28:47.128Z",
+          "updated_at": "2026-04-21T20:28:47.133Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": true,
+          "previous_status": "em_avaliacao",
+          "new_status": "em_analise_vaga",
+          "regression_prevented": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.253Z",
+      "scenario": "fluxo_principal",
+      "stage": "7b_validacao_status_em_analise_vaga",
+      "expected": "status_jornada = em_analise_vaga",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "name": "Lucas Henrique Barros da Silva",
+        "cpf": "12345678910",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "em_analise_vaga",
+        "created_at": "2026-04-21T20:28:46.893Z",
+        "updated_at": "2026-04-21T20:28:47.133Z",
+        "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.307Z",
+      "scenario": "fluxo_principal",
+      "stage": "8_decisao_institucional",
+      "expected": "Decidir em analise de vaga para aprovado",
+      "actual_status": 201,
+      "pass": true,
+      "response": {
+        "success": true,
+        "decisionId": "1",
+        "assistido_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "decisao": "aprovado",
+        "status_jornada_atual": "aprovado"
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.308Z",
+      "scenario": "fluxo_principal",
+      "stage": "8b_validacao_status_decisao",
+      "expected": "status_jornada = aprovado",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "name": "Lucas Henrique Barros da Silva",
+        "cpf": "12345678910",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "aprovado",
+        "created_at": "2026-04-21T20:28:46.893Z",
+        "updated_at": "2026-04-21T20:28:47.282Z",
+        "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.384Z",
+      "scenario": "fluxo_principal",
+      "stage": "9_matricula",
+      "expected": "Transicionar para matriculado",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "paciente": {
+          "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "nome": "Lucas Henrique Barros da Silva",
+          "cpf": "12345678910",
+          "telefone": "21998765432",
+          "email": "mariana.barros.teste@email.com",
+          "dataNascimento": null,
+          "status": "pre_cadastro",
+          "status_jornada": "matriculado"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.581Z",
+      "scenario": "fluxo_principal",
+      "stage": "10_pia",
+      "expected": "Validar suporte de PIA no sistema atual",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "note": "Repositorio nao expoe endpoint/tabela explicita de PIA no fluxo institucional. Validacao limitada ao que existe (matriculas operacionais em unit-operations).",
+        "unit_operations_enrollments_status": 200
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.634Z",
+      "scenario": "fluxo_principal",
+      "stage": "11_inicio_acompanhamento_continuo",
+      "expected": "Transicionar para ativo",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "paciente": {
+          "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+          "nome": "Lucas Henrique Barros da Silva",
+          "cpf": "12345678910",
+          "telefone": "21998765432",
+          "email": "mariana.barros.teste@email.com",
+          "dataNascimento": null,
+          "status": "pre_cadastro",
+          "status_jornada": "ativo"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.663Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "1_entrada_recepcao",
+      "expected": "Criar registro operacional na fila de espera sem alterar status_jornada do cadastro principal",
+      "actual_status": 200,
+      "pass": true,
+      "request": {
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "date_of_birth": "2017-08-14",
+        "cpf": "12345678919",
+        "sex": "Masculino",
+        "has_report": true,
+        "cid": "F84.0",
+        "urgency": "normal",
+        "services": [
+          "f6480df3-d458-48fb-b3b7-5b32f1417ac4"
+        ],
+        "responsible_name": "Mariana Barros da Silva",
+        "phone": "21996432118",
+        "whatsapp": true,
+        "email": "mariana.barros.teste+encaminhado@email.com",
+        "how_heard": "escola",
+        "referred_by": "Escola + pediatra",
+        "cadunico": true,
+        "consent_whatsapp": true,
+        "consent_lgpd": true,
+        "notes": "Investigacao: avaliacao complementar de linguagem e integracao sensorial. Bolsa Familia: 600. NIS: 123.45678.90-1"
+      },
+      "response": {
+        "success": true,
+        "fila_espera_id": "527e296d-1297-41ec-b8f8-976c6f5f6ca2",
+        "pre_appointment_id": "527e296d-1297-41ec-b8f8-976c6f5f6ca2",
+        "status_operacional": "pending",
+        "status_contexto": "Status da fila de espera e operacional; nao altera status_jornada do cadastro principal.",
+        "duplicate_review": {
+          "scenario": "not_found",
+          "exact_matches": [],
+          "similar_matches": [],
+          "justification_recorded": false,
+          "override_authorized": false,
+          "actor": {
+            "actor_id": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+            "actor_name": "admin",
+            "actor_role": "admin"
+          }
+        },
+        "message": "Solicitacao enviada com sucesso."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.688Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "2_fila_espera_e_cadastro_principal",
+      "expected": "Criar cadastro principal unico em em_fila_espera e converter pre-appointment",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "cpf": "12345678919",
+        "rg": "45.678.901-2",
+        "date_of_birth": "2017-08-14",
+        "email": "mariana.barros.teste+encaminhado@email.com",
+        "phone": "21996432118",
+        "mobile": "21964321187",
+        "address": "Rua das Acacias",
+        "number": "152",
+        "complement": "Casa 2",
+        "neighborhood": "Engenho de Dentro",
+        "city": "Rio de Janeiro",
+        "state": "RJ",
+        "zip_code": "20770-210",
+        "profession": "Estudante",
+        "marital_status": null,
+        "education": "3 ano fundamental",
+        "insurance_plan": null,
+        "insurance_number": null,
+        "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes.",
+        "status_jornada": "em_fila_espera",
+        "source_pre_appointment_id": "527e296d-1297-41ec-b8f8-976c6f5f6ca2"
+      },
+      "response": {
+        "success": true,
+        "paciente": {
+          "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "nome": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+          "cpf": "12345678919",
+          "telefone": "21996432118",
+          "email": "mariana.barros.teste+encaminhado@email.com",
+          "dataNascimento": "2017-08-14T03:00:00.000Z",
+          "status": "pre_cadastro",
+          "status_jornada": "em_fila_espera"
+        },
+        "source_pre_appointment_id": "527e296d-1297-41ec-b8f8-976c6f5f6ca2",
+        "pre_appointment_conversion": {
+          "pre_appointment_id": "527e296d-1297-41ec-b8f8-976c6f5f6ca2",
+          "converted_to_patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "linked_existing_patient": false
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.692Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "2b_antiduplicidade",
+      "expected": "Bloquear segundo cadastro da mesma crianca (409)",
+      "actual_status": 409,
+      "pass": true,
+      "response": {
+        "success": false,
+        "existing_patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "message": "Assistido ja cadastrado (CPF ou nome + data de nascimento)."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.693Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "3_triagem_social_inicial",
+      "expected": "Paciente permanece em em_fila_espera durante triagem/pre-cadastro operacional",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "patient": {
+          "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+          "cpf": "12345678919",
+          "date_of_birth": "2017-08-14T03:00:00.000Z",
+          "status": "pre_cadastro",
+          "status_jornada": "em_fila_espera",
+          "created_at": "2026-04-21T20:28:47.666Z",
+          "updated_at": "2026-04-21T20:28:47.666Z",
+          "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+        },
+        "history": [
+          {
+            "id": "93f6f6ed-ddfd-4d0d-a56e-77a1317018cd",
+            "status_anterior": null,
+            "status_novo": "em_fila_espera",
+            "motivo": "Cadastro criado",
+            "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+            "changed_at": "2026-04-21T20:28:47.666Z"
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.724Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "3b_pre_cadastro_operacional",
+      "expected": "Atualizar apenas triagem operacional",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "triage_case": {
+          "id": "bf478276-12cd-4c09-ada0-af9704d7afcd",
+          "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "triagem_status": "pre_cadastro_em_andamento",
+          "triagem_prioridade": "normal",
+          "triagem_responsavel_id": null,
+          "triagem_responsavel_nome": null,
+          "triagem_last_contact_at": null,
+          "triagem_next_action_at": null,
+          "triagem_notes_summary": null,
+          "entrevista_agendada_flag": false,
+          "linked_appointment_id": null,
+          "linked_appointment_at": null,
+          "created_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "updated_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "created_at": "2026-04-21T20:28:47.695Z",
+          "updated_at": "2026-04-21T20:28:47.695Z"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.729Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "4_agendamento_entrevista_social",
+      "expected": "Iniciar agendamento sem transicionar status_jornada",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "triage_case": {
+          "id": "bf478276-12cd-4c09-ada0-af9704d7afcd",
+          "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "triagem_status": "pre_cadastro_em_andamento",
+          "triagem_prioridade": "normal",
+          "triagem_responsavel_id": null,
+          "triagem_responsavel_nome": null,
+          "triagem_last_contact_at": null,
+          "triagem_next_action_at": null,
+          "triagem_notes_summary": null,
+          "entrevista_agendada_flag": false,
+          "linked_appointment_id": null,
+          "linked_appointment_at": null,
+          "created_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "updated_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "created_at": "2026-04-21T20:28:47.695Z",
+          "updated_at": "2026-04-21T20:28:47.695Z"
+        },
+        "agenda_route_hint": "/agenda?patient_id=efaa10ff-3135-43b4-910f-9f96fb5854d5&entry=triagem_social"
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.734Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "4b_agenda_registro",
+      "expected": "Registrar agendamento na agenda institucional",
+      "actual_status": 409,
+      "pass": false,
+      "response": {
+        "success": false,
+        "code": "agenda_slot_conflict",
+        "message": "Conflito de horario: ja existe agendamento ativo para este profissional na data/hora informada.",
+        "conflict": {
+          "appointment_id": "04041b23-e668-4d2a-abff-49e85a6b77a7",
+          "appointment_status": "scheduled"
+        },
+        "dry_run": false,
+        "persisted": false,
+        "endpoint": "agenda_create_v1",
+        "blocked": false,
+        "can_proceed": true,
+        "validation": {
+          "mode": "pre_enforcement",
+          "effective_mode": "observe_only",
+          "rollout_phase": "phase5_controlled_rollout",
+          "hard_block_enabled": false,
+          "legacy_mode_alias": "pre_enforcement",
+          "level": "info",
+          "action": "observe_only",
+          "reason_code": "journey_consistent",
+          "message": "Coerencia da jornada validada para o contexto atual.",
+          "supported_levels": [
+            "info",
+            "warning",
+            "block_ready"
+          ],
+          "should_warn": false,
+          "should_block": false,
+          "would_block_when_enforced": false,
+          "blocking_active": false,
+          "enforcement_ready": true,
+          "taxonomy_version": "2026.03.phase5",
+          "coherence_matrix_version": "2026.03.phase5"
+        },
+        "resolved_context": {
+          "professional_id": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+          "professional_name": "homol_ops_prof1@test.local",
+          "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "patient_name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+          "journey_status": "em_fila_espera",
+          "journey_status_source": "patients.status_jornada",
+          "journey_status_found": true,
+          "service_id": "f6480df3-d458-48fb-b3b7-5b32f1417ac4",
+          "service_name": "Assistente Social",
+          "service_name_source": "services.catalog",
+          "service_found": true,
+          "explicit_event_type": null
+        },
+        "override": {
+          "requested_enforcement_mode": null,
+          "override_allowed": true,
+          "override_ignored": false,
+          "configured_mode": "pre_enforcement",
+          "effective_mode": "observe_only"
+        },
+        "scope": {
+          "access_mode": "agenda_scope",
+          "compatibility_mode": false,
+          "compatibility_notice": null,
+          "primary_scope_required": "agenda:view",
+          "legacy_scope_required": "profissionais:view",
+          "legacy_scope_fallback_enabled": true,
+          "legacy_scope_active": false,
+          "legacy_scope_reason": null,
+          "legacy_scope_deprecation_phase": "phase5_controlled_removal",
+          "legacy_scope_requires_migration": false,
+          "legacy_scope_removal_ready": true,
+          "institutional_taxonomy_version": "2026.03.phase5",
+          "coherence_matrix_version": "2026.03.phase5",
+          "write_validation_ready": true,
+          "write_validation_mode": "pre_enforcement",
+          "write_validation_effective_mode": "observe_only",
+          "write_validation_rollout_phase": "phase5_controlled_rollout",
+          "write_validation_hard_block_enabled": false,
+          "write_validation_legacy_mode_alias": "pre_enforcement",
+          "write_validation_supported_levels": [
+            "info",
+            "warning",
+            "block_ready"
+          ],
+          "write_validation_blocking_active": false,
+          "write_validation_enforcement_ready": true,
+          "professional_id": null,
+          "can_view_all_professionals": false,
+          "allow_professional_view_others": false,
+          "write_validation_summary": {
+            "mode": "pre_enforcement",
+            "effective_mode": "observe_only",
+            "rollout_phase": "phase5_controlled_rollout",
+            "hard_block_enabled": false,
+            "legacy_mode_alias": "pre_enforcement",
+            "total": 1,
+            "info_count": 1,
+            "warning_count": 0,
+            "block_ready_count": 0,
+            "would_block_count": 0,
+            "blocking_count": 0,
+            "blocking_active": false,
+            "enforcement_ready": true
+          }
+        },
+        "create_status_policy": {
+          "default_status": "scheduled",
+          "allow_confirmed_on_create": false,
+          "allowed_statuses": [
+            "scheduled"
+          ]
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.741Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "4c_validacao_sem_transicao_prematura",
+      "expected": "Agendamento nao muda status_jornada",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "statusBeforeAgenda": "em_fila_espera",
+        "statusAfterAgenda": "em_fila_espera"
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.746Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "5_entrevista_social_formal",
+      "expected": "Concluir entrevista e mover para entrevista_realizada",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "interview_date": "2026-04-21",
+        "assistente_social": "Mariana Souza (Servi?o Social)",
+        "parecer_social": "Entrevista concluida. Perfil compativel para continuidade no fluxo institucional.",
+        "resultado_terapeutas": "Necessita avaliacao multiprofissional completa.",
+        "data_resultado_terapeutas": "2026-04-21",
+        "payload": {
+          "atendido_nome": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+          "data_nascimento": "2017-08-14",
+          "sexo": "Masculino",
+          "cor_raca": "Pardo",
+          "mae": "Mariana Barros da Silva",
+          "pai": "Carlos Eduardo da Silva",
+          "responsavel": "Mariana Barros da Silva",
+          "cpf_responsavel": "98765432100",
+          "endereco": "Rua das Acacias, 152, Casa 2",
+          "bairro": "Engenho de Dentro",
+          "cep": "20770-210",
+          "referencia": "Proximo a praca principal e Clinica da Familia",
+          "possui_laudo": true,
+          "cids": [
+            "F84.0"
+          ],
+          "escola_atual": "Escola Municipal Professora Nadir Fernandes",
+          "serie": "3 ano",
+          "turno": "Manha",
+          "horario": "07:30 as 12:00",
+          "dificuldades": "Concentracao, interacao social e linguagem pragmatica",
+          "encaminhada_por": "Escola + pediatra",
+          "motivo_encaminhamento": "Dificuldade de interacao social, atraso em linguagem funcional e necessidade de avaliacao multidisciplinar",
+          "cras_referencia": "CRAS Engenho de Dentro",
+          "bolsa_familia": true,
+          "valor_bolsa_familia": 600,
+          "observacoes_gerais": "Em investigacao: avaliacao complementar de linguagem e integracao sensorial.",
+          "is_draft": false,
+          "status_entrevista": "concluida"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Entrevista social concluida com sucesso.",
+        "interview": {
+          "id": "aedfd440-dab6-42d1-91b9-668853872896",
+          "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "assistente_social": null,
+          "assistente_social_id": null,
+          "interview_date": null,
+          "interview_time": null,
+          "parecer_social": "Entrevista concluida. Perfil compativel para continuidade no fluxo institucional.",
+          "resultado_terapeutas": null,
+          "data_resultado_terapeutas": null,
+          "is_draft": false,
+          "payload": {
+            "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+            "interview_date": null,
+            "assistente_social": null,
+            "parecer_social": "Entrevista concluida. Perfil compativel para continuidade no fluxo institucional.",
+            "resultado_terapeutas": null,
+            "data_resultado_terapeutas": null,
+            "is_draft": false,
+            "status_entrevista": "concluida"
+          },
+          "created_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+          "created_at": "2026-04-21T20:28:47.743Z",
+          "updated_at": "2026-04-21T20:28:47.743Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": true,
+          "previous_status": "em_fila_espera",
+          "new_status": "entrevista_realizada",
+          "regression_prevented": false
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.747Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "5b_validacao_status_entrevista_realizada",
+      "expected": "status_jornada = entrevista_realizada",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "cpf": "12345678919",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "entrevista_realizada",
+        "created_at": "2026-04-21T20:28:47.666Z",
+        "updated_at": "2026-04-21T20:28:47.743Z",
+        "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.753Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "6_avaliacao_multidisciplinar_individual",
+      "expected": "Registrar avaliacao individual e mover para em_avaliacao",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "professional_id": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+        "type": "Avaliacao Psicologica",
+        "start_date": "2026-04-22",
+        "end_date": "2026-04-22",
+        "status": "concluida",
+        "result": "Indicativos compativeis com necessidade de apoio multiprofissional.",
+        "report": "Relatorio tecnico individual concluido.",
+        "notes": "Avaliacao individual concluida.",
+        "is_stage_consolidation": false,
+        "checklist_ready_for_vaga": false
+      },
+      "response": {
+        "success": true,
+        "message": "Avaliacao tecnica registrada com sucesso.",
+        "evaluation": {
+          "id": "f7aff32a-e5db-4375-b0f2-0a4310b070ae",
+          "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "patient_name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+          "status_jornada": "em_avaliacao",
+          "professional_id": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+          "professional_name": "Psicologa",
+          "type": "Avaliacao Psicologica",
+          "start_date": "2026-04-22",
+          "end_date": "2026-04-22",
+          "status": "concluida",
+          "status_db": "completed",
+          "result": "Indicativos compativeis com necessidade de apoio multiprofissional.",
+          "report": "Relatorio tecnico individual concluido.",
+          "notes": "Avaliacao individual concluida.",
+          "is_stage_consolidation": false,
+          "checklist_ready_for_vaga": false,
+          "sent_to_vaga_at": null,
+          "devolutiva_date": null,
+          "created_at": "2026-04-21T20:28:47.749Z",
+          "updated_at": "2026-04-21T20:28:47.749Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": true,
+          "previous_status": "entrevista_realizada",
+          "new_status": "em_avaliacao",
+          "regression_prevented": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.754Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "6b_validacao_status_em_avaliacao",
+      "expected": "status_jornada = em_avaliacao",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "cpf": "12345678919",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "em_avaliacao",
+        "created_at": "2026-04-21T20:28:47.666Z",
+        "updated_at": "2026-04-21T20:28:47.749Z",
+        "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.759Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "6c_consolidacao_multidisciplinar",
+      "expected": "Registrar consolidacao pronta para vaga",
+      "actual_status": 201,
+      "pass": true,
+      "request": {
+        "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "professional_id": null,
+        "type": "Consolidacao multiprofissional",
+        "start_date": "2026-04-23",
+        "end_date": "2026-04-23",
+        "status": "concluida",
+        "result": "Consolidacao aprovada para analise de vaga.",
+        "report": "Checklist completo.",
+        "notes": "Consolidacao final.",
+        "is_stage_consolidation": true,
+        "checklist_ready_for_vaga": true,
+        "devolutiva_date": "2026-04-24"
+      },
+      "response": {
+        "success": true,
+        "message": "Consolidacao multiprofissional registrada com sucesso.",
+        "evaluation": {
+          "id": "a9cbca70-32a7-4ed0-87fe-322d9408ce5c",
+          "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "patient_name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+          "status_jornada": "em_avaliacao",
+          "professional_id": null,
+          "professional_name": null,
+          "type": "Consolidacao multiprofissional",
+          "start_date": "2026-04-23",
+          "end_date": "2026-04-23",
+          "status": "concluida",
+          "status_db": "completed",
+          "result": "Consolidacao aprovada para analise de vaga.",
+          "report": "Checklist completo.",
+          "notes": "Consolidacao final.",
+          "is_stage_consolidation": true,
+          "checklist_ready_for_vaga": true,
+          "sent_to_vaga_at": null,
+          "devolutiva_date": "2026-04-24",
+          "created_at": "2026-04-21T20:28:47.756Z",
+          "updated_at": "2026-04-21T20:28:47.756Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": false,
+          "previous_status": "em_avaliacao",
+          "new_status": "em_avaliacao",
+          "regression_prevented": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.766Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "7_analise_de_vaga",
+      "expected": "Enviar para analise de vaga e mover para em_analise_vaga",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "success": true,
+        "message": "Assistido enviado para analise de vaga com sucesso.",
+        "evaluation": {
+          "id": "a9cbca70-32a7-4ed0-87fe-322d9408ce5c",
+          "patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+          "patient_name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+          "status_jornada": "em_analise_vaga",
+          "professional_id": null,
+          "professional_name": null,
+          "type": "Consolidacao multiprofissional",
+          "start_date": "2026-04-23",
+          "end_date": "2026-04-23",
+          "status": "concluida",
+          "status_db": "completed",
+          "result": "Consolidacao aprovada para analise de vaga.",
+          "report": "Checklist completo.",
+          "notes": "Consolidacao final.",
+          "is_stage_consolidation": true,
+          "checklist_ready_for_vaga": true,
+          "sent_to_vaga_at": "2026-04-21T20:28:47.761Z",
+          "devolutiva_date": "2026-04-24",
+          "created_at": "2026-04-21T20:28:47.756Z",
+          "updated_at": "2026-04-21T20:28:47.761Z"
+        },
+        "status_transition": {
+          "attempted": true,
+          "changed": true,
+          "previous_status": "em_avaliacao",
+          "new_status": "em_analise_vaga",
+          "regression_prevented": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.767Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "7b_validacao_status_em_analise_vaga",
+      "expected": "status_jornada = em_analise_vaga",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "cpf": "12345678919",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "em_analise_vaga",
+        "created_at": "2026-04-21T20:28:47.666Z",
+        "updated_at": "2026-04-21T20:28:47.761Z",
+        "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.771Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "8_decisao_institucional",
+      "expected": "Decidir em analise de vaga para encaminhado",
+      "actual_status": 201,
+      "pass": true,
+      "response": {
+        "success": true,
+        "decisionId": "2",
+        "assistido_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "decisao": "encaminhado",
+        "status_jornada_atual": "encaminhado"
+      }
+    },
+    {
+      "timestamp": "2026-04-21T20:28:47.772Z",
+      "scenario": "fluxo_secundario_encaminhado",
+      "stage": "8b_validacao_status_decisao",
+      "expected": "status_jornada = encaminhado",
+      "actual_status": 200,
+      "pass": true,
+      "response": {
+        "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "cpf": "12345678919",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "pre_cadastro",
+        "status_jornada": "encaminhado",
+        "created_at": "2026-04-21T20:28:47.666Z",
+        "updated_at": "2026-04-21T20:28:47.768Z",
+        "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+      }
+    }
+  ],
+  "cases": {
+    "main": {
+      "routeTag": "fluxo_principal",
+      "childName": "Lucas Henrique Barros da Silva",
+      "childCpf": "12345678910",
+      "decision": "aprovado",
+      "patientId": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+      "preAppointmentId": "6a8be101-6913-4527-b579-aa6bbcade5bd",
+      "evaluationIndividualId": "3d0ef9f0-7722-4647-be31-8194208b5cdc",
+      "evaluationConsolidationId": "dd89f667-38dd-4edf-9fd2-2a8b84059c95",
+      "appointmentId": "04041b23-e668-4d2a-abff-49e85a6b77a7",
+      "snapshots": {
+        "afterCreate": {
+          "patient": {
+            "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+            "name": "Lucas Henrique Barros da Silva",
+            "cpf": "12345678910",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera",
+            "created_at": "2026-04-21T20:28:46.893Z",
+            "updated_at": "2026-04-21T20:28:46.893Z",
+            "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "36d525b7-b4f1-41b9-a16a-068d762437a7",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:46.893Z"
+            }
+          ]
+        },
+        "afterInterview": {
+          "patient": {
+            "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+            "name": "Lucas Henrique Barros da Silva",
+            "cpf": "12345678910",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "entrevista_realizada",
+            "created_at": "2026-04-21T20:28:46.893Z",
+            "updated_at": "2026-04-21T20:28:47.094Z",
+            "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "36d525b7-b4f1-41b9-a16a-068d762437a7",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:46.893Z"
+            },
+            {
+              "id": "05e17b5a-f019-4a28-b7dc-1f5e53985956",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.094Z"
+            }
+          ]
+        },
+        "afterEvaluationStart": {
+          "patient": {
+            "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+            "name": "Lucas Henrique Barros da Silva",
+            "cpf": "12345678910",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_avaliacao",
+            "created_at": "2026-04-21T20:28:46.893Z",
+            "updated_at": "2026-04-21T20:28:47.109Z",
+            "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "36d525b7-b4f1-41b9-a16a-068d762437a7",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:46.893Z"
+            },
+            {
+              "id": "05e17b5a-f019-4a28-b7dc-1f5e53985956",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.094Z"
+            },
+            {
+              "id": "fa30b73a-ae30-4528-99d1-9ebbad8950b9",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.109Z"
+            }
+          ]
+        },
+        "afterSendVaga": {
+          "patient": {
+            "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+            "name": "Lucas Henrique Barros da Silva",
+            "cpf": "12345678910",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_analise_vaga",
+            "created_at": "2026-04-21T20:28:46.893Z",
+            "updated_at": "2026-04-21T20:28:47.133Z",
+            "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "36d525b7-b4f1-41b9-a16a-068d762437a7",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:46.893Z"
+            },
+            {
+              "id": "05e17b5a-f019-4a28-b7dc-1f5e53985956",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.094Z"
+            },
+            {
+              "id": "fa30b73a-ae30-4528-99d1-9ebbad8950b9",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.109Z"
+            },
+            {
+              "id": "802f24c9-3395-4717-b569-6e904348144c",
+              "status_anterior": "em_avaliacao",
+              "status_novo": "em_analise_vaga",
+              "motivo": "Encaminhamento para analise de vaga (fluxo_principal)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.133Z"
+            }
+          ]
+        },
+        "afterDecision": {
+          "patient": {
+            "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+            "name": "Lucas Henrique Barros da Silva",
+            "cpf": "12345678910",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "aprovado",
+            "created_at": "2026-04-21T20:28:46.893Z",
+            "updated_at": "2026-04-21T20:28:47.282Z",
+            "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "36d525b7-b4f1-41b9-a16a-068d762437a7",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:46.893Z"
+            },
+            {
+              "id": "05e17b5a-f019-4a28-b7dc-1f5e53985956",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.094Z"
+            },
+            {
+              "id": "fa30b73a-ae30-4528-99d1-9ebbad8950b9",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.109Z"
+            },
+            {
+              "id": "802f24c9-3395-4717-b569-6e904348144c",
+              "status_anterior": "em_avaliacao",
+              "status_novo": "em_analise_vaga",
+              "motivo": "Encaminhamento para analise de vaga (fluxo_principal)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.133Z"
+            },
+            {
+              "id": "488895d6-a005-412c-91af-a541a117b26b",
+              "status_anterior": "em_analise_vaga",
+              "status_novo": "aprovado",
+              "motivo": "Caso apto para matricula institucional (fluxo_principal)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.282Z"
+            }
+          ]
+        },
+        "final": {
+          "patient": {
+            "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+            "name": "Lucas Henrique Barros da Silva",
+            "cpf": "12345678910",
+            "date_of_birth": null,
+            "status": "pre_cadastro",
+            "status_jornada": "ativo",
+            "created_at": "2026-04-21T20:28:46.893Z",
+            "updated_at": "2026-04-21T20:28:47.606Z",
+            "notes": "[fluxo_principal] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes.\n[ACOMPANHAMENTO] Inicio do acompanhamento continuo."
+          },
+          "history": [
+            {
+              "id": "36d525b7-b4f1-41b9-a16a-068d762437a7",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:46.893Z"
+            },
+            {
+              "id": "05e17b5a-f019-4a28-b7dc-1f5e53985956",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.094Z"
+            },
+            {
+              "id": "fa30b73a-ae30-4528-99d1-9ebbad8950b9",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.109Z"
+            },
+            {
+              "id": "802f24c9-3395-4717-b569-6e904348144c",
+              "status_anterior": "em_avaliacao",
+              "status_novo": "em_analise_vaga",
+              "motivo": "Encaminhamento para analise de vaga (fluxo_principal)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.133Z"
+            },
+            {
+              "id": "488895d6-a005-412c-91af-a541a117b26b",
+              "status_anterior": "em_analise_vaga",
+              "status_novo": "aprovado",
+              "motivo": "Caso apto para matricula institucional (fluxo_principal)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.282Z"
+            },
+            {
+              "id": "9ae9738e-d602-4903-a0f5-11b5b77a1358",
+              "status_anterior": "aprovado",
+              "status_novo": "matriculado",
+              "motivo": "Status atualizado no cadastro",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.338Z"
+            },
+            {
+              "id": "4c2612da-3b38-4432-81be-b28bfc8d0260",
+              "status_anterior": "matriculado",
+              "status_novo": "ativo",
+              "motivo": "Status atualizado no cadastro",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.606Z"
+            }
+          ]
+        }
+      },
+      "preAppointmentSnapshot": {
+        "id": "6a8be101-6913-4527-b579-aa6bbcade5bd",
+        "name": "Lucas Henrique Barros da Silva",
+        "cpf": "12345678910",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "converted",
+        "converted_to_patient_id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "converted_at": "2026-04-21T20:28:46.893Z",
+        "converted_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+        "created_at": "2026-04-21T20:28:46.877Z"
+      }
+    },
+    "secondary": {
+      "routeTag": "fluxo_secundario_encaminhado",
+      "childName": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+      "childCpf": "12345678919",
+      "decision": "encaminhado",
+      "patientId": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+      "preAppointmentId": "527e296d-1297-41ec-b8f8-976c6f5f6ca2",
+      "evaluationIndividualId": "f7aff32a-e5db-4375-b0f2-0a4310b070ae",
+      "evaluationConsolidationId": "a9cbca70-32a7-4ed0-87fe-322d9408ce5c",
+      "appointmentId": null,
+      "snapshots": {
+        "afterCreate": {
+          "patient": {
+            "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+            "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+            "cpf": "12345678919",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera",
+            "created_at": "2026-04-21T20:28:47.666Z",
+            "updated_at": "2026-04-21T20:28:47.666Z",
+            "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "93f6f6ed-ddfd-4d0d-a56e-77a1317018cd",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.666Z"
+            }
+          ]
+        },
+        "afterInterview": {
+          "patient": {
+            "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+            "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+            "cpf": "12345678919",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "entrevista_realizada",
+            "created_at": "2026-04-21T20:28:47.666Z",
+            "updated_at": "2026-04-21T20:28:47.743Z",
+            "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "93f6f6ed-ddfd-4d0d-a56e-77a1317018cd",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.666Z"
+            },
+            {
+              "id": "e300d3e0-5a1a-49f8-adcf-90ea232eb47e",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.743Z"
+            }
+          ]
+        },
+        "afterEvaluationStart": {
+          "patient": {
+            "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+            "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+            "cpf": "12345678919",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_avaliacao",
+            "created_at": "2026-04-21T20:28:47.666Z",
+            "updated_at": "2026-04-21T20:28:47.749Z",
+            "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "93f6f6ed-ddfd-4d0d-a56e-77a1317018cd",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.666Z"
+            },
+            {
+              "id": "e300d3e0-5a1a-49f8-adcf-90ea232eb47e",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.743Z"
+            },
+            {
+              "id": "ed73938f-5c5c-4cb3-93ee-e9e86ac69093",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.749Z"
+            }
+          ]
+        },
+        "afterSendVaga": {
+          "patient": {
+            "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+            "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+            "cpf": "12345678919",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_analise_vaga",
+            "created_at": "2026-04-21T20:28:47.666Z",
+            "updated_at": "2026-04-21T20:28:47.761Z",
+            "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "93f6f6ed-ddfd-4d0d-a56e-77a1317018cd",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.666Z"
+            },
+            {
+              "id": "e300d3e0-5a1a-49f8-adcf-90ea232eb47e",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.743Z"
+            },
+            {
+              "id": "ed73938f-5c5c-4cb3-93ee-e9e86ac69093",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.749Z"
+            },
+            {
+              "id": "b284ee2e-ffa3-4659-bfd9-395e87603f1d",
+              "status_anterior": "em_avaliacao",
+              "status_novo": "em_analise_vaga",
+              "motivo": "Encaminhamento para analise de vaga (fluxo_secundario_encaminhado)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.761Z"
+            }
+          ]
+        },
+        "afterDecision": {
+          "patient": {
+            "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+            "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+            "cpf": "12345678919",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "encaminhado",
+            "created_at": "2026-04-21T20:28:47.666Z",
+            "updated_at": "2026-04-21T20:28:47.768Z",
+            "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "93f6f6ed-ddfd-4d0d-a56e-77a1317018cd",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.666Z"
+            },
+            {
+              "id": "e300d3e0-5a1a-49f8-adcf-90ea232eb47e",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.743Z"
+            },
+            {
+              "id": "ed73938f-5c5c-4cb3-93ee-e9e86ac69093",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.749Z"
+            },
+            {
+              "id": "b284ee2e-ffa3-4659-bfd9-395e87603f1d",
+              "status_anterior": "em_avaliacao",
+              "status_novo": "em_analise_vaga",
+              "motivo": "Encaminhamento para analise de vaga (fluxo_secundario_encaminhado)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.761Z"
+            },
+            {
+              "id": "b2ef5b85-4aff-4c86-b8fb-b45e1bac6ff8",
+              "status_anterior": "em_analise_vaga",
+              "status_novo": "encaminhado",
+              "motivo": "Encaminhamento externo formal (fluxo_secundario_encaminhado)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.768Z"
+            }
+          ]
+        },
+        "final": {
+          "patient": {
+            "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+            "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+            "cpf": "12345678919",
+            "date_of_birth": "2017-08-14T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "encaminhado",
+            "created_at": "2026-04-21T20:28:47.666Z",
+            "updated_at": "2026-04-21T20:28:47.768Z",
+            "notes": "[fluxo_secundario_encaminhado] Responsavel: Mariana Barros da Silva. Pai: Carlos Eduardo da Silva. Escola: EM Professora Nadir Fernandes."
+          },
+          "history": [
+            {
+              "id": "93f6f6ed-ddfd-4d0d-a56e-77a1317018cd",
+              "status_anterior": null,
+              "status_novo": "em_fila_espera",
+              "motivo": "Cadastro criado",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.666Z"
+            },
+            {
+              "id": "e300d3e0-5a1a-49f8-adcf-90ea232eb47e",
+              "status_anterior": "em_fila_espera",
+              "status_novo": "entrevista_realizada",
+              "motivo": "Entrevista Social concluida",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.743Z"
+            },
+            {
+              "id": "ed73938f-5c5c-4cb3-93ee-e9e86ac69093",
+              "status_anterior": "entrevista_realizada",
+              "status_novo": "em_avaliacao",
+              "motivo": "Etapa de avaliacao multidisciplinar iniciada",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.749Z"
+            },
+            {
+              "id": "b284ee2e-ffa3-4659-bfd9-395e87603f1d",
+              "status_anterior": "em_avaliacao",
+              "status_novo": "em_analise_vaga",
+              "motivo": "Encaminhamento para analise de vaga (fluxo_secundario_encaminhado)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.761Z"
+            },
+            {
+              "id": "b2ef5b85-4aff-4c86-b8fb-b45e1bac6ff8",
+              "status_anterior": "em_analise_vaga",
+              "status_novo": "encaminhado",
+              "motivo": "Encaminhamento externo formal (fluxo_secundario_encaminhado)",
+              "changed_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+              "changed_at": "2026-04-21T20:28:47.768Z"
+            }
+          ]
+        }
+      },
+      "preAppointmentSnapshot": {
+        "id": "527e296d-1297-41ec-b8f8-976c6f5f6ca2",
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "cpf": "12345678919",
+        "date_of_birth": "2017-08-14T03:00:00.000Z",
+        "status": "converted",
+        "converted_to_patient_id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "converted_at": "2026-04-21T20:28:47.666Z",
+        "converted_by": "d1aa940b-2c48-4d29-bdfa-9b4ec08fe409",
+        "created_at": "2026-04-21T20:28:47.638Z"
+      }
+    }
+  },
+  "rbac": {
+    "user": {
+      "id": "85e29ac2-1596-4c68-a25c-24f56412fe59",
+      "username": "rbac_fluxo_20260421202846",
+      "password": "rbac123"
+    },
+    "social_triage_get": {
+      "status": 403,
+      "pass": true,
+      "payload": {
+        "success": false,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    "fila_triage_queue_get": {
+      "status": 403,
+      "pass": true,
+      "payload": {
+        "success": false,
+        "message": "Acesso negado para esta operação"
+      }
+    },
+    "pacientes_list_get": {
+      "status": 200,
+      "pass": false,
+      "payload": {
+        "success": true,
+        "total": 39,
+        "pacientes": [
+          {
+            "id": "d1d7812a-7ef4-4e14-a1e7-b33e27f98833",
+            "nome": "Joao Pedro Silva Final 20260420235716",
+            "cpf": "80420235716",
+            "telefone": "11820235716",
+            "email": null,
+            "dataNascimento": "2017-08-10T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "5d77aab6-8b4b-49f8-ba26-4baea1487bb5",
+            "nome": "Homolog Crianca Base Final 20260420235716",
+            "cpf": "70420235716",
+            "telefone": "11761753202",
+            "email": null,
+            "dataNascimento": "2018-09-15T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "c86a4c6c-1bc1-48ef-9e1d-b87955dd6404",
+            "nome": "Joao Pedro Silva Final 20260420235628",
+            "cpf": "80420235628",
+            "telefone": "11820235628",
+            "email": null,
+            "dataNascimento": "2017-08-10T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "99a16f0a-7931-4c23-90af-975cb1c174e5",
+            "nome": "Homolog Crianca Base Final 20260420235628",
+            "cpf": "70420235628",
+            "telefone": "11782653202",
+            "email": null,
+            "dataNascimento": "2018-09-15T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "1513a77c-fcaa-4b60-9dad-d75a2a3c25c8",
+            "nome": "Joao Pedro Silva Final 20260420235554",
+            "cpf": "80420235554",
+            "telefone": "11820235554",
+            "email": null,
+            "dataNascimento": "2017-08-10T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "38f7b38b-5f35-45a5-b897-12aa9f8bea20",
+            "nome": "Homolog Crianca Base Final 20260420235554",
+            "cpf": "70420235554",
+            "telefone": "11980235554",
+            "email": null,
+            "dataNascimento": "2018-09-15T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "a1dd6d76-f27b-43fa-8760-df87dde3dd70",
+            "nome": "Homolog Crianca Nova 202604202327528186",
+            "cpf": null,
+            "telefone": "11805958186",
+            "email": "hml.clean.202604202327528186@example.test",
+            "dataNascimento": "2019-11-19T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "75e44780-d5fa-4038-bc4f-0d73b8f6e2b4",
+            "nome": "Homolog Crianca Base 202604202327528186 Forte",
+            "cpf": "76725958186",
+            "telefone": "11925958187",
+            "email": "hml.base.202604202327528186@example.test",
+            "dataNascimento": "2018-09-15T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "ecac5168-a6a2-4dda-b548-400aac62cc1c",
+            "nome": "Homolog Crianca Base 202604202305456744",
+            "cpf": "63460526744",
+            "telefone": "11960526744",
+            "email": "hml.base.202604202305456744@example.test",
+            "dataNascimento": "2018-09-15T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "953e2c2c-f76c-4aa8-9a96-29aba2158f3d",
+            "nome": "Homolog Crianca Base 202604202256006520",
+            "cpf": "57607226520",
+            "telefone": "11907226520",
+            "email": "hml.base.202604202256006520@example.test",
+            "dataNascimento": "2018-09-15T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "8896c12d-9828-41d1-9011-3baf938724a1",
+            "nome": "Assistido Homol 2",
+            "cpf": "99900000002",
+            "telefone": "11999990102",
+            "email": "assistido.homol2@test.local",
+            "dataNascimento": null,
+            "status": "ativo",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "62fc36db-02c4-4059-b130-b94f77282d99",
+            "nome": "Assistido Homol 1",
+            "cpf": "99900000001",
+            "telefone": "11999990101",
+            "email": "assistido.homol1@test.local",
+            "dataNascimento": null,
+            "status": "ativo",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "27b0aef3-7705-4e96-a5dc-ee065250265f",
+            "nome": "Smoke Tela 33829460",
+            "cpf": null,
+            "telefone": "11999829460",
+            "email": "smoke.tela.33829460@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "b3a3a0a4-5e1b-4a43-8f36-88654684fa78",
+            "nome": "Tela Homolog 33651503",
+            "cpf": null,
+            "telefone": "11999651503",
+            "email": "tela.hml.33651503@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "fc5af1bc-af92-4063-95a2-1e93224e4a91",
+            "nome": "Crianca Homolog HML20260327174624",
+            "cpf": null,
+            "telefone": "1199174624",
+            "email": "hml.preag.20260327174624@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "d9714ade-51c8-4d19-ae75-ce1eeaf828a0",
+            "nome": "Crianca Homolog HML20260327174603",
+            "cpf": null,
+            "telefone": "1199174603",
+            "email": "hml.preag.20260327174603@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "b3714625-55c2-49b7-955b-461a0c7d2595",
+            "nome": "Crianca Homolog HML20260327174227",
+            "cpf": null,
+            "telefone": "1199174227",
+            "email": "hml.preag.20260327174227@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "66405f7a-37ce-4138-970c-c537ddac333f",
+            "nome": "Crianca Homolog HML20260327171559",
+            "cpf": null,
+            "telefone": "1199171559",
+            "email": "hml.preag.20260327171559@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "94bac146-79d9-4e64-951b-45422fd0df57",
+            "nome": "Crianca Homolog HML20260327171426",
+            "cpf": null,
+            "telefone": "1199171426",
+            "email": "hml.preag.20260327171426@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "7c7b16f2-53a5-4a00-aab7-be6d51b08513",
+            "nome": "Crianca Homolog HML20260327171335",
+            "cpf": null,
+            "telefone": "1199171335",
+            "email": "hml.preag.20260327171335@teste.local",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "8ce13b8f-02fb-4441-9699-a612c304565f",
+            "nome": "Crianca Duplicada HML23285617",
+            "cpf": "28597895638",
+            "telefone": "(11) 96666-2222",
+            "email": "dupbase.HML23285617@mail.test",
+            "dataNascimento": "2017-02-03T02:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "b4ee2911-b238-4622-9ae2-90ca597b2ff3",
+            "nome": "Crianca Import HML23285617",
+            "cpf": "28561763036",
+            "telefone": "(11) 98888-1111",
+            "email": "import.HML23285617@mail.test",
+            "dataNascimento": "2019-05-10T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "3cb1937b-b937-4c10-a944-6c19379075d2",
+            "nome": "Crianca Manual HML23285617",
+            "cpf": "28578488089",
+            "telefone": "(11) 97777-1111",
+            "email": "manual.HML23285617@mail.test",
+            "dataNascimento": "2018-01-15T02:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "c65eb439-8f5f-4932-bba5-706719f1d6ef",
+            "nome": "Homologacao Final 1773953236143",
+            "cpf": null,
+            "telefone": "11999990000",
+            "email": "homologacao.final.1773953236143@example.com",
+            "dataNascimento": "2017-04-21T03:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "c4e2aa4c-a361-4e84-810c-5de1eb8fef82",
+            "nome": "Homologacao Jornada 1773946638476",
+            "cpf": null,
+            "telefone": "11999990000",
+            "email": "homologacao+1773946638476@example.com",
+            "dataNascimento": "2017-01-15T02:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "fd5a40a0-f5e1-404d-9e8e-6440592b2dc5",
+            "nome": "Homologacao Jornada 1773946548174",
+            "cpf": null,
+            "telefone": "11999990000",
+            "email": "homologacao+1773946548174@example.com",
+            "dataNascimento": "2017-01-15T02:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "f4b8a62d-3263-4868-9179-1a90754f4940",
+            "nome": "Homologacao Jornada 1773946465652",
+            "cpf": null,
+            "telefone": "11999990000",
+            "email": "homologacao+1773946465652@example.com",
+            "dataNascimento": "2017-01-15T02:00:00.000Z",
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "c7ab21d2-0981-45a7-a17f-b2d6287a46fc",
+            "nome": "UI Paciente 1773254464446",
+            "cpf": "16544280802",
+            "telefone": null,
+            "email": null,
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_analise_vaga"
+          },
+          {
+            "id": "3f87d59f-3136-4b83-b8af-c6affd1eebc5",
+            "nome": "UI Paciente 1773254351243",
+            "cpf": "58612544101",
+            "telefone": null,
+            "email": null,
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "587c2755-a62d-4dc4-9e96-59fd34c45537",
+            "nome": "UI Paciente 1773254190409",
+            "cpf": "16092159428",
+            "telefone": null,
+            "email": null,
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "5785413e-c195-410c-aee0-dfea27bcb7af",
+            "nome": "UI Paciente 1773254095263",
+            "cpf": "77385267928",
+            "telefone": null,
+            "email": null,
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "18ed71d8-9309-4645-a4d1-d21c8a10626a",
+            "nome": "UI Paciente 1773254018007",
+            "cpf": "56361863504",
+            "telefone": null,
+            "email": null,
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "05de8116-fc57-455d-b871-0e31e03cbc30",
+            "nome": "Paciente Avaliacoes 1773253875652",
+            "cpf": "49794691442",
+            "telefone": null,
+            "email": null,
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_analise_vaga"
+          },
+          {
+            "id": "79086ebe-f867-447f-940d-ed0e81dd8dce",
+            "nome": "Paciente Smoke Journey",
+            "cpf": null,
+            "telefone": null,
+            "email": null,
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_analise_vaga"
+          },
+          {
+            "id": "4f75649f-5716-4466-8d8c-4fb39747edac",
+            "nome": "Rafael Souza",
+            "cpf": "90000000003",
+            "telefone": "21990000003",
+            "email": "rafael.souza.seed@example.com",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "4a65d73d-fc3d-452d-9e41-d4e133cea162",
+            "nome": "Lucas Ferreira",
+            "cpf": "90000000001",
+            "telefone": "21990000001",
+            "email": "lucas.ferreira.seed@example.com",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_analise_vaga"
+          },
+          {
+            "id": "7730352c-94f6-48bd-a6a6-adf3401ed5a0",
+            "nome": "Mariana Costa",
+            "cpf": "90000000002",
+            "telefone": "21990000002",
+            "email": "mariana.costa.seed@example.com",
+            "dataNascimento": null,
+            "status": "pre_cadastro",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000302",
+            "nome": "Pedro Lima",
+            "cpf": null,
+            "telefone": "11888887777",
+            "email": "pedro@email.com",
+            "dataNascimento": null,
+            "status": "ativo",
+            "status_jornada": "em_fila_espera"
+          },
+          {
+            "id": "00000000-0000-0000-0000-000000000301",
+            "nome": "Maria Silva",
+            "cpf": null,
+            "telefone": "11999990000",
+            "email": "maria@email.com",
+            "dataNascimento": null,
+            "status": "ativo",
+            "status_jornada": "em_fila_espera"
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": {
+    "health": {
+      "method": "GET",
+      "route": "/health",
+      "status": 200,
+      "ok": true,
+      "payload": {
+        "message": "API Instituto Lauir funcionando!",
+        "timestamp": "2026-04-21T20:28:46.488Z",
+        "environment": "development",
+        "frontendBuildAvailable": true
+      }
+    },
+    "adminLogin": "ok",
+    "references": {
+      "professionalId": "7faa1d93-2615-4392-b708-08ddce1e5bdc",
+      "serviceId": "f6480df3-d458-48fb-b3b7-5b32f1417ac4",
+      "serviceName": "Assistente Social"
+    },
+    "finalPatientRows": [
+      {
+        "id": "efaa10ff-3135-43b4-910f-9f96fb5854d5",
+        "name": "Lucas Henrique Barros da Silva (Secundario Encaminhado)",
+        "cpf": "12345678919",
+        "status": "pre_cadastro",
+        "status_jornada": "encaminhado",
+        "updated_at": "2026-04-21T20:28:47.768Z"
+      },
+      {
+        "id": "fa8f6c4b-ccc1-4ac0-867a-cdb94e830820",
+        "name": "Lucas Henrique Barros da Silva",
+        "cpf": "12345678910",
+        "status": "pre_cadastro",
+        "status_jornada": "ativo",
+        "updated_at": "2026-04-21T20:28:47.606Z"
+      }
+    ]
+  },
+  "errors": [],
+  "finishedAt": "2026-04-21T20:28:47.773Z",
+  "success": true
+}

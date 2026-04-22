@@ -19,6 +19,28 @@ if ($LASTEXITCODE -ne 0) {
   throw "Falha ao executar 'git add --all'."
 }
 
+# Keep local environment files out of deploy commits.
+$stagedFiles = @(git diff --cached --name-only)
+$localEnvFiles = @(
+  $stagedFiles | Where-Object {
+    $normalized = ($_ -replace '\\', '/')
+    $leaf = Split-Path -Path $normalized -Leaf
+    ($leaf -eq ".env" -or $leaf -like ".env.*" -or $leaf -like ".env*.local") -and
+      $leaf -ne ".env.example"
+  }
+)
+
+if ($localEnvFiles.Count -gt 0) {
+  Write-Host "Ignorando arquivos locais de ambiente no deploy:"
+  foreach ($file in $localEnvFiles) {
+    Write-Host " - $file"
+    git restore --staged -- $file
+    if ($LASTEXITCODE -ne 0) {
+      throw "Falha ao remover '$file' do stage."
+    }
+  }
+}
+
 # If nothing is staged, create empty commit for redeploy
 git diff --cached --quiet
 if ($LASTEXITCODE -eq 0) {
