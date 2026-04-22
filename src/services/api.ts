@@ -189,6 +189,55 @@ export type PatientCreateResponse = {
   message?: string;
 };
 
+export type PatientPiaStatus = "rascunho" | "ativo" | "em_revisao" | "encerrado";
+
+export type PatientPiaDTO = {
+  id: string;
+  patient_id: string;
+  status: PatientPiaStatus | string;
+  data_inicio: string;
+  data_revisao?: string | null;
+  objetivos: string;
+  intervencoes: string;
+  metas: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type PatientPiaHistoryDTO = {
+  id: string;
+  pia_id: string;
+  patient_id: string;
+  action: "criado" | "revisado" | string;
+  status: PatientPiaStatus | string;
+  data_inicio: string;
+  data_revisao?: string | null;
+  objetivos: string;
+  intervencoes: string;
+  metas: string;
+  changed_by?: string | null;
+  changed_at?: string | null;
+};
+
+export type PatientPiaPayload = {
+  status?: PatientPiaStatus | string;
+  data_inicio: string;
+  data_revisao?: string | null;
+  objetivos?: string | null;
+  intervencoes?: string | null;
+  metas?: string | null;
+};
+
+export type PatientPiaResponse = {
+  success: boolean;
+  patient_id?: string;
+  status_jornada?: string | null;
+  pia: PatientPiaDTO | null;
+  history?: PatientPiaHistoryDTO[];
+};
+
 export type PreAppointmentImportRecord = {
   id: string;
   name: string;
@@ -562,6 +611,25 @@ type PatientRecordLike = {
   updated_at?: string | null;
 };
 
+type PatientPiaRecordLike = {
+  id?: string | number | null;
+  pia_id?: string | number | null;
+  patient_id?: string | number | null;
+  action?: string | null;
+  status?: string | null;
+  data_inicio?: string | null;
+  data_revisao?: string | null;
+  objetivos?: string | null;
+  intervencoes?: string | null;
+  metas?: string | null;
+  created_by?: string | number | null;
+  updated_by?: string | number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  changed_by?: string | number | null;
+  changed_at?: string | null;
+};
+
 type PreAppointmentRecordLike = {
   id?: string | number | null;
   name?: string | null;
@@ -748,6 +816,67 @@ function normalizePatientDetailRecord(raw: unknown): PatientDetailDTO | null {
     notes: coerceStatusText(payload.notes),
     created_at: coerceStatusText(payload.created_at),
     updated_at: coerceStatusText(payload.updated_at),
+  };
+}
+
+function normalizePatientPiaRecord(raw: unknown): PatientPiaDTO | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const payload = raw as PatientPiaRecordLike;
+  const idCandidate = payload.id;
+  const patientIdCandidate = payload.patient_id;
+  if (idCandidate === null || idCandidate === undefined) return null;
+  if (patientIdCandidate === null || patientIdCandidate === undefined) return null;
+
+  return {
+    id: String(idCandidate),
+    patient_id: String(patientIdCandidate),
+    status: coerceStatusText(payload.status) || "ativo",
+    data_inicio: coerceStatusText(payload.data_inicio) || "",
+    data_revisao: coerceStatusText(payload.data_revisao),
+    objetivos: coerceStatusText(payload.objetivos) || "",
+    intervencoes: coerceStatusText(payload.intervencoes) || "",
+    metas: coerceStatusText(payload.metas) || "",
+    created_by:
+      payload.created_by === null || payload.created_by === undefined
+        ? null
+        : String(payload.created_by),
+    updated_by:
+      payload.updated_by === null || payload.updated_by === undefined
+        ? null
+        : String(payload.updated_by),
+    created_at: coerceStatusText(payload.created_at),
+    updated_at: coerceStatusText(payload.updated_at),
+  };
+}
+
+function normalizePatientPiaHistoryRecord(raw: unknown): PatientPiaHistoryDTO | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const payload = raw as PatientPiaRecordLike;
+  const idCandidate = payload.id;
+  const piaIdCandidate = payload.pia_id;
+  const patientIdCandidate = payload.patient_id;
+  if (idCandidate === null || idCandidate === undefined) return null;
+  if (piaIdCandidate === null || piaIdCandidate === undefined) return null;
+  if (patientIdCandidate === null || patientIdCandidate === undefined) return null;
+
+  return {
+    id: String(idCandidate),
+    pia_id: String(piaIdCandidate),
+    patient_id: String(patientIdCandidate),
+    action: coerceStatusText(payload.action) || "",
+    status: coerceStatusText(payload.status) || "ativo",
+    data_inicio: coerceStatusText(payload.data_inicio) || "",
+    data_revisao: coerceStatusText(payload.data_revisao),
+    objetivos: coerceStatusText(payload.objetivos) || "",
+    intervencoes: coerceStatusText(payload.intervencoes) || "",
+    metas: coerceStatusText(payload.metas) || "",
+    changed_by:
+      payload.changed_by === null || payload.changed_by === undefined
+        ? null
+        : String(payload.changed_by),
+    changed_at: coerceStatusText(payload.changed_at),
   };
 }
 
@@ -3512,6 +3641,101 @@ class ApiService {
     );
 
     return normalizePatientDetailRecord(raw.paciente ?? null);
+  }
+
+  async getPatientPia(patientId: string): Promise<PatientPiaResponse> {
+    const normalizedId = this.toNonEmptyString(patientId);
+    if (!normalizedId) {
+      return { success: false, pia: null, history: [] };
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/pacientes/${encodeURIComponent(normalizedId)}/pia`,
+      {
+        headers: this.getAuthHeaders(),
+      }
+    );
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao carregar PIA do assistido"
+    );
+
+    const history = Array.isArray(raw.history)
+      ? raw.history
+          .map((item) => normalizePatientPiaHistoryRecord(item))
+          .filter((item): item is PatientPiaHistoryDTO => item !== null)
+      : [];
+
+    return {
+      success: raw.success === true,
+      patient_id: this.toNonEmptyString(raw.patient_id) || normalizedId,
+      status_jornada: this.toNonEmptyString(raw.status_jornada),
+      pia: normalizePatientPiaRecord(raw.pia ?? null),
+      history,
+    };
+  }
+
+  async createPatientPia(
+    patientId: string,
+    payload: PatientPiaPayload
+  ): Promise<PatientPiaResponse> {
+    const normalizedId = this.toNonEmptyString(patientId);
+    if (!normalizedId) return { success: false, pia: null };
+
+    const response = await fetch(
+      `${API_BASE_URL}/pacientes/${encodeURIComponent(normalizedId)}/pia`,
+      {
+        method: "POST",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao salvar PIA do assistido"
+    );
+
+    return {
+      success: raw.success === true,
+      patient_id: normalizedId,
+      status_jornada: this.toNonEmptyString(raw.status_jornada),
+      pia: normalizePatientPiaRecord(raw.pia ?? null),
+    };
+  }
+
+  async updatePatientPia(
+    patientId: string,
+    piaId: string,
+    payload: PatientPiaPayload
+  ): Promise<PatientPiaResponse> {
+    const normalizedPatientId = this.toNonEmptyString(patientId);
+    const normalizedPiaId = this.toNonEmptyString(piaId);
+    if (!normalizedPatientId || !normalizedPiaId) return { success: false, pia: null };
+
+    const response = await fetch(
+      `${API_BASE_URL}/pacientes/${encodeURIComponent(
+        normalizedPatientId
+      )}/pia/${encodeURIComponent(normalizedPiaId)}`,
+      {
+        method: "PUT",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+
+    const raw = await this.parseResponseOrThrow<Record<string, unknown>>(
+      response,
+      "Falha ao atualizar PIA do assistido"
+    );
+
+    return {
+      success: raw.success === true,
+      patient_id: normalizedPatientId,
+      status_jornada: this.toNonEmptyString(raw.status_jornada),
+      pia: normalizePatientPiaRecord(raw.pia ?? null),
+    };
   }
 
   async getSocialTriageQueue(

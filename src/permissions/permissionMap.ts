@@ -141,6 +141,8 @@ const MODULE_ALIASES: Record<string, string[]> = {
   evaluations: ["evaluations", "avaliacoes", "avaliacao"],
   analise_vagas: ["analise_vagas", "vagas"],
   vagas: ["vagas", "analise_vagas"],
+  pias: ["pias", "pia"],
+  pia: ["pia", "pias"],
 };
 
 function normalizePath(pathname: string) {

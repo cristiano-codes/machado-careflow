@@ -12,6 +12,7 @@ import {
   getJourneyStatusLabel,
   normalizeJourneyStatus as normalizeOfficialJourneyStatus,
 } from "@/components/status";
+import { PatientPiaPanel } from "@/components/pia/PatientPiaPanel";
 import { useModulePermissions, usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -1035,6 +1036,14 @@ export default function AnaliseVagas() {
               ) : null}
             </CardContent>
           </Card>
+
+          {selectedPatient ? (
+            <PatientPiaPanel
+              patientId={selectedPatient.id}
+              patientName={selectedPatient.nome}
+              statusJornada={selectedPatient.statusJornada}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>

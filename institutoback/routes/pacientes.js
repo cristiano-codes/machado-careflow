@@ -28,6 +28,13 @@ const authorizePatientsList = authorizeAny([
   ['vagas', 'view'],
 ]);
 
+const authorizePiaView = authorizeAny([['pias', 'view']]);
+const authorizePiaCreate = authorizeAny([['pias', 'create']]);
+const authorizePiaEdit = authorizeAny([['pias', 'edit']]);
+
+const PIA_STATUSES = new Set(['rascunho', 'ativo', 'em_revisao', 'encerrado']);
+const PIA_MUTABLE_JOURNEY_STATUSES = new Set(['matriculado', 'ativo']);
+
 router.use(authMiddleware);
 
 function normalizeCpf(value) {
@@ -71,6 +78,13 @@ function normalizeOptionalText(value) {
   if (value === undefined || value === null) return null;
   const text = value.toString().trim();
   return text.length > 0 ? text : null;
+}
+
+function normalizeTimestamp(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  return normalizeOptionalText(value);
 }
 
 function hasOwn(obj, key) {
@@ -343,6 +357,151 @@ async function getPatientById(client, patientId) {
   );
 
   return result.rows[0] || null;
+}
+
+function normalizePiaStatus(value, fallback = 'ativo') {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return fallback;
+  const status = normalized.toLowerCase();
+  return PIA_STATUSES.has(status) ? status : null;
+}
+
+function buildPiaPayload(body, existing = null) {
+  const payload = body || {};
+  const hasDataInicio = hasOwn(payload, 'data_inicio');
+  const hasDataRevisao = hasOwn(payload, 'data_revisao');
+  const status = normalizePiaStatus(
+    hasOwn(payload, 'status') ? payload.status : existing?.status,
+    existing?.status || 'ativo'
+  );
+  const dataInicio = hasDataInicio
+    ? normalizeDate(payload.data_inicio)
+    : normalizeDate(existing?.data_inicio);
+  const dataRevisao = hasDataRevisao
+    ? normalizeDate(payload.data_revisao)
+    : normalizeDate(existing?.data_revisao);
+
+  return {
+    status,
+    data_inicio: dataInicio,
+    data_revisao: dataRevisao,
+    objetivos:
+      normalizeOptionalText(
+        hasOwn(payload, 'objetivos') ? payload.objetivos : existing?.objetivos
+      ) || '',
+    intervencoes:
+      normalizeOptionalText(
+        hasOwn(payload, 'intervencoes') ? payload.intervencoes : existing?.intervencoes
+      ) || '',
+    metas:
+      normalizeOptionalText(hasOwn(payload, 'metas') ? payload.metas : existing?.metas) || '',
+  };
+}
+
+function validatePiaPayload(payload, body = {}) {
+  if (!payload.status) {
+    return 'status do PIA invalido';
+  }
+
+  const dataInicioProvided = hasOwn(body, 'data_inicio');
+  if (!payload.data_inicio) {
+    return dataInicioProvided
+      ? 'data_inicio invalida. Use YYYY-MM-DD'
+      : 'data_inicio e obrigatoria';
+  }
+
+  if (hasOwn(body, 'data_revisao') && body.data_revisao && !payload.data_revisao) {
+    return 'data_revisao invalida. Use YYYY-MM-DD';
+  }
+
+  if (payload.data_revisao && payload.data_revisao < payload.data_inicio) {
+    return 'data_revisao deve ser maior ou igual a data_inicio';
+  }
+
+  return null;
+}
+
+function mapPiaResponse(row) {
+  if (!row) return null;
+  return {
+    id: normalizeIdAsText(row.id),
+    patient_id: normalizeIdAsText(row.patient_id),
+    status: normalizeOptionalText(row.status),
+    data_inicio: normalizeDate(row.data_inicio),
+    data_revisao: normalizeDate(row.data_revisao),
+    objetivos: normalizeOptionalText(row.objetivos) || '',
+    intervencoes: normalizeOptionalText(row.intervencoes) || '',
+    metas: normalizeOptionalText(row.metas) || '',
+    created_by: normalizeIdAsText(row.created_by),
+    updated_by: normalizeIdAsText(row.updated_by),
+    created_at: normalizeTimestamp(row.created_at),
+    updated_at: normalizeTimestamp(row.updated_at),
+  };
+}
+
+function mapPiaHistoryResponse(row) {
+  if (!row) return null;
+  return {
+    id: normalizeIdAsText(row.id),
+    pia_id: normalizeIdAsText(row.pia_id),
+    patient_id: normalizeIdAsText(row.patient_id),
+    action: normalizeOptionalText(row.action),
+    status: normalizeOptionalText(row.status),
+    data_inicio: normalizeDate(row.data_inicio),
+    data_revisao: normalizeDate(row.data_revisao),
+    objetivos: normalizeOptionalText(row.objetivos) || '',
+    intervencoes: normalizeOptionalText(row.intervencoes) || '',
+    metas: normalizeOptionalText(row.metas) || '',
+    changed_by: normalizeIdAsText(row.changed_by),
+    changed_at: normalizeTimestamp(row.changed_at),
+  };
+}
+
+async function getPatientJourneyForPia(client, patientId, { lock = false } = {}) {
+  const result = await client.query(
+    `
+      SELECT id::text AS id, status_jornada
+      FROM public.patients
+      WHERE id::text = $1
+      LIMIT 1
+      ${lock ? 'FOR UPDATE' : ''}
+    `,
+    [patientId]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function insertPiaHistory(client, piaRow, action, changedBy) {
+  await client.query(
+    `
+      INSERT INTO public.patient_pia_history (
+        pia_id,
+        patient_id,
+        action,
+        status,
+        data_inicio,
+        data_revisao,
+        objetivos,
+        intervencoes,
+        metas,
+        changed_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `,
+    [
+      piaRow.id,
+      piaRow.patient_id,
+      action,
+      piaRow.status,
+      piaRow.data_inicio,
+      piaRow.data_revisao,
+      piaRow.objetivos || '',
+      piaRow.intervencoes || '',
+      piaRow.metas || '',
+      changedBy,
+    ]
+  );
 }
 
 router.get('/', authorizePatientsList, async (req, res) => {
@@ -706,6 +865,355 @@ router.get('/vaga-elegiveis', authorizeVagaEligibilityLookup, async (req, res) =
       success: false,
       message: 'Erro ao listar pacientes elegiveis para vaga',
     });
+  }
+});
+
+router.get('/:id/pia', authorizePiaView, async (req, res) => {
+  const patientId = normalizeIdAsText(req.params?.id);
+  if (!patientId) {
+    return res.status(400).json({
+      success: false,
+      message: 'id do assistido e obrigatorio',
+    });
+  }
+
+  try {
+    const patient = await getPatientJourneyForPia(pool, patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assistido nao encontrado',
+      });
+    }
+
+    const piaResult = await pool.query(
+      `
+        SELECT
+          id::text AS id,
+          patient_id::text AS patient_id,
+          status,
+          data_inicio,
+          data_revisao,
+          objetivos,
+          intervencoes,
+          metas,
+          created_by::text AS created_by,
+          updated_by::text AS updated_by,
+          created_at,
+          updated_at
+        FROM public.patient_pias
+        WHERE patient_id::text = $1
+        LIMIT 1
+      `,
+      [patientId]
+    );
+
+    const historyResult = await pool.query(
+      `
+        SELECT
+          id::text AS id,
+          pia_id::text AS pia_id,
+          patient_id::text AS patient_id,
+          action,
+          status,
+          data_inicio,
+          data_revisao,
+          objetivos,
+          intervencoes,
+          metas,
+          changed_by::text AS changed_by,
+          changed_at
+        FROM public.patient_pia_history
+        WHERE patient_id::text = $1
+        ORDER BY changed_at DESC
+        LIMIT 20
+      `,
+      [patientId]
+    );
+
+    return res.json({
+      success: true,
+      patient_id: patient.id,
+      status_jornada: normalizeJourneyStatus(patient.status_jornada),
+      pia: mapPiaResponse(piaResult.rows[0]),
+      history: historyResult.rows.map(mapPiaHistoryResponse).filter(Boolean),
+    });
+  } catch (error) {
+    console.error('Erro ao buscar PIA do assistido:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao buscar PIA do assistido',
+    });
+  }
+});
+
+router.post('/:id/pia', authorizePiaCreate, async (req, res) => {
+  const patientId = normalizeIdAsText(req.params?.id);
+  const userId = normalizeIdAsText(req.user?.id);
+  if (!patientId) {
+    return res.status(400).json({
+      success: false,
+      message: 'id do assistido e obrigatorio',
+    });
+  }
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nao foi possivel identificar o usuario logado.',
+    });
+  }
+
+  const payload = buildPiaPayload(req.body);
+  const validationMessage = validatePiaPayload(payload, req.body);
+  if (validationMessage) {
+    return res.status(400).json({
+      success: false,
+      message: validationMessage,
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const patient = await getPatientJourneyForPia(client, patientId, { lock: true });
+    if (!patient) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Assistido nao encontrado',
+      });
+    }
+
+    const journeyStatus = normalizeJourneyStatus(patient.status_jornada);
+    if (!PIA_MUTABLE_JOURNEY_STATUSES.has(journeyStatus)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        code: 'PIA_REQUIRES_MATRICULA',
+        status_jornada: journeyStatus,
+        message: 'PIA so pode ser criado para assistido matriculado ou ativo.',
+      });
+    }
+
+    const existingResult = await client.query(
+      `
+        SELECT id::text AS id
+        FROM public.patient_pias
+        WHERE patient_id::text = $1
+        LIMIT 1
+      `,
+      [patientId]
+    );
+    if (existingResult.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        code: 'PIA_ALREADY_EXISTS',
+        pia_id: existingResult.rows[0].id,
+        message: 'Este assistido ja possui PIA cadastrado.',
+      });
+    }
+
+    const insertResult = await client.query(
+      `
+        INSERT INTO public.patient_pias (
+          patient_id,
+          status,
+          data_inicio,
+          data_revisao,
+          objetivos,
+          intervencoes,
+          metas,
+          created_by,
+          updated_by
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+        RETURNING
+          id::text AS id,
+          patient_id::text AS patient_id,
+          status,
+          data_inicio,
+          data_revisao,
+          objetivos,
+          intervencoes,
+          metas,
+          created_by::text AS created_by,
+          updated_by::text AS updated_by,
+          created_at,
+          updated_at
+      `,
+      [
+        patientId,
+        payload.status,
+        payload.data_inicio,
+        payload.data_revisao,
+        payload.objetivos,
+        payload.intervencoes,
+        payload.metas,
+        userId,
+      ]
+    );
+
+    await insertPiaHistory(client, insertResult.rows[0], 'criado', userId);
+    await client.query('COMMIT');
+
+    return res.status(201).json({
+      success: true,
+      status_jornada: journeyStatus,
+      pia: mapPiaResponse(insertResult.rows[0]),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao criar PIA do assistido:', error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || 'Erro ao criar PIA do assistido',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+router.put('/:id/pia/:piaId', authorizePiaEdit, async (req, res) => {
+  const patientId = normalizeIdAsText(req.params?.id);
+  const piaId = normalizeIdAsText(req.params?.piaId);
+  const userId = normalizeIdAsText(req.user?.id);
+  if (!patientId || !piaId) {
+    return res.status(400).json({
+      success: false,
+      message: 'id do assistido e id do PIA sao obrigatorios',
+    });
+  }
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nao foi possivel identificar o usuario logado.',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const patient = await getPatientJourneyForPia(client, patientId, { lock: true });
+    if (!patient) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Assistido nao encontrado',
+      });
+    }
+
+    const journeyStatus = normalizeJourneyStatus(patient.status_jornada);
+    if (!PIA_MUTABLE_JOURNEY_STATUSES.has(journeyStatus)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        code: 'PIA_REQUIRES_MATRICULA',
+        status_jornada: journeyStatus,
+        message: 'PIA so pode ser revisado para assistido matriculado ou ativo.',
+      });
+    }
+
+    const existingResult = await client.query(
+      `
+        SELECT
+          id::text AS id,
+          patient_id::text AS patient_id,
+          status,
+          data_inicio,
+          data_revisao,
+          objetivos,
+          intervencoes,
+          metas
+        FROM public.patient_pias
+        WHERE id::text = $1
+          AND patient_id::text = $2
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [piaId, patientId]
+    );
+
+    if (existingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'PIA nao encontrado para este assistido',
+      });
+    }
+
+    const payload = buildPiaPayload(req.body, existingResult.rows[0]);
+    const validationMessage = validatePiaPayload(payload, {
+      ...existingResult.rows[0],
+      ...req.body,
+    });
+    if (validationMessage) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: validationMessage,
+      });
+    }
+
+    const updateResult = await client.query(
+      `
+        UPDATE public.patient_pias
+        SET status = $1,
+            data_inicio = $2,
+            data_revisao = $3,
+            objetivos = $4,
+            intervencoes = $5,
+            metas = $6,
+            updated_by = $7,
+            updated_at = NOW()
+        WHERE id::text = $8
+          AND patient_id::text = $9
+        RETURNING
+          id::text AS id,
+          patient_id::text AS patient_id,
+          status,
+          data_inicio,
+          data_revisao,
+          objetivos,
+          intervencoes,
+          metas,
+          created_by::text AS created_by,
+          updated_by::text AS updated_by,
+          created_at,
+          updated_at
+      `,
+      [
+        payload.status,
+        payload.data_inicio,
+        payload.data_revisao,
+        payload.objetivos,
+        payload.intervencoes,
+        payload.metas,
+        userId,
+        piaId,
+        patientId,
+      ]
+    );
+
+    await insertPiaHistory(client, updateResult.rows[0], 'revisado', userId);
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      status_jornada: journeyStatus,
+      pia: mapPiaResponse(updateResult.rows[0]),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao atualizar PIA do assistido:', error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || 'Erro ao atualizar PIA do assistido',
+    });
+  } finally {
+    client.release();
   }
 });
 
